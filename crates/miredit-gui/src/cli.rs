@@ -240,7 +240,7 @@ pub struct Cli {
     /// 全部在第 1 帧执行时，切换发生在首帧重渲**之前**，观察不到缓存键失效。
     /// 语法见 [`parse_menu_click`]（`view.open_doors@40` ⇒ 第 40 帧点「开启门」）。
     pub menu_clicks: Vec<String>,
-    /// `--menu-dump`：**不开窗**，把 5 菜单 39 项逐条打到 stderr 后退出。
+    /// `--menu-dump`：**不开窗**，把 5 菜单 41 项逐条打到 stderr 后退出。
     pub menu_dump: bool,
     /// `--export-selection <路径>`：**不开窗**把当前选区按 1:1 渲成 PNG 写到该路径。
     ///
@@ -416,6 +416,21 @@ impl Cli {
     /// 纯函数（不读环境、不开窗口），所以能直接单测。
     pub fn version_line() -> String {
         format!("Crystal Studio {}", env!("CARGO_PKG_VERSION"))
+    }
+
+    /// `--help` 打印的整段文本（**第一行就是 [`Cli::version_line`]**）。
+    ///
+    /// # 为什么版本行要放在用法前面
+    ///
+    /// 2026-11-06 用户反馈"GUI 版看不到版本"，另一种常见问法是"这个 exe 是哪版"。
+    /// `--help` 是最常被拿来问这个的命令，而原实现只打 [`crate::ui_text::DIAG_USAGE`]
+    /// （一整行 `用法：…`，没有版本）⇒ 用户只能再想一次 `--version`。
+    /// 现在第一行固定是 `Crystal Studio <版本>`，与 `--version` **同一个函数**拼出来
+    /// （[`Cli::version_line`]，版本仍是 `CARGO_PKG_VERSION` 单一真源）。
+    ///
+    /// `--version` **不受影响**：它只打这一行、不开窗、也不打用法（见 `main.rs` 的分支顺序）。
+    pub fn help_text() -> String {
+        format!("{}\n{}", Cli::version_line(), crate::ui_text::DIAG_USAGE)
     }
 
     /// 解析 `std::env::args().skip(1)`。
@@ -1385,5 +1400,30 @@ mod tests {
         assert!(c.errors.is_empty(), "{:?}", c.errors);
         assert!(p(&["-V"]).version, "-V 是 --version 的短名");
         assert!(!p(&[]).version, "缺省不打印版本");
+    }
+
+    /// **`--help` 第一行必须是版本行**（2026-11-06 用户报"GUI 看不到版本"的另一半）。
+    ///
+    /// 判据（逐条可机器核对）：
+    /// ① 首行 == `Cli::version_line()`（同一个函数拼的，不是第二份格式）；
+    /// ② 整段**只有两行**（版本行 + 用法行），且第二行就是 `DIAG_USAGE`；
+    /// ③ 用法行里列着 `--version` / `--help` 两个开关（否则用户不知道有它们）。
+    #[test]
+    fn 帮助首行是版本行() {
+        let text = Cli::help_text();
+        let mut lines = text.lines();
+        assert_eq!(lines.next(), Some(Cli::version_line().as_str()), "--help 首行不是版本行");
+        assert_eq!(
+            lines.next(),
+            Some(crate::ui_text::DIAG_USAGE),
+            "--help 第二行必须是用法（整段只该有两行）"
+        );
+        assert_eq!(lines.next(), None, "--help 不该有第三行：{text}");
+        // 首行必须带真实版本（不是空串、不是占位符）
+        assert!(Cli::version_line().starts_with("Crystal Studio "));
+        assert!(Cli::version_line().contains(env!("CARGO_PKG_VERSION")));
+        // 用法行要能让人发现这两个开关
+        assert!(crate::ui_text::DIAG_USAGE.contains("[--version]"), "用法里要点名 --version");
+        assert!(crate::ui_text::DIAG_USAGE.contains("[--help]"), "用法里要点名 --help");
     }
 }

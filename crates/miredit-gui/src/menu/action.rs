@@ -423,6 +423,16 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             *cx.overlay = crate::menu::Overlay::Shortcuts;
             Outcome::ok(tx::SHORTCUTS_TITLE.to_owned())
         }
+        // 「关于 Crystal Studio」（2026-11-06 新增）：打开只读模态。
+        //
+        // 与「键盘快捷键」同一套口径：**只改浮层状态**，不碰文档/视口/会话 ⇒
+        // 地图一字节不动，也没有"需要先开图"这一档（没有地图时照样能看版本号）。
+        // 内容全部现算（版本 `CARGO_PKG_VERSION` + 构建档位 `cfg!(debug_assertions)`），
+        // 见 [`crate::menu::about::rows`]。
+        Action::About => {
+            *cx.overlay = crate::menu::Overlay::About;
+            Outcome::ok(tx::ABOUT_OPEN_RECEIPT.to_owned())
+        }
         // ───────────── 视图：地图光照（2026-11-05 接线） ─────────────
         //
         // 父项是**子菜单容器**（官方 `MapLightingMenu` 无 `Click`）：直接派发它本身
@@ -911,6 +921,55 @@ mod tests {
         assert_eq!(text, tx::EXPORT_MINI_DLG_TITLE);
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **帮助 → 关于**：打开只读模态，回执点名产品，**地图一字节不动**、不需要先开图。
+    ///
+    /// 这一条钉住三件事：
+    /// ① `Action::About` 真的接到了浮层状态（不是"点了没反应"）；
+    /// ② 无图也照样打开（`State::Ready`，用户拿空界面问版本是天经地义）；
+    /// ③ 不改文档 ⇒ `touched_map == false`（不会触发重渲，也不会把地图标脏）。
+    #[test]
+    fn 关于菜单项打开只读模态() {
+        // ① 有图
+        let a = 造图("about", 4, 4);
+        let mut f = 夹具::打开(&a);
+        let canvas = 画布();
+        let out = apply(Action::About, &mut f.ctx(canvas));
+        assert_eq!(f.overlay, Overlay::About, "关于必须打开 About 浮层");
+        let (text, warn) = out.receipt.clone().expect("要有回执");
+        assert!(!warn, "打开关于是正常动作，不该用警示色");
+        assert_eq!(text, tx::ABOUT_OPEN_RECEIPT);
+        assert!(text.contains("Crystal Studio"), "回执要点名产品：{text}");
+        assert!(!out.touched_map, "关于不许碰地图");
+        // 模态里那一份版本号与 `--version` 同源
+        assert_eq!(crate::menu::about::VERSION, env!("CARGO_PKG_VERSION"));
+
+        // ② 无图（空界面）也要能打开 —— 这是"双击 exe 想知道版本"的场景
+        let mut g = 夹具 {
+            doc: DocState {
+                doc: None,
+                assets: crate::mapdoc::Assets::Failed("无".to_owned()),
+                map_error: None,
+                map_gen: 0,
+            },
+            view: CanvasView::default(),
+            edit: EditSession::default(),
+            panels: PanelVis::default(),
+            dark: false,
+            grid: false,
+            doors_open: false,
+            lighting: MapLighting::Day,
+            overlay: Overlay::None,
+            settings: std::env::temp_dir().join("miredit_gui_act_settings.json"),
+            recent: Vec::new(),
+        };
+        let out = apply(Action::About, &mut g.ctx(canvas));
+        assert_eq!(g.overlay, Overlay::About, "无图时关于也要能打开");
+        let (_, warn) = out.receipt.clone().expect("要有回执");
+        assert!(!warn, "无图不算拒绝（关于不依赖地图）");
+
+        let _ = std::fs::remove_dir_all(a.parent().unwrap());
     }
 
     /// **没有地图时两个导出都不给模态**，只给带原因的回执（`State::Ready` 的配套）。

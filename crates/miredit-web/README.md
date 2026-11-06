@@ -29,8 +29,11 @@ cargo run -p miredit-web --release
 
 ```bash
 curl -s http://127.0.0.1:8080/api/health
-# {"ok":true,"version":"0.2.0"}
+# {"ok":true,"version":"0.0.1"}
 ```
+
+> 上面的 `version` 是**当前快照**（`0.0.1`）：版本号唯一真源是根 `Cargo.toml` 的
+> `[workspace.package].version`，实际值一律以 `/api/health` 的返回为准（本文不预写下一版号）。
 
 ### 1.2 环境变量
 
@@ -69,15 +72,18 @@ curl -s http://127.0.0.1:8080/api/health
 cd docker && docker compose up -d --build
 
 # 或手工构建（构建上下文必须是仓库根，原因见 docker/Dockerfile 头注释）
-docker build -f docker/Dockerfile -t miredit-web:0.2.0 .
+docker build -f docker/Dockerfile -t miredit-web:0.0.1 .
 docker run --rm -p 8080:8080 \
   -v /path/to/maps:/data/maps:ro \
   -v /path/to/client-root:/data/client:ro \
   -v /path/to/crystalstudio/catalogue:/data/crystalstudio/catalogue:ro \
   -v /path/to/crystalstudio/Objects:/data/crystalstudio/Objects:ro \
-  miredit-web:0.2.0
+  miredit-web:0.0.1
 curl http://127.0.0.1:8080/api/health
 ```
+
+> 镜像 tag 只是**示例**（用当前版本号打本地标签，方便对照 `docker/compose.yaml` 里的 `:dev`）；
+> 正式发布才按 `VERSIONING.md` §六 第 8 步打 `vX.Y.Z` / `X.Y` / `latest`。
 
 > 该镜像**自带**静态前端（`/app/web`），所以不再挂 `miredit/web`；
 > `/data/crystalstudio` 必须挂，否则 `/api/stamps` 的 `cells`/`bounds` 全为 `null`。
@@ -91,7 +97,7 @@ curl http://127.0.0.1:8080/api/health
 
 | 方法 | 路径 | 成功响应 |
 |---|---|---|
-| GET | `/api/health` | `{"ok":true,"version":"0.2.0"}` |
+| GET | `/api/health` | `{"ok":true,"version":"0.0.1"}`（示例快照，实际以进程返回为准） |
 | GET | `/api/map` | `{"path","width","height","format","dirty","tolerant_trailer_bytes","format_label","editable","ground_paint_supported","edit_warning","disk_cell_len"}`；没开图时除 `width/height` 外全为 `null`（两个能力布尔也是 `null`，**不写 `false`**）。`editable` 与 `edit_warning` 的口径见 §2.0.1 |
 | POST | `/api/map/open` `{"path":"…"}` | 同上 |
 | GET | `/api/tiles?x&y&w&h&scale&layers&collision&doors&lighting` | `image/png` |

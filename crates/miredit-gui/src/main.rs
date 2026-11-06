@@ -14,6 +14,8 @@
 //! 命令行开关见 [`miredit_gui::ui_text::DIAG_USAGE`]：
 //! - `--version`：**不开窗**，只打印 `Crystal Studio <版本>` 后退出（版本取
 //!   `CARGO_PKG_VERSION`，与网页 `/api/health` 同源；见 [`miredit_gui::cli::Cli::version_line`]）；
+//! - `--help`：**不开窗**，第一行是同一行版本，其后是 `DIAG_USAGE`
+//!   （[`miredit_gui::cli::Cli::help_text`]）；两者都不开窗、不读地图。
 //! - 无开关：用 [`miredit_gui::mapdoc::DEFAULT_MAP_PATH`]（**恒为空 = 未指定地图**：
 //!   公开仓没有内建缺省图，界面会如实说「未指定地图」并留空画布，不猜路径）；
 //! - `--map <路径>`：打开哪张图（**唯一**指定地图的入口）。
@@ -38,7 +40,9 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     if cli.help {
-        println!("{}", tx::DIAG_USAGE);
+        // `--help` 的**第一行就是版本行**（`Cli::help_text`）：用户拿 `--help` 问"这是哪版"
+        // 是常态，只打用法而不打版本等于让他再猜一次。`--version` 仍是"只打一行"。
+        println!("{}", Cli::help_text());
         return Ok(());
     }
     println!("{}", tx::DIAG_START);
@@ -95,7 +99,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
 
-    // 菜单清单转储：不开窗，把 5 个菜单 39 项逐条打到 stderr 后退出（验收门 §四.2 的证据来源）
+    // 菜单清单转储：不开窗，把 5 个菜单 41 项逐条打到 stderr 后退出（验收门 §四.2 的证据来源）
     if cli.menu_dump {
         let _ = miredit_gui::menu::dump(
             cli.map.is_some(),

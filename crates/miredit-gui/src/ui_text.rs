@@ -133,7 +133,7 @@ pub const MENU_ITEMS: [&str; 5] = [MENU_FILE, MENU_EDIT, MENU_VIEW, MENU_TOOLS, 
 /// —— 上一版取「地图编辑器」的写法已按该裁定订正（见 [`TITLE_TMPL`]）。
 pub const BRAND: &str = "Crystal Studio"; // EN: Crystal Studio ｜ 品牌不译（2026-11-06 裁定）
 
-// ───────────────────── 下拉菜单项（官方 5 菜单 / 39 项，2026-11-05） ─────────────────────
+// ───────────────────── 下拉菜单项（官方 5 菜单；本仓 41 项，2026-11-05 起） ─────────────────────
 //
 // **权威来源（两处，互相印证）**：
 // 1. `CrystalStudio/MainWindow.axaml:5` 的 `<Menu>` 树 —— 每项 `Header` 是
@@ -149,7 +149,9 @@ pub const BRAND: &str = "Crystal Studio"; // EN: Crystal Studio ｜ 品牌不译
 //    `AddSectionMenu`，面板清单来自 `MainWindow.axaml.cs:338-379` 的 `docking.Add(...)`）、
 //    锁定 / 重置面板布局（`MainWindow.axaml.cs:389-396`）。
 //
-// ⚠ **"39 项"的账**：文件 10 + 编辑 4 + 视图 18 + 工具 6 + 帮助 1 = 39。
+// ⚠ **项数的账**：官方 XAML 是 39 项（文件 10 + 编辑 4 + 视图 18 + 工具 6 + 帮助 1）；
+// 本仓 2026-11-05 起 40 项（视图多一个「地图列表」面板开关），
+// 2026-11-06 起 **41 项**（帮助多一个「关于 Crystal Studio」，本仓新增，见 `menu::model::HELP_ITEMS`）。
 //    视图的 18 = XAML 的 8（深色模式/单元格网格/地图光照/开启门/放大/缩小/实际大小/适应地图）
 //    + 语言 1 + 面板开关 7 + 锁定/重置 2。面板开关是 **7 个**（含「当前资源」），
 //    不是 6 个 —— 官方 `docking.Add("Active Asset", …)` 同样会被 `AddSectionMenu` 生成开关项。
@@ -222,6 +224,11 @@ pub const MENU_EXTRACT_OBJECTS: &str = "提取地图物体"; // EN: Extract Map 
 
 /// 帮助 → 键盘快捷键。
 pub const MENU_KEYBOARD_SHORTCUTS: &str = "键盘快捷键(S)…"; // EN: Keyboard _Shortcuts… ｜ 官方: KeyboardShortcuts_873E9855
+/// 帮助 → 关于 Crystal Studio（2026-11-06 新增：只读模态，见 [`crate::menu::about`]）。
+///
+/// 为什么文案带产品名：任务栏/开始菜单里同时可能有别的编辑器，
+/// 只写「关于」在弹窗标题里会分不清是谁的版本号。
+pub const MENU_ABOUT: &str = "关于 Crystal Studio"; // EN: About Crystal Studio
 
 /// **"未实现"的灰显原因模板** —— 点击灰显项时整句进状态栏。
 ///
@@ -437,6 +444,46 @@ pub const SC_WHEEL_ZOOM: &str = "以鼠标为中心缩放"; // EN: Zoom at curso
 pub const SC_OPEN_OVERLAY: &str = "打开本浮层"; // EN: Open this overlay
 /// 动作名：开 / 关单元格网格（`视图 → 单元格网格` 的官方手势 `G`）。
 pub const SC_TOGGLE_GRID: &str = "单元格网格 开 / 关"; // EN: Toggle cell grid
+
+// ───────────────────────── 关于对话框（帮助 → 关于 Crystal Studio，2026-11-06） ─────────────────────────
+//
+// ⚠ **版本号不在这里**：版本取 `env!("CARGO_PKG_VERSION")`（根 `[workspace.package].version`
+// 是唯一真源，见 `VERSIONING.md` §3.1），由 [`crate::menu::about::rows`] 现拼。
+// 这条纪律与 `--version` / 网页 `/api/health` 是同一份：**绝不在文案里写死一个版本数字**，
+// 否则 bump 之后「关于」和 `--version` 会各说一套。
+
+/// 关于对话框标题（= 菜单项文案，同一份）。
+pub const ABOUT_TITLE: &str = "关于 Crystal Studio"; // EN: About Crystal Studio
+/// 行标签：产品名。
+pub const ABOUT_LABEL_PRODUCT: &str = "产品"; // EN: Product
+/// 行标签：版本。
+pub const ABOUT_LABEL_VERSION: &str = "版本"; // EN: Version
+/// 行标签：实现形态。
+pub const ABOUT_LABEL_IMPL: &str = "实现"; // EN: Implementation
+/// 实现形态的值：本仓是**全量 Rust 重写**，不是外壳绑定（用户最关心这一句）。
+pub const ABOUT_IMPL: &str = "Rust 全量移植"; // EN: Full Rust port
+/// 行标签：上游工程。
+pub const ABOUT_LABEL_UPSTREAM: &str = "上游"; // EN: Upstream
+/// 上游工程（C# / Avalonia 原版）。
+pub const ABOUT_UPSTREAM: &str = "github.com/fluttergo/CrystalStudio";
+/// 行标签：本仓。
+pub const ABOUT_LABEL_REPO: &str = "本仓"; // EN: This repo
+/// 本仓（Rust 移植）。
+pub const ABOUT_REPO: &str = "github.com/lxf505226/CrystalStudio-Rust";
+/// 行标签：许可证。
+pub const ABOUT_LABEL_LICENSE: &str = "许可证"; // EN: License
+/// 许可证值（与仓库 `LICENSE` 同一份：MIT）。
+pub const ABOUT_LICENSE: &str = "MIT"; // EN: MIT
+/// 行标签：构建档位。
+pub const ABOUT_LABEL_PROFILE: &str = "构建"; // EN: Build
+/// 构建档位：`debug`（`cfg!(debug_assertions)` 为真时用）。
+pub const ABOUT_PROFILE_DEBUG: &str = "debug（调试构建）"; // EN: debug
+/// 构建档位：`release`。
+pub const ABOUT_PROFILE_RELEASE: &str = "release（发布构建）"; // EN: release
+/// 关于对话框底部的关闭提示。
+pub const ABOUT_CLOSE_HINT: &str = "Esc 或点击任意处关闭"; // EN: Esc or click anywhere to close
+/// 打开关于对话框时状态栏的回执（= 标题，不另编一句）。
+pub const ABOUT_OPEN_RECEIPT: &str = "关于 Crystal Studio"; // EN: About Crystal Studio
 
 /// 键名：`Ctrl+N`。
 pub const KEY_CTRL_N: &str = "Ctrl+N"; // EN: Ctrl+N
@@ -1497,8 +1544,13 @@ pub const DIAG_EXIT: &str = "miredit-gui 已退出（码 {code}）"; // EN: exit
 pub const DIAG_EXIT_ERR: &str = "miredit-gui 启动失败：{err}"; // EN: failed to start
 /// 命令行参数错误。
 pub const DIAG_BAD_ARG: &str = "[参数] 无法解析：{arg}"; // EN: [cli] bad arg
+/// **窗口图标解码失败**（`window::app_icon`）——退回系统默认图标，但要说出来。
+///
+/// 为什么要有它：图标 PNG 是 `include_bytes!` 嵌进 exe 的，正常构建下不可能解码失败；
+/// 真失败了（资源被替换/损坏）说明交付物有问题，**不许静默**用默认图标装没事。
+pub const DIAG_WINDOW_ICON_FAIL: &str = "[窗口] 图标解码失败，改用系统默认图标：{err}"; // EN: [window] icon decode failed
 /// 帮助。
-pub const DIAG_USAGE: &str = "用法：miredit-gui [--version] [--map <路径>] [--center <x,y>] [--scale <倍数>] [--layers ground,middle,front] [--layer ground|middle|front|low_collision|high_collision] [--collision low|high|all|none] [--tool <0..9>] [--brush-size <3..31 奇数>] [--edit-layer ground|middle|front|low_collision|high_collision] [--edit-size <3..31 奇数>] [--edit-pick <x,y>] [--edit-brush <x,y>] [--edit-erase <x,y>] [--edit-stroke <x0,y0,x1,y1>] [--edit-fill <x,y>] [--edit-undo <n>] [--edit-redo <n>] [--edit-check] [--save] [--save-as <路径>] [--no-window] [--shot <png>] [--gate2-client <png>] [--gate2-at <x,y>] [--autodrag <秒>] [--probe <x,y>] [--frames <帧数>] [--palette-lib <基名>] [--palette-scroll <行>] [--palette-search <图号>] [--palette-tab <0..3>] [--palette-pick <帧索引0基>] [--palette-autoscroll <秒>] [--palette-report] [--stamp-kind <all|unclassified|unlisted|英文 kind>] [--stamp-search <文字>] [--stamp-page <1基页码>] [--stamp-pick <当前页格号0基>] [--stamp-report] [--stamp-probe] [--stamp-sweep] [--stamp-arm] [--stamp-place-at <x,y>] [--select <x0,y0,x1,y1>] [--select-copy] [--theme light|dark] [--dark] [--cell-grid] [--no-cell-grid] [--open-doors] [--lighting dawn_dusk|day|night] [--menu-open <0..4>] [--menu-hover <菜单内下标，仅配合 --shot/--menu-open>] [--menu-sub-focus <父项>,<行>，仅配合 --shot/--menu-open>] [--menu-click <菜单项id[@帧号]>] [--export-selection <路径>] [--export-minimap <路径>] [--export-doors] [--minimap-width <像素>] [--minimap-height <像素>] [--minimap-preset small|medium|large] [--minimap-max-side <像素>] [--menu-dump] [--shortcuts] [--panel-hide <tools|tool_options|layers|minimap|palette|active_asset|cell_inspector>] [--open-map <路径>] [--settings <路径>]"; // EN: usage
+pub const DIAG_USAGE: &str = "用法：miredit-gui [--version] [--help] [--map <路径>] [--center <x,y>] [--scale <倍数>] [--layers ground,middle,front] [--layer ground|middle|front|low_collision|high_collision] [--collision low|high|all|none] [--tool <0..9>] [--brush-size <3..31 奇数>] [--edit-layer ground|middle|front|low_collision|high_collision] [--edit-size <3..31 奇数>] [--edit-pick <x,y>] [--edit-brush <x,y>] [--edit-erase <x,y>] [--edit-stroke <x0,y0,x1,y1>] [--edit-fill <x,y>] [--edit-undo <n>] [--edit-redo <n>] [--edit-check] [--save] [--save-as <路径>] [--no-window] [--shot <png>] [--gate2-client <png>] [--gate2-at <x,y>] [--autodrag <秒>] [--probe <x,y>] [--frames <帧数>] [--palette-lib <基名>] [--palette-scroll <行>] [--palette-search <图号>] [--palette-tab <0..3>] [--palette-pick <帧索引0基>] [--palette-autoscroll <秒>] [--palette-report] [--stamp-kind <all|unclassified|unlisted|英文 kind>] [--stamp-search <文字>] [--stamp-page <1基页码>] [--stamp-pick <当前页格号0基>] [--stamp-report] [--stamp-probe] [--stamp-sweep] [--stamp-arm] [--stamp-place-at <x,y>] [--select <x0,y0,x1,y1>] [--select-copy] [--theme light|dark] [--dark] [--cell-grid] [--no-cell-grid] [--open-doors] [--lighting dawn_dusk|day|night] [--menu-open <0..4>] [--menu-hover <菜单内下标，仅配合 --shot/--menu-open>] [--menu-sub-focus <父项>,<行>，仅配合 --shot/--menu-open>] [--menu-click <菜单项id[@帧号]>] [--export-selection <路径>] [--export-minimap <路径>] [--export-doors] [--minimap-width <像素>] [--minimap-height <像素>] [--minimap-preset small|medium|large] [--minimap-max-side <像素>] [--menu-dump] [--shortcuts] [--panel-hide <tools|tool_options|layers|minimap|palette|active_asset|cell_inspector>] [--open-map <路径>] [--settings <路径>]"; // EN: usage
 
 // ───────────────────────── 编辑/保存诊断（本单新增） ─────────────────────────
 
@@ -1658,7 +1710,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_TOOLS", MENU_TOOLS),
     ("MENU_HELP", MENU_HELP),
     ("BRAND", BRAND),
-    // 下拉菜单 39 项（2026-11-05）
+    // 下拉菜单（本仓 41 项：官方 39 + 地图列表面板开关 + 关于）
     ("MENU_NEW_MAP", MENU_NEW_MAP),
     ("MENU_OPEN_MAP", MENU_OPEN_MAP),
     ("MENU_OPEN_RECENT", MENU_OPEN_RECENT),
@@ -1691,6 +1743,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_IDENTIFY_OBJECTS", MENU_IDENTIFY_OBJECTS),
     ("MENU_EXTRACT_OBJECTS", MENU_EXTRACT_OBJECTS),
     ("MENU_KEYBOARD_SHORTCUTS", MENU_KEYBOARD_SHORTCUTS),
+    ("MENU_ABOUT", MENU_ABOUT),
     ("STATUS_MENU_TODO_TMPL", STATUS_MENU_TODO_TMPL),
     ("STATUS_MENU_NEED_MAP_TMPL", STATUS_MENU_NEED_MAP_TMPL),
     ("WHY_NEED_MAP", WHY_NEED_MAP),
@@ -2053,7 +2106,24 @@ pub const ALL: &[(&str, &str)] = &[
     ("DIAG_START", DIAG_START),
     ("DIAG_EXIT", DIAG_EXIT),
     ("DIAG_EXIT_ERR", DIAG_EXIT_ERR),
+    ("ABOUT_TITLE", ABOUT_TITLE),
+    ("ABOUT_LABEL_PRODUCT", ABOUT_LABEL_PRODUCT),
+    ("ABOUT_LABEL_VERSION", ABOUT_LABEL_VERSION),
+    ("ABOUT_LABEL_IMPL", ABOUT_LABEL_IMPL),
+    ("ABOUT_IMPL", ABOUT_IMPL),
+    ("ABOUT_LABEL_UPSTREAM", ABOUT_LABEL_UPSTREAM),
+    ("ABOUT_UPSTREAM", ABOUT_UPSTREAM),
+    ("ABOUT_LABEL_REPO", ABOUT_LABEL_REPO),
+    ("ABOUT_REPO", ABOUT_REPO),
+    ("ABOUT_LABEL_LICENSE", ABOUT_LABEL_LICENSE),
+    ("ABOUT_LICENSE", ABOUT_LICENSE),
+    ("ABOUT_LABEL_PROFILE", ABOUT_LABEL_PROFILE),
+    ("ABOUT_PROFILE_DEBUG", ABOUT_PROFILE_DEBUG),
+    ("ABOUT_PROFILE_RELEASE", ABOUT_PROFILE_RELEASE),
+    ("ABOUT_CLOSE_HINT", ABOUT_CLOSE_HINT),
+    ("ABOUT_OPEN_RECEIPT", ABOUT_OPEN_RECEIPT),
     ("DIAG_USAGE", DIAG_USAGE),
+    ("DIAG_WINDOW_ICON_FAIL", DIAG_WINDOW_ICON_FAIL),
     ("DIAG_EDIT_NO_MAP", DIAG_EDIT_NO_MAP),
     ("DIAG_EDIT_PICK", DIAG_EDIT_PICK),
     ("DIAG_EDIT_PICK_CELL", DIAG_EDIT_PICK_CELL),
@@ -2310,7 +2380,24 @@ mod tests {
             ("DIAG_START", DIAG_START),
             ("DIAG_EXIT", DIAG_EXIT),
             ("DIAG_EXIT_ERR", DIAG_EXIT_ERR),
-            ("DIAG_USAGE", DIAG_USAGE),
+            ("ABOUT_TITLE", ABOUT_TITLE),
+    ("ABOUT_LABEL_PRODUCT", ABOUT_LABEL_PRODUCT),
+    ("ABOUT_LABEL_VERSION", ABOUT_LABEL_VERSION),
+    ("ABOUT_LABEL_IMPL", ABOUT_LABEL_IMPL),
+    ("ABOUT_IMPL", ABOUT_IMPL),
+    ("ABOUT_LABEL_UPSTREAM", ABOUT_LABEL_UPSTREAM),
+    ("ABOUT_UPSTREAM", ABOUT_UPSTREAM),
+    ("ABOUT_LABEL_REPO", ABOUT_LABEL_REPO),
+    ("ABOUT_REPO", ABOUT_REPO),
+    ("ABOUT_LABEL_LICENSE", ABOUT_LABEL_LICENSE),
+    ("ABOUT_LICENSE", ABOUT_LICENSE),
+    ("ABOUT_LABEL_PROFILE", ABOUT_LABEL_PROFILE),
+    ("ABOUT_PROFILE_DEBUG", ABOUT_PROFILE_DEBUG),
+    ("ABOUT_PROFILE_RELEASE", ABOUT_PROFILE_RELEASE),
+    ("ABOUT_CLOSE_HINT", ABOUT_CLOSE_HINT),
+    ("ABOUT_OPEN_RECEIPT", ABOUT_OPEN_RECEIPT),
+    ("DIAG_USAGE", DIAG_USAGE),
+    ("DIAG_WINDOW_ICON_FAIL", DIAG_WINDOW_ICON_FAIL),
             ("DIAG_EDIT_NO_MAP", DIAG_EDIT_NO_MAP),
             ("DIAG_EDIT_PICK", DIAG_EDIT_PICK),
             ("DIAG_EDIT_PICK_CELL", DIAG_EDIT_PICK_CELL),

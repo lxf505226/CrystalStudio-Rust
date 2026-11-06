@@ -1,4 +1,4 @@
-//! **菜单项静态表**：5 个菜单 / 39 项（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
+//! **菜单项静态表**：5 个菜单 / **41 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
 //! 逐项照抄官方（分组 = 官方 `<Separator />` 的位置）。
 //!
 //! # 数据来源（两处互相印证）
@@ -10,15 +10,20 @@
 //! 运行时由代码追加的那几项（语言 / 7 个面板开关 / 锁定 / 重置）见
 //! `ui_text` 里「下拉菜单项」小节的说明与 [`crate::menu::panels`] 的模块文档。
 //!
-//! # 40 项的账
+//! # 41 项的账
 //!
 //! ```text
-//! 文件 10 + 编辑 4 + 视图 19 + 工具 6 + 帮助 1 = 40
+//! 文件 10 + 编辑 4 + 视图 19 + 工具 6 + 帮助 2 = 41
 //! 视图 19 = XAML 8 + 语言 1 + 面板开关 8 + 锁定/重置 2
 //!
 //! ⚠ **2026-11-05 起是 40 项**（原 39）：上游 `901dbe2f` 新增了第 8 个面板
 //! （`docking.Add("Maps", …)`），而 `DockWorkspace.cs:269 AddSectionMenu` 会为
 //! **每一个**面板生成一条 CheckBox 菜单项 ⇒ 面板开关 7 → 8，视图 18 → 19。
+//! ⚠ **2026-11-06 起是 41 项**（帮助 1 → 2）：本仓补了「帮助 → 关于 Crystal Studio」
+//! （[`Action::About`]）。**这一项没有官方 XAML 对应**：上游 `MainWindow.axaml` 的帮助菜单
+//! 只有 `KeyboardShortcuts`，所以它是本仓新增的**原生功能**（只读模态，
+//! 见 [`crate::menu::about`]），不是"照抄漏了"。数账时必须把它算进帮助菜单，
+//! 否则 [`item_count`] 与 `--menu-dump` 的汇总行会与实际绘制条数对不上。
 //! ```
 //!
 //! # 子菜单的账（2026-11-05 补：审查缺陷 1 / 2）
@@ -35,8 +40,8 @@
 //! ```
 //!
 //! 静态子项共 **5** 个（[`sub_count`]），另有 1 个动态列表（行数随 `recent` 变：0 条 ⇒ 1 行空态）。
-//! 子项**不进** [`MENUS`] 的 `items`（那是"顶级 39 项"的口径），
-//! 所以 [`item_count`] 仍是 40、`--menu-dump` 的汇总行仍是 40 —— 子项在 dump 里
+//! 子项**不进** [`MENUS`] 的 `items`（那是"顶级 41 项"的口径），
+//! 所以 [`item_count`] 仍是 41、`--menu-dump` 的汇总行仍是 41 —— 子项在 dump 里
 //! 靠 `parent=` 列自证（见 [`crate::menu::dump_lines`]）。
 //!
 //! [`tests::顶级39项与子项5项计数`] 把这两笔账都钉住。
@@ -196,7 +201,7 @@ impl Lang {
 ///
 /// # 为什么需要它
 ///
-/// 顶级 40 项里真正有**运行期真状态**的有五样：深色模式（`app.dark`）、
+/// 顶级 41 项里真正有**运行期真状态**的有五样：深色模式（`app.dark`）、
 /// 单元格网格（`app.grid`）、开启门（`app.doors_open`）、**地图光照（`app.lighting`）**、
 /// 8 个面板显隐（`app.panels`）—— 它们由 [`check`] / [`check_with`] 直接从宿主字段读，
 /// **不经过本结构**（光照那一档尤其不许再存第二份，见下）。
@@ -351,6 +356,13 @@ pub enum Action {
     ExtractObjects,
     // ── 帮助 ──
     KeyboardShortcuts,
+    /// `关于 Crystal Studio`（2026-11-06 新增，**官方没有这一项**）。
+    ///
+    /// 触发一个**只读模态**（[`crate::menu::Overlay::About`]）：产品名 / 版本 / 实现形态 /
+    /// 上游与本仓地址 / 许可证 / 构建档位。版本与构建档位是**现算**的
+    /// （`CARGO_PKG_VERSION` + `cfg!(debug_assertions)`），不写死任何数字 ——
+    /// 与 `--version` 同一份真源（见 [`crate::cli::Cli::version_line`]）。
+    About,
 }
 
 impl Action {
@@ -402,6 +414,7 @@ impl Action {
             Action::IdentifyObjects => "tools.identify_objects",
             Action::ExtractObjects => "tools.extract_objects",
             Action::KeyboardShortcuts => "help.keyboard_shortcuts",
+            Action::About => "help.about",
         }
     }
 
@@ -446,6 +459,7 @@ impl Action {
             Action::IdentifyObjects => tx::MENU_IDENTIFY_OBJECTS,
             Action::ExtractObjects => tx::MENU_EXTRACT_OBJECTS,
             Action::KeyboardShortcuts => tx::MENU_KEYBOARD_SHORTCUTS,
+            Action::About => tx::MENU_ABOUT,
         }
     }
 
@@ -633,8 +647,17 @@ pub const TOOLS_ITEMS: [Item; 6] = [
     it(Action::ExtractObjects, false),
 ];
 
-/// 帮助菜单（1 项）。
-pub const HELP_ITEMS: [Item; 1] = [it(Action::KeyboardShortcuts, false)];
+/// 帮助菜单（**2 项**，2026-11-06 起 1 → 2）。
+///
+/// `关于 Crystal Studio`（[`Action::About`]）是**本仓新增**的原生功能：
+/// 上游 `MainWindow.axaml` 的帮助菜单只有 `KeyboardShortcuts`，没有 About
+/// （C# 版的版本号只出现在窗口标题里）。加它不是因为"官方有"，而是因为
+/// **GUI 版必须能直接看到自己声称的版本号**（用户此前拿到的旧 exe 就是靠这条看不到版本）。
+/// 与 `键盘快捷键…` 之间挂一条分隔线：一个是"查手势"，一个是"查身份"，两类信息。
+pub const HELP_ITEMS: [Item; 2] = [
+    it(Action::KeyboardShortcuts, false),
+    it(Action::About, true),
+];
 
 /// 5 个菜单（顺序 = 菜单栏顺序）。
 pub const MENUS: [Menu; 5] = [
@@ -660,7 +683,7 @@ pub const MENUS: [Menu; 5] = [
     },
 ];
 
-/// 全部菜单项总数（= 40）。
+/// 全部菜单项总数（= **41**：文件 10 + 编辑 4 + 视图 19 + 工具 6 + 帮助 2）。
 pub fn item_count() -> usize {
     MENUS.iter().map(|m| m.items.len()).sum()
 }
@@ -668,7 +691,7 @@ pub fn item_count() -> usize {
 /// 静态子项总数（= **5**：地图光照 3 + 语言 2）。
 ///
 /// 「最近打开」的动态列表**不计入**（行数随设置文件里的 `recent` 变：
-/// 0 条 ⇒ 1 行官方空态行）。子项**不进** [`MENUS`] 的 `items`，所以 [`item_count`] 仍是 40
+/// 0 条 ⇒ 1 行官方空态行）。子项**不进** [`MENUS`] 的 `items`，所以 [`item_count`] 仍是 41
 /// —— 两笔账分开数，免得"加了子项就把顶级 39 撑成 44"。
 pub fn sub_count() -> usize {
     let mut n = 0;
@@ -706,7 +729,7 @@ pub fn find_by_id(id: &str) -> Option<(usize, usize, &'static Item)> {
 /// （2026-11-05 地图光照接线时补）。
 ///
 /// 为什么需要它：`--menu-click view.light_night` 里的 `view.light_night` 是**子项** id，
-/// 原来的 [`find_by_id`] 只扫顶级 40 项 ⇒ 判成「没有这个菜单项」并报参数错误，
+/// 原来的 [`find_by_id`] 只扫顶级 41 项 ⇒ 判成「没有这个菜单项」并报参数错误，
 /// 而验收要求「同一会话点一档光照 ⇒ 切档 + 重渲」必须能无人值守复现。
 /// 现在 [`crate::cli::Cli::parse`] 与 [`crate::app::MireditApp`] 的 `pending_menu_clicks`
 /// 都问这一个函数：认得顶级项与静态子项，动态行（最近打开）仍不支持（它们没有稳定 id）。
@@ -740,6 +763,9 @@ pub const fn state(action: Action) -> State {
     match action {
         // ── 已实现（真执行） ──
         Action::OpenMap | Action::DarkMode | Action::KeyboardShortcuts => State::Ready,
+        // 「关于 Crystal Studio」2026-11-06 新增：只读模态，不依赖地图、不改一个字节
+        // ⇒ `Ready`（与「键盘快捷键」同一档：没有地图时也能看版本号）。
+        Action::About => State::Ready,
         Action::Panel(_) => State::Ready,
         // 「单元格网格」2026-11-05 起**真实现**：画布上按世界格 48×32 画格线
         // （`crate::grid`），`G` / 菜单 / `--cell-grid` / `--no-cell-grid` 都能切换。
@@ -946,7 +972,7 @@ mod tests {
     use crate::menu::panels::PanelVis;
     use std::collections::BTreeSet;
 
-    /// **40 项的账**：文件 10 / 编辑 4 / 视图 19 / 工具 6 / 帮助 1。
+    /// **41 项的账**：文件 10 / 编辑 4 / 视图 19 / 工具 6 / 帮助 2（2026-11-06 加「关于」）。
     ///
     /// 这条是验收门 §四.2 的机器判据：任何人加/删一项，这里先红。
     #[test]
@@ -959,8 +985,8 @@ mod tests {
             "视图菜单（XAML 8 + 语言 1 + 面板 8 + 锁定/重置 2）"
         );
         assert_eq!(TOOLS_ITEMS.len(), 6, "工具菜单");
-        assert_eq!(HELP_ITEMS.len(), 1, "帮助菜单");
-        assert_eq!(item_count(), 40, "5 个菜单合计");
+        assert_eq!(HELP_ITEMS.len(), 2, "帮助菜单（键盘快捷键 + 关于）");
+        assert_eq!(item_count(), 41, "5 个菜单合计");
         assert_eq!(MENUS.len(), 5);
         // 视图里的面板开关正好 8 个，且与 PanelId::ALL 一一对应
         let panels: Vec<_> = VIEW_ITEMS
@@ -991,8 +1017,37 @@ mod tests {
                 assert_eq!(MENUS[mi].items[ii].action.id(), id);
             }
         }
-        assert_eq!(ids.len(), 40);
+        assert_eq!(ids.len(), 41);
         assert!(find_by_id("no.such_item").is_none());
+    }
+
+    /// **帮助 → 关于**（2026-11-06 新增）在静态表里真的存在，且四项都对：
+    /// id `help.about` / 文案来自 `ui_text` / 三态 `Ready`（无图也能看）/ 位于帮助菜单第 2 项。
+    ///
+    /// ⚠ 这一项**没有官方 XAML 对应**（上游帮助菜单只有 `KeyboardShortcuts`），
+    /// 所以这条用例不比对官方，只钉住"本仓确实接上了、且计数算对"。
+    #[test]
+    fn 帮助关于项已接线() {
+        let (mi, ii, item) = find_by_id("help.about").expect("help.about 必须存在");
+        assert_eq!(mi, 4, "关于必须在帮助菜单（第 5 个）里");
+        assert_eq!(MENUS[mi].title, tx::MENU_HELP);
+        assert_eq!(ii, 1, "关于是帮助菜单第 2 项（1 基）");
+        assert_eq!(item.action, Action::About);
+        assert_eq!(item.action.label(), tx::MENU_ABOUT);
+        assert_eq!(item.action.shortcut(), None, "关于没有官方手势");
+        assert_eq!(state(item.action), State::Ready, "关于必须可真执行（只读模态）");
+        assert!(item.sub.is_none(), "关于是叶子项，不是子菜单容器");
+        assert!(item.sep_before, "关于与键盘快捷键之间要有一条分隔线");
+        // 帮助菜单的**顺序**：键盘快捷键 → 关于（顺序反过来会让分隔线落在第一项上）
+        assert_eq!(
+            HELP_ITEMS.iter().map(|i| i.action).collect::<Vec<_>>(),
+            vec![Action::KeyboardShortcuts, Action::About],
+            "帮助菜单顺序不对"
+        );
+        // `--menu-click help.about` 的校验/派发入口必须认这个 id
+        assert_eq!(find_action_by_id("help.about"), Some(Action::About));
+        // 菜单文案里点名产品名（否则任务栏里同名的"关于"分不清是谁）
+        assert!(MENUS[mi].items[ii].action.label().contains("Crystal Studio"));
     }
 
     /// **每项都有明确归属**：要么 `Ready`/`NeedsMap`（会真执行），要么 `Todo(原因非空)`。
@@ -1016,7 +1071,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(ready + need_map + todo, 40);
+        assert_eq!(ready + need_map + todo, 41);
         // 任务书 §三.3 点名必须真接上的那一批：逐条钉住，防止有人把它们改回 Todo
         for a in [
             Action::OpenMap,
@@ -1218,7 +1273,9 @@ mod tests {
             "视图：深色模式后 / 网格后 / 门后 / 适应地图后 / 语言后 / 面板后"
         );
         assert_eq!(seps(&TOOLS_ITEMS), vec![4], "工具：4 个生成器之后");
-        assert_eq!(seps(&HELP_ITEMS), Vec::<usize>::new());
+        // 帮助菜单：`键盘快捷键…` ｜ `关于 Crystal Studio` —— 这一条分隔线是**本仓新增**的
+        // （官方帮助菜单没有 About，见 `HELP_ITEMS` 的文档），目的是把"查手势"与"查身份"分开。
+        assert_eq!(seps(&HELP_ITEMS), vec![1], "帮助：关于之前");
     }
 
     /// **子项文案的字形覆盖**（补 `fonts::tests::文案全部字符都有字形` 的缺口）。
@@ -1265,18 +1322,18 @@ mod tests {
         }
     }
 
-    /// **40 顶级 + 5 子项**（审查缺陷 1/2 的计数钉子）。
+    /// **41 顶级 + 5 子项**（审查缺陷 1/2 的计数钉子）。
     ///
     /// 两笔账分开数：
-    /// * 顶级 40（[`item_count`] —— `--menu-dump` 汇总行的口径）；
+    /// * 顶级 41（[`item_count`] —— `--menu-dump` 汇总行的口径）；
     /// * 静态子项 5（[`sub_count`] = 地图光照 3 + 语言 2）。
     ///
     /// 再加「最近打开」那个**动态列表**：它没有静态子项，空列表时按官方
     /// `RecentMaps.cs:39` 给一条灰行 —— 这一条也在这里钉住。
     #[test]
-    fn 顶级40项与子项5项计数() {
-        // ① 顶级仍是 40（加子项不许把顶级撑大）
-        assert_eq!(item_count(), 40);
+    fn 顶级41项与子项5项计数() {
+        // ① 顶级是 41（帮助菜单 2026-11-06 由 1 项变 2 项），子项不许把它撑大
+        assert_eq!(item_count(), 41);
         // ② 静态子项 5，且顺序照官方
         assert_eq!(sub_count(), 5, "地图光照 3 + 语言 2");
         assert_eq!(

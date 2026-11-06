@@ -1229,8 +1229,12 @@ impl MireditApp {
                 .map(|d| (u32::from(d.map.width), u32::from(d.map.height)))
                 .unwrap_or((0, 0));
             act = menu::dialog::interact_export_minimap(ui, l, &mut self.overlay, cells);
-        } else if matches!(self.overlay, Overlay::Shortcuts) {
-            // 只读浮层：任意点击 / Esc 关闭
+        } else if matches!(self.overlay, Overlay::Shortcuts | Overlay::About) {
+            // 只读浮层（键盘快捷键 / 关于 Crystal Studio）：任意点击 / Esc 关闭。
+            //
+            // ⚠ 关于对话框**不走 egui::Window**（与快捷键浮层同一套自绘模态）：
+            // 它是"看一眼就关"的只读面板，没有输入框、没有提交按钮 ⇒ 点击任意处即关，
+            // 不阻塞主编辑（关掉立刻能继续画）。
             if ui.input(|i| i.pointer.any_click()) || ui.input(|i| i.key_pressed(egui::Key::Escape))
             {
                 act = menu::dialog::DialogAction::Cancel;
@@ -2328,6 +2332,8 @@ impl eframe::App for MireditApp {
                         menu::dialog::draw_export_minimap(&p, &l, path, size, cells)
                     }
                     Overlay::Shortcuts => menu::dialog::draw_shortcuts(&p, &l),
+                    // 帮助 → 关于 Crystal Studio：只读模态（产品名/版本/上游/许可证/构建档位）
+                    Overlay::About => menu::about::draw(&p, &l),
                     Overlay::None => {}
                 }
 
@@ -3635,6 +3641,30 @@ mod tests {
         app.dispatch_menu(menu::model::Action::KeyboardShortcuts, canvas);
         assert!(app.overlay == Overlay::Shortcuts, "菜单项没打开浮层");
         assert!(app.overlay.is_some());
+    }
+
+    /// **帮助 → 关于**：菜单项打开只读模态，且**地图一字节不动**（`map_gen` 不变）。
+    ///
+    /// 为什么单列一条（不并进快捷键那条）：这两条走的是同一个 `dispatch_menu`，
+    /// 但 About 是 2026-11-06 新增的**本仓功能**，它的"版本号现算 + 不碰文档"是硬要求，
+    /// 得有一条用例在宿主层（app）钉住，而不是只在 `menu::action` 的夹具里绿。
+    #[test]
+    fn 关于浮层打开且不改地图() {
+        let mut app = 有图应用();
+        let canvas = 画布();
+        let gen = app.doc.map_gen;
+        assert!(app.overlay == Overlay::None);
+        app.dispatch_menu(menu::model::Action::About, canvas);
+        assert!(app.overlay == Overlay::About, "菜单项没打开关于模态");
+        assert!(app.overlay.is_some());
+        assert_eq!(app.doc.map_gen, gen, "打开关于不许改地图/触发重渲");
+        let (text, warn) = app.op.clone().expect("要有回执");
+        assert!(!warn, "打开关于不是拒绝：{text}");
+        assert_eq!(text, tx::ABOUT_OPEN_RECEIPT);
+        // 版本号在宿主这一层也是同一份真源（`--version` / 关于 / 网页 health）
+        assert_eq!(menu::about::VERSION, env!("CARGO_PKG_VERSION"));
+        // 浮层是"只读模态"：`is_some()` ⇒ `handle_keys` 整段早退，编辑快捷键不会落进地图
+        assert!(app.overlay.is_some(), "关于打开期间编辑快捷键必须被挡住");
     }
 
     /// **`--menu-click file.open_recent`**：容器项**不执行任何动作**，只回一条"去哪选"的话。

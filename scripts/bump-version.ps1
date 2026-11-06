@@ -15,6 +15,8 @@
       -Part patch|minor|major
           按当前版本递增：patch 只升 Z；minor 升 Y 且 Z 归零；major 在 1.0 之前被拒绝
           （0.x 阶段用 minor 表示 breaking），1.0 之后按正常 SemVer 升 X 并归零 Y/Z。
+          0.x 阶梯（VERSIONING.md §5.1）：0.0.1 -Part patch ⇒ 0.0.2（只修不增）；
+          0.0.1 -Part minor ⇒ 0.1.0（首个 MINOR 功能里程碑）。
 
       -Set X.Y.Z
           显式设成指定三段版本（严格 SemVer 校验；-rc.N / +g<sha> 由发布流程另定，本脚本不处理）。
@@ -46,7 +48,7 @@
     pwsh -File scripts/bump-version.ps1 -Part minor
 
 .EXAMPLE
-    pwsh -File scripts/bump-version.ps1 -Set 0.2.0
+    pwsh -File scripts/bump-version.ps1 -Set 0.1.0
 
 .NOTES
     退出码：0 = 成功；1 = 校验失败或前置条件不满足（含「根 Cargo.toml 缺 [workspace.package]」）。
@@ -141,7 +143,7 @@ function Assert-NoBom {
 # ───────────────────────────── TOML 读取（只认当前仓库用到的两种写法） ─────────────────────────────
 
 # 取指定表里的 version 键。返回 $null（表或键不存在），或：
-#   Kind = 'literal'    ⇒ version = "0.1.0"（写死，违反单一真源）
+#   Kind = 'literal'    ⇒ version = "0.0.1"（写死，违反单一真源）
 #   Kind = 'workspace'  ⇒ version.workspace = true（正确写法）
 #   Value = 版本号 / 'workspace'；Line = 行号（1 起）
 function Get-TomlVersionEntry {
@@ -556,7 +558,7 @@ function Show-ReleaseChecklist {
     Write-Line '2. 版本展示面核对：'
     Write-Line "     cargo pkgid -p miredit-web                  # 末段应为 #$Version"
     Write-Line '     curl -s http://127.0.0.1:8080/api/health    # version 必须等于新版本'
-    Write-Line '     miredit-gui --version                       # 必须输出 Crystal Studio <版本>（VERSIONING.md §3.2）；「关于」对话框仍未实现'
+    Write-Line '     miredit-gui --version                       # 必须输出 Crystal Studio <版本>（VERSIONING.md §3.2）；「关于」对话框若已落地，版本串必须与这里一致'
     Write-Line '3. 干净构建（一次性 target 目录，别塞进仓库树）：'
     Write-Line '     CARGO_TARGET_DIR=<独立目录> cargo build --release --workspace'
     Write-Line "     git archive --format=zip --prefix=CrystalStudio-$Version/ v$Version -o CrystalStudio-$Version.zip"
@@ -623,7 +625,7 @@ else {
     }
     if (-not (Test-SemVerCore $Set)) {
         Stop-Failure "-Set 的值不是合法三段 SemVer：$Set" @(
-            '要求：MAJOR.MINOR.PATCH，三段十进制整数，不写前导零（例：0.2.0 / 1.0.0）。'
+            '要求：MAJOR.MINOR.PATCH，三段十进制整数，不写前导零（例：0.0.2 / 1.0.0）。'
         )
     }
     $target = $Set

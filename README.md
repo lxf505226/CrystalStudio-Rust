@@ -4,7 +4,7 @@
 
 **Crystal Studio** 是传奇 M2 系地图编辑器（上游为 C# / Avalonia 实现）的 **Rust 全量移植**：8 个单向依赖的 crate，PC 原生版与网页版共用同一编辑内核，覆盖 **9 种地图格式**的判别、解析与写回。
 
-上游参照：[`fluttergo/CrystalStudio`](https://github.com/fluttergo/CrystalStudio)，本仓对齐的上游基线提交为 `901dbe2f`。上游 HEAD `6450da90` 仅新增 CellHover + NativeAOT 发布链，未改变地图格式/渲染/资产解码。
+上游参照：[`fluttergo/CrystalStudio`](https://github.com/fluttergo/CrystalStudio)，本仓对齐的上游基线提交为 `901dbe2f`。2026-11-06 复核上游 HEAD `f84566b`：新增模块化地图生成/分割/连接能力（模块族），未改 `.map` 格式/保存字节；本版**未跟进模块族**。
 
 ## 一、能力
 

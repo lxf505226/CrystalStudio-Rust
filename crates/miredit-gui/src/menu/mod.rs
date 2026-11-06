@@ -1,15 +1,16 @@
-//! **完整菜单系统**（5 个菜单 / 40 项）+ 弹层 / 浮层状态机。
+//! **完整菜单系统**（5 个菜单 / **41 项**）+ 弹层 / 浮层状态机。
 //!
 //! # 模块划分
 //!
 //! | 模块 | 职责 |
 //! |---|---|
-//! | [`model`] | **静态表**：5 菜单 40 项、官方分组、官方快捷键、三态判据 |
+//! | [`model`] | **静态表**：5 菜单 41 项、官方分组、官方快捷键、三态判据 |
 //! | [`action`] | **唯一执行入口**：鼠标 / 键盘 / `--menu-click` 三条路径共用 |
 //! | [`popup`] | 弹层几何与绘制（量出来的宽高，颜色/尺寸全走 `theme` / `metrics`）|
 //! | [`panels`] | 7 个面板的显隐状态（视图菜单那 7 个开关）|
 //! | [`settings`] | `%LOCALAPPDATA%\miredit\settings.json`（深色偏好 + **最近打开的地图列表**）|
 //! | [`shortcuts`] | 帮助 → 键盘快捷键：**只列真实绑定**的只读浮层 |
+//! | [`about`] | 帮助 → 关于 Crystal Studio：产品名/版本/上游/许可证/构建档位的只读模态 |
 //! | [`dialog`] | 打开地图模态 + 另存为模态 + 快捷键浮层的绘制与输入 |
 //!
 //! # 交互契约
@@ -38,6 +39,7 @@
 //! 不用 egui 的 `Area`/`Window`：本界面是**纯 Painter 自绘**（见 `app.rs` 的绘制顺序），
 //! 弹层必须自己排在菜单栏之后画，才能压住面板与画布。
 
+pub mod about;
 pub mod action;
 pub mod dialog;
 pub mod model;
@@ -95,6 +97,13 @@ pub enum Overlay {
     },
     /// 「帮助 → 键盘快捷键…」的只读浮层。
     Shortcuts,
+    /// 「帮助 → 关于 Crystal Studio」的只读模态（2026-11-06 新增）。
+    ///
+    /// 与 [`Overlay::Shortcuts`] **同一套交互**：Esc 或点击任意处关闭，不吃编辑快捷键
+    /// （`app::handle_keys` 在 `overlay.is_some()` 时整段早退，见那里的 ⓪ 段）。
+    /// 内容全部现算（版本 = `CARGO_PKG_VERSION`、构建档位 = `cfg!(debug_assertions)`），
+    /// 见 [`crate::menu::about::rows`]。
+    About,
 }
 
 impl Overlay {
@@ -958,9 +967,9 @@ fn dump_sub_state() -> SubState {
     }
 }
 
-/// `--menu-dump`：把 40 项（含子项行）逐条打到 stderr（**不开窗**，验收门 §四.2 的证据来源）。
+/// `--menu-dump`：把 41 项（含子项行）逐条打到 stderr（**不开窗**，验收门 §四.2 的证据来源）。
 ///
-/// 返回**顶级项数**（= 40；子项行不计入，与旧口径一致）。
+/// 返回**顶级项数**（= 41；子项行不计入，与旧口径一致）。
 pub fn dump(has_map: bool, dark: bool, panels: &PanelVis) -> usize {
     let sub = dump_sub_state();
     for line in dump_lines_with(has_map, dark, panels, &sub) {
@@ -979,11 +988,11 @@ mod tests {
     use super::*;
     use crate::menu::model::{find_by_id, item_count};
 
-    /// 40 项、5 菜单（`dump` 的计数与静态表必须一致）。
+    /// 41 项、5 菜单（`dump` 的计数与静态表必须一致）。
     #[test]
     fn 表与常量一致() {
         assert_eq!(MENUS.len(), 5);
-        assert_eq!(item_count(), 40);
+        assert_eq!(item_count(), 41);
         assert!(find_by_id("view.dark_mode").is_some());
     }
 
@@ -1603,9 +1612,9 @@ mod tests {
     ///
     /// 四件事一起钉：
     /// ① 每个项行都带 `parent=` 与 `sep=`（缺一列就等于没加）；
-    /// ② 顶级 40 行 `parent=-`，`sep=yes` 恰好 11 条（官方 `<Separator />` 总数）；
+    /// ② 顶级 41 行 `parent=-`，`sep=yes` 恰好 12 条（官方 11 条 + 本仓「关于」前 1 条）；
     /// ③ 子项行 `parent=<父项id>`：地图光照 3 + 语言 2 + 最近打开空态 1，且 `sep=-`；
-    /// ④ 汇总行仍是 **40 口径**（子项不计入）。
+    /// ④ 汇总行仍是 **41 口径**（子项不计入）。
     #[test]
     fn dump带parent与sep两列() {
         let panels = PanelVis::default();
@@ -1613,7 +1622,7 @@ mod tests {
         assert_eq!(
             lines.len(),
             1 + item_count() + 5 + 1 + 1,
-            "表头 + 40 顶级行 + 5 子项行 + 1 空态行 + 汇总行"
+            "表头 + 41 顶级行 + 5 子项行 + 1 空态行 + 汇总行"
         );
         let rows: Vec<&String> = lines.iter().filter(|l| l.contains(" | parent=")).collect();
         assert_eq!(rows.len(), item_count() + 5 + 1, "每个项行都要带 parent 列");
@@ -1622,18 +1631,20 @@ mod tests {
         }
         // ② 顶级行
         let top = rows.iter().filter(|l| l.contains("parent=- ")).count();
-        assert_eq!(top, item_count(), "顶级行必须是 40 条 parent=-");
-        // 分隔线总数 = **11**：
+        assert_eq!(top, item_count(), "顶级行必须是 41 条 parent=-");
+        // 分隔线总数 = **12**：
         //   静态 8（实测 axaml 全文 `<Separator />` 只有 8 个：文件 2 / 编辑 2 / 视图 3 / 工具 1）
         // + 视图动态追加 3（`MainWindow.Localization.cs:15` 语言前 1 条、`axaml.cs:383` 面板前
-        //   1 条、`axaml.cs:387` 锁定前 1 条）= 11，其中视图 3+3=6。
+        //   1 条、`axaml.cs:387` 锁定前 1 条）= 11，其中视图 3+3=6；
+        //   **本仓再加 1 条**（2026-11-06）：帮助菜单「关于 Crystal Studio」之前（本仓新增项，
+        //   官方没有 About，所以这 1 条没有 XAML 出处 —— 见 `model::HELP_ITEMS` 的文档）= 12。
         // ⚠ 审查报告 §8.1 写「分隔线 12 条（视图 7）」是**多算了一条**（2026-11-05 复核：
         //   `[regex]::Matches($axaml,'<Separator\s*/>').Count == 8`，代码追加 3 条），
         //   本仓 `sep_before` 的 11 处才是对的 —— 以代码实测为准，报告那个数已过期。
         let seps = rows.iter().filter(|l| l.contains("sep=yes")).count();
         assert_eq!(
-            seps, 11,
-            "分隔线 11 条（静态 8 + 视图动态 3；报告写的 12 是多算了视图一条）"
+            seps, 12,
+            "分隔线 12 条（官方 11 + 本仓「关于」前 1 条）"
         );
         // ③ 子项行
         let subs: Vec<&&String> = rows.iter().filter(|l| !l.contains("parent=- ")).collect();

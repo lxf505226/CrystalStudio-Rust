@@ -3,6 +3,17 @@ name = "miredit-gui"
 version.workspace = true
 edition = "2021"
 description = "地图编辑器 GUI（egui，仿 CrystalStudio 运行期界面）"
+# 构建脚本：把**应用图标 + 版本资源**嵌进 Windows exe（PE 资源段）。
+# 只用得着 `assets/crystal-studio.ico` 与 `CARGO_PKG_VERSION`，见 `build.rs` 的模块文档。
+build = "build.rs"
+
+[build-dependencies]
+# 资源编译的胶水层：`*-pc-windows-gnu` 用 PATH 上的 `windres`，MSVC 用 `rc.exe`
+# （它会自己去 VS/SDK 目录里找）。**不自己拼命令行**：本机是 GNU 目标、CI 是 MSVC 目标，
+# 两套参数差异（`-fo/-C/-no-preprocess` vs `/fo`）由它统一，避免出"本地能嵌、CI 嵌不进"。
+# 版本取 3.x：`compile()` 的返回值必须显式判 Ok（见 `build.rs`），
+# 这样"没有资源编译器"会**构建失败**，而不是悄悄产出没图标的 exe。
+embed-resource = "3"
 
 [dependencies]
 # egui / eframe 版本硬锁定（任务书 §六：必须锁定具体版本，不得浮动）
@@ -14,6 +25,13 @@ eframe = { version = "=0.33.3", default-features = false, features = [
     "x11",
 ] }
 egui = "=0.33.3"
+
+# ⚠ **窗口图标不需要额外依赖**（2026-11-06 图标单核过）：
+# 解码走 `eframe::icon_data::from_png_bytes`（`eframe-0.33.3/src/icon_data.rs:24`），
+# 它内部就是 `image::load_from_memory` —— 而 `eframe` 对 `image 0.25`（`features=["png"]`，
+# 非 optional）本来就是**无条件依赖**（`eframe/Cargo.toml` 的 `[target.'cfg(not(wasm32))'.dependencies.image]`）。
+# ⇒ 本 crate 再声明一条 `image` 直接依赖是**多余的**（依赖图不会变，只是多一行声明），
+#   所以这里不加。若将来要自己解非 PNG 的图，再按需加。
 
 # 中文字体解析：egui/epaint 内部本来就依赖它（epaint-0.33.3 → ab_glyph = "0.2.32"），
 # 这里只是把**同一个**版本声明成直接依赖来自己用它，**没有新增任何字体库**，
