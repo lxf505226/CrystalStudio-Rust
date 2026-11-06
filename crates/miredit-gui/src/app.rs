@@ -196,6 +196,12 @@ pub struct MireditApp {
     /// 只用于「窗口尺寸是否变了」这一个判断 —— `Some(旧) != 当前` 时才走一次
     /// [`CanvasView::refit_on_resize`]，**不是每帧都 fit**（否则用户手动缩放/平移会被抢掉）。
     canvas_size: Option<Vec2>,
+    /// **Alt 落位预览的内容纹理缓存**（A-011）：`(印章 id, 纹理, 宽, 高)`。
+    ///
+    /// 换选（`id` 变了）⇒ 失效重渲染；不按帧渲染（`render_stamp` 一次 ~10ms 级）。
+    preview_tex: Option<(String, egui::TextureId, u32, u32)>,
+    /// `--preview-alt`：把「按住 Alt」伪造成常真（**只服务取证截图**）。
+    preview_alt: bool,
     /// 关闭拦截模态是否已经弹出（有未保存修改时点第一次 × 变成 `true`）。
     confirm_close: bool,
     /// 已发给窗口系统的标题（变了才发 `ViewportCommand::Title`，避免每帧发指令）。
@@ -604,6 +610,8 @@ impl MireditApp {
             last_frame: None,
             last_canvas: Rect::NOTHING,
             canvas_size: None,
+            preview_tex: None,
+            preview_alt: cli.preview_alt,
             last_overlay: Rect::NOTHING,
             confirm_close: false,
             shown_title: String::new(),
@@ -1514,6 +1522,17 @@ impl MireditApp {
 
     /// 把**当前选中的印章**置为待放置态（`Enter` 与 `--stamp-arm` 共用这一条）。
     ///
+    /// 待放置印章的 `.X` 绝对路径 —— **与面板缩略图同源**（`catalog.resolve(id)`）。
+    ///
+    /// ⚠ 为什么不用 `stamps.selected_path()`（2026-11-07 实测踩到）：那条路只有在
+    /// **面板里真的选中过一行**（`Item.path` 非空）时才有值；`--stamp-pick/--stamp-arm`
+    /// 这条 CLI 取证路径上它是 `None` ⇒ `Armed.cells` 拿不到 ⇒ A-011 的预览只有轮廓、
+    /// 没有半透明内容与受阻诊断（三张验收图当场拍空）。`resolve` 是按 id 现查，
+    /// 与面板给缩略图取路径**完全同一条**，两条入口都能拿到。
+    fn path_of_stamp(&mut self, id: &str) -> Option<std::path::PathBuf> {
+        self.stamps.catalog_mut()?.resolve(id).map(|r| r.path)
+    }
+
     /// 返回是否真的进入了待放置态（没选中任何一枚 ⇒ `false`，什么都不做）。
     fn arm_selected(&mut self) -> bool {
         let Some(a) = self.stamps.armed() else {
@@ -1539,6 +1558,21 @@ impl MireditApp {
         // 待放置态的提示进 `status_op`（不是 `status_stamp`）：后者是"选中的是谁"，
         // 前者是"现在点下去会发生什么"，两件事分开说。
         self.op = Some((stamp_place::armed_text(&a.name), false));
+        // A-011：进待放置态时**顺带读一次盘**把格表装进 `Armed`（Alt 预览要用它渲染
+        // 半透明内容与受阻诊断）。读失败 ⇒ `cells: None` ⇒ 预览降级成只画轮廓；
+        // **不在这里报错**：真正落位时 `place` 会现读盘并给出中文原因（一条路径，不两套口径）。
+        let 号段 = self
+            .doc
+            .assets
+            .号段()
+            .unwrap_or(miredit_core::库号号段::Wemade);
+        let cells = self
+            .path_of_stamp(&a.id)
+            .and_then(|p| stamp_place::read(&p, 号段).ok())
+            .map(|f| f.cells);
+
+        let mut a = a;
+        a.cells = cells;
         self.armed = Some(a);
         // 进待放置态时切到「印章」工具图标，让工具列也反映当前意图
         self.selected_tool = selection_ops::TOOL_STAMP_IDX;
@@ -2260,6 +2294,8 @@ impl eframe::App for MireditApp {
                 let l = self.layout(screen);
                 // 面板自身不留边距，painter 的裁剪盒扩到整个窗口
                 let p = ui.painter().with_clip_rect(screen);
+                // A-011：Alt 预览（内容纹理懒加载 ⇒ 每帧只在需要时渲染一次）
+                let 预览 = self.stamp_preview(ctx);
 
                 // ① 自动化驱动（平移 / 素材滚动）——必须在交互/布局之前
                 self.drive_autodrag(ctx);
@@ -2406,9 +2442,12 @@ impl eframe::App for MireditApp {
                         map_w: self.doc.doc.as_ref().map(|d| d.map.width).unwrap_or(0),
                         map_h: self.doc.doc.as_ref().map(|d| d.map.height).unwrap_or(0),
                         selection: self.edit.selection(),
+                        // 待放置预览（A-011）：内容 + 轮廓 + 受阻诊断。
+                        // ⚠ 必须**先**算到局部变量：`stamp_preview` 要 `&mut self`（懒加载纹理），
+                        //  而下面的 `CanvasCtx` 字面量同时**不可变**借用了 `self` 的其它字段。
                         // 待放置轮廓：**只有按住 Alt 才画**（任务书 §三.5 的推荐做法）——
                         // 常驻显示会盖住地图，按住 Alt 才看是"临时预览"的语义。
-                        stamp_preview: self.stamp_preview(ctx),
+                        stamp_preview: 预览,
                         armed_badge: self.armed_badge(),
                     },
                 );
@@ -2583,12 +2622,114 @@ impl MireditApp {
     /// 为什么"按住 Alt 才画"而不是常驻：轮廓是一块矩形描边，常驻会一直盖在地图上；
     /// 按住 `Alt` 才看是**临时预览**的语义（任务书 §三.5 的推荐做法）。
     /// 为什么缺 ④ 就不画：没有包围盒就没有真实几何，随便框一个"大概大小"就是假数据。
-    fn stamp_preview(&self, ctx: &egui::Context) -> Option<stamp_place::Outline> {
-        let a = self.armed.as_ref()?;
-        if !ctx.input(|i| i.modifiers.alt) {
+    /// **Alt 落位预览**（A-011）：内容（半透明）+ 轮廓 + 受阻诊断。
+    ///
+    /// 上游 `MapViewport.StampRendering.cs:58-109` 的三段：`PushOpacity(Allowed ? 0.55 : 0.18)`
+    /// → 内容 → 轮廓 → `blocked` 非空才画红/琥珀诊断。
+    ///
+    /// 本方法只做**宿主侧**三件事，判据全在内核/纯函数：
+    /// ① Alt 门控（保留既有差异：上游 armed 常驻，本仓要按住 Alt）；
+    /// ② 懒渲染内容纹理（按 `armed.id` 缓存；失败/无 `cells` ⇒ `tex: None` ⇒ 只画轮廓，
+    ///    **绝不画假像素**）；
+    /// ③ 把内核 `check_stamp_placement` 的受阻格原样带出去给绘制层。
+    fn stamp_preview(&mut self, ctx: &egui::Context) -> Option<crate::canvas_overlay::PreviewData> {
+        // ①b 格表**懒加载兜底**：`arm_selected` 已经试过一次；若那次没读到（路径未解析出来等），
+        //    这里再按当前选中项补一次 —— 预览只是只读展示，多读一次盘不影响任何语义。
+        let 缺格 = self
+            .armed
+            .as_ref()
+            .map(|a| a.cells.is_none())
+            .unwrap_or(false);
+        if 缺格 {
+            if let Some(id) = self.armed.as_ref().map(|a| a.id.clone()) {
+                if let Some(p) = self.path_of_stamp(&id) {
+                    let 号段 = self
+                        .doc
+                        .assets
+                        .号段()
+                        .unwrap_or(miredit_core::库号号段::Wemade);
+                    let cells = stamp_place::read(&p, 号段).ok().map(|f| f.cells);
+                    if let Some(a) = self.armed.as_mut() {
+                        a.cells = cells;
+                    }
+                }
+            }
+        }
+        let armed = self.armed.as_ref()?;
+        // Alt 门控（保留既有差异：上游 armed 常驻）；`--preview-alt` 是取证用的伪造开关
+        if !self.preview_alt && !ctx.input(|i| i.modifiers.alt) {
             return None;
         }
-        Some((self.hover?, a.bounds?))
+        let anchor = self.hover?;
+        let d = self.doc.doc.as_ref()?;
+        // 诊断（内核只读检查）：没有格表 ⇒ 只有轮廓、无诊断
+        let 状态 = armed.cells.as_deref().and_then(|cells| {
+            stamp_place::preview_state(&d.map, cells, anchor.0, anchor.1, true)
+        });
+        // 内容纹理：按 id 懒加载（换选失效）
+        let mut tex = match &self.preview_tex {
+            Some((id, t, w, h)) if id == &armed.id => Some((*t, *w, *h)),
+            _ => None,
+        };
+        if tex.is_none() {
+            if let (Some(cells), Some(src)) = (
+                armed.cells.as_deref(),
+                self.doc.assets.source().map(|s| s as &dyn mir2_assets::SpriteSource),
+            ) {
+                // 与 `stamp_panel::thumbs` 同一套搬运（掩 bit15 交给渲染库）
+                let 位置格: Vec<miredit_render::stamp::PositionedCell> = cells
+                    .iter()
+                    .map(|c| miredit_render::stamp::PositionedCell {
+                        dx: c.dx,
+                        dy: c.dy,
+                        bk: c.bk & 0x7FFF,
+                        mid: c.mid & 0x7FFF,
+                        fr: c.fr & 0x7FFF,
+                        bk_lib: c.bk_lib,
+                        mid_lib: c.mid_lib,
+                        fr_lib: c.fr_lib,
+                    })
+                    .collect();
+                // 上游预览是**1:1 原生像素**：scale 1、Nearest、**margin 0**
+                let opts = miredit_render::stamp::StampRenderOptions {
+                    box_px: None,
+                    scale: 1.0,
+                    filter: miredit_render::stamp::FilterClass::Nearest,
+                    margin_px: 0,
+                };
+                if let Ok(img) = miredit_render::stamp::render_stamp(&位置格, src, &opts) {
+
+                    if img.width > 0 && img.height > 0 && !img.rgba.is_empty() {
+                        let 色 = egui::ColorImage::from_rgba_unmultiplied(
+                            [img.width as usize, img.height as usize],
+                            &img.rgba,
+                        );
+                        let t = ctx.load_texture(
+                            format!("miredit-stamp-preview-{}", armed.id),
+                            色,
+                            egui::TextureOptions::NEAREST,
+                        );
+                        tex = Some((t.id(), img.width, img.height));
+                        self.preview_tex = Some((armed.id.clone(), t.id(), img.width, img.height));
+                    }
+                }
+            }
+        }
+        // 包围盒：目录给的优先；没有就用格表算（仍然只有轮廓）
+        let bounds = armed
+            .bounds
+            .or_else(|| armed.cells.as_deref().map(stamp_place::格表包围盒))?;
+
+        Some(crate::canvas_overlay::PreviewData {
+            anchor,
+            bounds,
+            tex,
+            opacity: 状态
+                .as_ref()
+                .map(|s| s.不透明度)
+                .unwrap_or(stamp_place::不透明度允许),
+            blocked: 状态.map(|s| s.检查.blocked).unwrap_or_default(),
+        })
     }
 
     /// 这一帧要不要画**待放置徽标**（跟着鼠标走的小标签）。
@@ -4600,5 +4741,98 @@ mod tests {
             平移前,
             "手动平移过的位置不许被覆盖"
         );
+    }
+
+    // ─────────────────── A-011：arm 之后格表必须到位（预览的数据前提） ───────────────────
+
+    /// 印章调色板路径：`MIR2_STAMP_PALETTE` → 缺省 `_upstream/catalogue/palette.json`。
+    fn 印章调色板() -> Option<PathBuf> {
+        let p = std::env::var_os("MIR2_STAMP_PALETTE")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(r"I:\miredit\_upstream\catalogue\palette.json"));
+        p.is_file().then_some(p)
+    }
+
+    /// **arm 之后必须拿到格表**（`Armed.cells`），且 `preview_state` 带出内容/受阻诊断。
+    ///
+    /// 钉住 2026-11-07 实测踩到的坑：`--stamp-pick/--stamp-arm` 这条入口上
+    /// `stamps.selected_path()` 是 `None` ⇒ `Armed.cells` 为空 ⇒ 半透明内容与红/琥珀诊断
+    /// 一个像素都画不出来（三张验收图当场拍空）。现在路径改走 `catalog.resolve(id)`
+    /// （与面板缩略图同源），本用例守这条链：arm ⇒ 有格表 ⇒ 预览有状态。
+    #[test]
+    fn arm之后拿到格表且预览有诊断() {
+        let Some(pal) = 印章调色板() else {
+            eprintln!("[跳过] 印章调色板不在（MIR2_STAMP_PALETTE / _upstream/catalogue/palette.json）");
+            return;
+        };
+        let mut app = 有图应用n(8);
+        app.stamps = crate::stamp_panel::StampPanel::with_path(pal);
+        let t0 = std::time::Instant::now();
+        while !app.stamps.is_ready() && t0.elapsed() < std::time::Duration::from_secs(5) {
+            // 后台线程把结果送进 channel，`poll()` 才把它换成 `Load::Ready`（宿主每帧做同一件事）
+            app.stamps.poll();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(app.stamps.is_ready(), "印章目录必须装载成功");
+        assert!(app.stamps.pick_slot(0), "第 1 格应能选中");
+        assert!(app.arm_selected(), "应进入待放置态");
+
+        let cells = app
+            .armed
+            .as_ref()
+            .and_then(|a| a.cells.clone())
+            .expect("arm 之后必须有格表（否则预览只能画轮廓）");
+        assert!(!cells.is_empty(), "格表不许为空");
+        // 抽一格**非负偏移**的格当"占用"目标（保证落在锚点右下方、图内）
+        let 偏移 = cells
+            .iter()
+            .find(|c| c.dx >= 0 && c.dy >= 0)
+            .map(|c| (c.dx, c.dy))
+            .expect("印章至少有一格非负偏移");
+
+        // ① 空位 ⇒ 允许 + 0.55，无受阻
+        {
+            let map = &app.doc.doc.as_ref().expect("有图").map;
+            let s = stamp_place::preview_state(map, &cells, 2, 2, true).expect("Alt 按住");
+            assert!(s.检查.error.is_none(), "空位不该有 error");
+            assert!(s.检查.blocked.is_empty(), "空位不该有受阻格");
+            assert!(
+                (s.不透明度 - stamp_place::不透明度允许).abs() < 1e-6,
+                "允许 ⇒ 0.55"
+            );
+        }
+        // ② 占掉目标格 ⇒ 受阻（OccupiedObject）+ 0.18
+        {
+            let d = app.doc.doc.as_mut().expect("有图");
+            let (tx, ty) = (
+                2u16 + u16::try_from(偏移.0).unwrap(),
+                2u16 + u16::try_from(偏移.1).unwrap(),
+            );
+            let i = miredit_core::index_of(&d.map, tx, ty).expect("图内格");
+            d.map.cells[i].fr_img = 7;
+            let s = stamp_place::preview_state(&d.map, &cells, 2, 2, true).expect("Alt 按住");
+            assert_eq!(s.检查.blocked.len(), 1, "只该有那一格被占");
+            assert_eq!(
+                s.检查.blocked[0].reason,
+                miredit_core::StampBlockReason::OccupiedObject
+            );
+            assert!(
+                (s.不透明度 - stamp_place::不透明度受阻).abs() < 1e-6,
+                "受阻 ⇒ 0.18"
+            );
+        }
+        // ③ 贴边（锚点 0,0）⇒ 出界的格报 MapBoundary（琥珀）
+        {
+            let map = &app.doc.doc.as_ref().expect("有图").map;
+            let s = stamp_place::preview_state(map, &cells, 0, 0, true).expect("Alt 按住");
+            assert!(
+                s.检查
+                    .blocked
+                    .iter()
+                    .any(|b| b.reason == miredit_core::StampBlockReason::MapBoundary),
+                "贴左上角必须有出界格：{:?}",
+                s.检查.blocked
+            );
+        }
     }
 }

@@ -177,6 +177,13 @@ pub struct Palette {
     pub selection_fill: Color32,
     /// 印章**待放置轮廓框**的线色。
     pub stamp_preview_stroke: Color32,
+    /// 落位预览里**已有物件**的受阻格诊断色（上游 `Color.FromRgb(247,66,85)` = `#F74255`）。
+    ///
+    /// 两套主题**同值**：这是压在**地图像素**上的诊断色，与界面主题无关
+    /// （同 `modal_scrim` 的理由）；实际绘制时填充 α95、描边不透明（上游 `:102-103`）。
+    pub stamp_blocked: Color32,
+    /// 落位预览里**落到地图外**的受阻格诊断色（上游 `Color.FromRgb(245,174,52)` = `#F5AE32`）。
+    pub stamp_boundary: Color32,
 
     // ── 模态 / 弹层 ──
     /// 关闭拦截模态 / 打开地图模态的遮罩色（预乘半透明黑）。
@@ -313,6 +320,9 @@ pub const LIGHT: Palette = Palette {
     selection_fill: rgba_pm(12, 17, 30, 30),
     // 印章轮廓 = `accent` 实测值 `#CC9629`（不透明实线）。
     stamp_preview_stroke: Color32::from_rgb(0xCC, 0x96, 0x29),
+    // 落位诊断两色与主题无关（官方硬编码，压在游戏画面之上）
+    stamp_blocked: Color32::from_rgb(0xF7, 0x42, 0x55),
+    stamp_boundary: Color32::from_rgb(0xF5, 0xAE, 0x32),
 
     // 模态遮罩（**推导**，参考截图无此控件）：35% 黑。
     modal_scrim: rgba_pm(0, 0, 0, 90),
@@ -474,6 +484,9 @@ pub const DARK: Palette = Palette {
     selection_fill: rgba_pm(12, 17, 30, 30),
     // 官方: 同 `accent`。
     stamp_preview_stroke: Color32::from_rgb(0x84, 0x98, 0xFF),
+    // 落位诊断两色与主题无关（同浅色侧）
+    stamp_blocked: Color32::from_rgb(0xF7, 0x42, 0x55),
+    stamp_boundary: Color32::from_rgb(0xF5, 0xAE, 0x32),
 
     // 遮罩两套同值：它压在**地图**上，与主题无关（浅色下也不该变）。
     modal_scrim: rgba_pm(0, 0, 0, 90),
@@ -536,6 +549,9 @@ mod tests {
             "collision_high_mark",
             "selection_fill",
             "hover_blocked_text",
+            // A-011：落位诊断两色与主题无关（压在游戏画面上的硬编码诊断色）
+            "stamp_blocked",
+            "stamp_boundary",
         ];
         let pairs = [
             ("title_bar", LIGHT.title_bar, DARK.title_bar),
@@ -576,11 +592,12 @@ mod tests {
                 LIGHT.stamp_preview_stroke,
                 DARK.stamp_preview_stroke,
             ),
+
             ("menu_popup_bg", LIGHT.menu_popup_bg, DARK.menu_popup_bg),
             ("menu_popup_border", LIGHT.menu_popup_border, DARK.menu_popup_border),
             ("menu_popup_hover", LIGHT.menu_popup_hover, DARK.menu_popup_hover),
         ];
-        assert_eq!(pairs.len() + same_ok.len(), 43, "字段清单要覆盖全部 43 项");
+        assert_eq!(pairs.len() + same_ok.len(), 45, "字段清单要覆盖全部 45 项（A-011 加了两条诊断色）");
         for (name, l, d) in pairs {
             assert_ne!(l, d, "字段 {name} 两套色板相同（深色模式会漏变）");
         }

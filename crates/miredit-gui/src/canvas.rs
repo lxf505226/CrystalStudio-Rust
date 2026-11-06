@@ -68,7 +68,7 @@ pub struct CanvasCtx<'a> {
     ///
     /// 只有"待放置态 + 按住 Alt + 鼠标在图内 + 目录给得出包围盒"四条同时成立才有值。
     /// 画的时候**只描边**（[`crate::canvas_overlay::draw_stamp_outline`]），不填任何像素。
-    pub stamp_preview: Option<crate::stamp_place::Outline>,
+    pub stamp_preview: Option<crate::canvas_overlay::PreviewData>,
     /// 待放置徽标的文字（`None` = 不画）。
     ///
     /// 待放置态本身在画布上没有任何标记（轮廓只在按住 Alt 时才有），
@@ -277,8 +277,8 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
     if let Some(sel) = c.selection {
         crate::canvas_overlay::draw_selection(&pv, l.viewport, c.view, sel);
     }
-    if let Some((anchor, bounds)) = c.stamp_preview {
-        crate::canvas_overlay::draw_stamp_outline(&pv, l.viewport, c.view, anchor, bounds);
+    if let Some(d) = c.stamp_preview.as_ref() {
+        crate::canvas_overlay::draw_stamp_preview(&pv, l.viewport, c.view, d);
     }
     if let (Some(text), Some((x, y))) = (c.armed_badge.as_deref(), c.hover) {
         let r = c.view.cell_rect(l.viewport, i32::from(x), i32::from(y));
@@ -463,11 +463,19 @@ mod tests {
             map_w: 700,
             map_h: 700,
             selection: Some(sel),
-            stamp_preview: Some(((10, 10), (-1, -2, 4, 3))),
+            stamp_preview: Some(crate::canvas_overlay::PreviewData {
+                anchor: (10, 10),
+                bounds: (-1, -2, 4, 3),
+                tex: None,
+                opacity: 0.55,
+                blocked: Vec::new(),
+            }),
             armed_badge: Some("放置「x」".to_string()),
         };
         assert_eq!(c.selection, Some(sel));
-        assert_eq!(c.stamp_preview, Some(((10, 10), (-1, -2, 4, 3))));
+        let sp = c.stamp_preview.as_ref().expect("预览必须在");
+        assert_eq!((sp.anchor, sp.bounds), ((10, 10), (-1, -2, 4, 3)));
+        assert!(sp.tex.is_none(), "夹具没有纹理 ⇒ 降级只画轮廓");
         assert_eq!(c.armed_badge.as_deref(), Some("放置「x」"));
         assert!(c.grid, "单元格网格开关必须真的传进画布");
         // 选区矩形与印章轮廓矩形必须落在**不同**位置（否则说明锚点被当成了选区端点）

@@ -486,6 +486,9 @@ impl StampPanel {
             id: s.id.clone(),
             name: s.name.clone(),
             bounds: s.bounds,
+            // 格表由宿主（`app` 进入待放置态时）顺带读盘填入 —— 面板只搬目录里的
+            // 三个字段，**不在这里读盘**（9,159 枚里翻页路过不该触发 IO）。
+            cells: None,
         })
     }
 

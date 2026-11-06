@@ -49,6 +49,7 @@ fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
         id: "mir/mir_00000".to_string(),
         name: "mir_00000".to_string(),
         bounds: Some((-1, -2, 4, 3)),
+            cells: None,
     };
     let 高 = doc.doc.as_ref().expect("文档").map.height;
     assert_eq!(高, 700, "0.map 是 700×700");

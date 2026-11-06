@@ -145,6 +145,12 @@ pub struct Cli {
     /// 为什么需要它：`--shot` 运行会锁死鼠标/键盘输入，`Enter` 按不了，
     /// 而"待放置态长什么样"必须能无人值守复现。
     pub stamp_arm: bool,
+    /// `--preview-alt`：**取证开关**——把「按住 Alt」这一条件伪造成常真，
+    /// 好让 `--shot` 能拍到 §A-011 的落位预览（内容半透明 + 受阻诊断）。
+    ///
+    /// 为什么需要它：`--shot` 运行锁死键鼠，Alt 按不了，而预览正是"要按住 Alt 才有"的东西。
+    /// 与 `--hover` / `--stamp-arm` 同一类：**只影响取证**，不改变交互语义。
+    pub preview_alt: bool,
     /// `--stamp-place-at <x,y>`：装载完成后先 `--stamp-pick` 选中的那一枚置为待放置态，
     /// 再在 `(x,y)` 落位（走与鼠标点击**完全相同**的 [`crate::stamp_place::place`]）。
     ///
@@ -550,6 +556,7 @@ impl Cli {
                     Some(Some(p)) => c.hover = Some(p),
                     _ => c.bad(&a, true),
                 },
+                "--preview-alt" => c.preview_alt = true,
                 "--probe" => match it.next().map(|v| parse_pair_u16(&v)) {
                     Some(Some(p)) => c.probe = Some(p),
                     _ => c.bad(&a, true),

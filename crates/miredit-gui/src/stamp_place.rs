@@ -122,6 +122,11 @@ pub struct Armed {
     pub name: String,
     /// 包围盒（`None` = 目录里 `resolve` 失败 ⇒ 预览不画框，落位时会报读盘失败）。
     pub bounds: Option<(i32, i32, i32, i32)>,
+    /// **格表**（A-011：进入待放置态时顺带读一次盘，Alt 预览要用它渲染半透明内容与受阻诊断）。
+    ///
+    /// `None` = 还没读 / 读失败 ⇒ 预览**降级成只画轮廓**（不画假像素）。
+    /// 真正落位仍走 [`place`]（每次现读盘），本字段只服务预览。
+    pub cells: Option<Vec<StampCellInput>>,
 }
 
 /// 放置成功的结果（内核 `PlaceOutcome::Placed` 的宿主侧镜像，只留两个数）。
@@ -149,6 +154,67 @@ pub fn cells_of(
     号段: 库号号段,
 ) -> Result<Vec<StampCellInput>, miredit_core::StampConvertError> {
     miredit_core::cells_from_stamp(stamp, 号段)
+}
+
+// ───────────────────── A-011：落位预览的**状态**（只读） ─────────────────────
+
+/// 允许落位时的内容不透明度（上游 `MapViewport.StampRendering.cs:61` 的 `0.55`）。
+pub const 不透明度允许: f32 = 0.55;
+/// 受阻（或有 error）时的内容不透明度（同处 `0.18`）。
+pub const 不透明度受阻: f32 = 0.18;
+
+/// 内容预览的两档不透明度（**只有这两个值**，不是渐变）。
+#[must_use]
+pub const fn 不透明度(允许: bool) -> f32 {
+    if 允许 {
+        不透明度允许
+    } else {
+        不透明度受阻
+    }
+}
+
+/// Alt 落位预览的状态（A-011）：不透明度 + 内核的只读诊断。
+///
+/// 诊断本身在 [`miredit_core::check_stamp_placement`]（**单一实现**，GUI 不重算）；
+/// 本结构只把"允许与否"折成上游的两个透明度档位。
+#[derive(Clone, Debug, PartialEq)]
+pub struct 预览状态 {
+    /// 内容不透明度：[`不透明度允许`] 或 [`不透明度受阻`]。
+    pub 不透明度: f32,
+    /// 内核给的只读诊断（受阻格 + error）。
+    pub 检查: miredit_core::StampPlacementCheck,
+}
+
+impl 预览状态 {
+    /// 由内核诊断折出状态：`allowed()` ⇒ 0.55，否则（受阻或 error）⇒ 0.18。
+    #[must_use]
+    pub fn 由检查(检查: miredit_core::StampPlacementCheck) -> Self {
+        let 允许 = 检查.allowed();
+        Self {
+            不透明度: 不透明度(允许),
+            检查,
+        }
+    }
+}
+
+/// **Alt 预览状态**（`alt == false` ⇒ `None` = 不画）。
+///
+/// 判据全在内核（[`miredit_core::check_stamp_placement`]，只读）；这里只做三件界面的事：
+/// ① Alt 门控；② 把 `allowed()` 折成 0.55 / 0.18；③ 原样带出逐格受阻给绘制层。
+#[must_use]
+pub fn preview_state(
+    map: &Map,
+    cells: &[StampCellInput],
+    x: u16,
+    y: u16,
+    alt: bool,
+) -> Option<预览状态> {
+    if !alt {
+        return None;
+    }
+    Some(预览状态::由检查(miredit_core::check_stamp_placement(
+        map, cells, x, y,
+    )))
 }
 
 /// 读一枚 `.X` 并换成内核要的格表；失败 ⇒ **带路径与原文的中文原因**。
@@ -255,6 +321,25 @@ pub fn outline_rect(
     let br = view.cell_rect(canvas, ax + max_x, ay + max_y);
     Rect::from_min_max(tl.min, br.max)
 }
+
+/// 格表自己的包围盒（`(min_x, min_y, max_x, max_y)`，闭区间）—— 与 [`Stamp::bounds`] 同口径。
+///
+/// 用途：`Armed` 里 `bounds` 缺失（目录没给）时，预览仍能从格表算出框（只画轮廓 + 诊断）。
+#[must_use]
+pub fn 格表包围盒(cells: &[StampCellInput]) -> (i32, i32, i32, i32) {
+    if cells.is_empty() {
+        return (0, 0, 0, 0);
+    }
+    let mut b = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    for c in cells {
+        b.0 = b.0.min(c.dx);
+        b.1 = b.1.min(c.dy);
+        b.2 = b.2.max(c.dx);
+        b.3 = b.3.max(c.dy);
+    }
+    b
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -391,6 +476,7 @@ mod tests {
             id: "mir/mir_00000".to_string(),
             name: "mir_00000".to_string(),
             bounds: Some((-1, -2, 4, 3)),
+            cells: None,
         };
         // 锚点 (5,5) + 包围盒 (-1,-2,4,3) ⇒ x 4..=9 / y 3..=8，全在 16×16 内
         let out = place(&mut ed, &mut map, &armed, &p, 5, 5, 库号号段::Wemade).expect("应能放置");
@@ -417,7 +503,7 @@ mod tests {
         let mut map = 造图(4, 4);
         let before = map.to_bytes();
         let mut ed = EditSession::default();
-        let armed = Armed { id: "mir/mir_00000".into(), name: "mir_00000".into(), bounds: None };
+        let armed = Armed { id: "mir/mir_00000".into(), name: "mir_00000".into(), bounds: None, cells: None };
         let err = place(&mut ed, &mut map, &armed, &p, 200, 200, 库号号段::Wemade)
             .expect_err("必须拒绝");
         assert!(err.contains("地图外"), "{err}");
@@ -545,6 +631,7 @@ mod tests {
             id: "mir/mir_00000".to_string(),
             name: "mir_00000".to_string(),
             bounds: Some((-1, -2, 4, 3)),
+            cells: None,
         };
         // 包围盒 (-1,-2,4,3) + 锚点 (5,5) ⇒ 覆盖 x 4..=9 / y 3..=8，全在 16×16 内
         let out = place(&mut ed, &mut map, &armed, &p, 5, 5, 库号号段::Wemade).expect("应能放置");
@@ -734,5 +821,62 @@ mod tests {
                 "这枚印章只有前景图（库号全局 2）⇒ 只能问 Objects 页 0"
             );
         }
+    }
+
+    // ─────────────────── A-011：预览状态（透明度两档 + 只读诊断） ───────────────────
+
+    /// 2×2 的合成印章格表（诊断用：不关心图号/库号，只关心 `(dx,dy)`）。
+    fn 小印章() -> Vec<StampCellInput> {
+        let mut v = Vec::new();
+        for dy in 0..2 {
+            for dx in 0..2 {
+                v.push(StampCellInput {
+                    dx,
+                    dy,
+                    ..Default::default()
+                });
+            }
+        }
+        v
+    }
+
+    /// **允许 ⇒ 0.55**；诊断留给内核（这里只验折档）。
+    #[test]
+    fn 预览允许时为五五() {
+        let map = 造图(8, 8);
+        let cells = 小印章();
+        let s = preview_state(&map, &cells, 2, 2, true).expect("Alt 按住 ⇒ 有状态");
+        assert!(s.检查.allowed(), "2×2 落在空位上应允许");
+        assert!((s.不透明度 - 不透明度允许).abs() < 1e-6, "允许时必须 0.55");
+        assert_eq!(不透明度(true), 0.55);
+    }
+
+    /// **受阻（占用）⇒ 0.18**，且受阻格被带出来。
+    #[test]
+    fn 预览受阻时为一八() {
+        let mut map = 造图(8, 8);
+        let i = miredit_core::index_of(&map, 3, 3).expect("图内格");
+        map.cells[i].fr_img = 5;
+        let s = preview_state(&map, &小印章(), 2, 2, true).expect("有状态");
+        assert!(!s.检查.allowed());
+        assert_eq!(s.检查.blocked.len(), 1, "只有 (3,3) 被占");
+        assert!((s.不透明度 - 不透明度受阻).abs() < 1e-6, "受阻时必须 0.18");
+        assert_eq!(不透明度(false), 0.18);
+    }
+
+    /// **error（空格表）⇒ 也是 0.18**（上游"落不下去就不透明地画"）。
+    #[test]
+    fn 预览有错误时也为一八() {
+        let map = 造图(8, 8);
+        let s = preview_state(&map, &[], 2, 2, true).expect("有状态");
+        assert!(s.检查.error.is_some(), "空格表必须报 error");
+        assert!((s.不透明度 - 不透明度受阻).abs() < 1e-6, "error 也要 0.18");
+    }
+
+    /// **没按 Alt ⇒ `None`**（既有的 Alt 门控保留）。
+    #[test]
+    fn 预览不按alt不返回() {
+        let map = 造图(8, 8);
+        assert!(preview_state(&map, &小印章(), 2, 2, false).is_none());
     }
 }

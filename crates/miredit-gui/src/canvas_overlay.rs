@@ -274,3 +274,169 @@ mod tests {
         );
     }
 }
+
+// ───────────────────────── A-011：Alt 落位预览的绘制 ─────────────────────────
+
+/// 落位预览的**绘制数据**（`app` 每帧算好交给画布；A-011）。
+///
+/// 上游对照 `MapViewport.StampRendering.cs:58-109`：
+/// ① 内容按 `opacity` 半透明贴（`:61` 的 `PushOpacity`）；
+/// ② 再描轮廓（`DrawStampOutline`）；
+/// ③ `blocked` 非空才逐格画红/琥珀诊断（`:64-108`）。
+#[derive(Clone, Debug)]
+pub struct PreviewData {
+    /// 锚点世界格。
+    pub anchor: (u16, u16),
+    /// 包围盒（闭区间，与 [`crate::stamp_place::outline_rect`] 同一口径）。
+    pub bounds: (i32, i32, i32, i32),
+    /// 内容纹理 `(texture, 宽, 高)`；`None` = 没渲染出来 ⇒ **只画轮廓**（绝不画假像素）。
+    pub tex: Option<(egui::TextureId, u32, u32)>,
+    /// 内容不透明度（`0.55` 允许 / `0.18` 受阻）。
+    pub opacity: f32,
+    /// 逐格受阻（内核 `check_stamp_placement` 的原文，界面不重算）。
+    pub blocked: Vec<miredit_core::BlockedCell>,
+}
+
+/// 诊断描边的宽度（**屏幕**像素）。
+///
+/// 上游 `MapViewport.StampRendering.cs:103` 给的是 `ScenePen(brush, 2/Math.Max(Zoom, 0.4))`
+/// —— 那是**场景（世界）单位**：预览画在 `DrawMapScene` 里，外层已经压了
+/// `PushTransform(SceneTranslation(origin))` + `PushTransform(SceneScale(Zoom, Zoom))`
+/// （`MapViewport.cs:236`，`StampRendering.cs:58` 的调用点在那之内），
+/// 所以世界单位 × Zoom = 屏幕像素：
+///
+/// ```text
+/// 屏幕宽 = 2 / max(zoom, 0.4) * zoom
+///        ⇒ zoom ≥ 0.4：恒 2 px
+///        ⇒ zoom = 0.25：2/0.4*0.25 = 1.25 px（不是 5 px）
+/// ```
+///
+/// ⚠ 2026-11-07 订正：上一版直接拿 `2/max(zoom,0.4)` 当屏幕宽（zoom<0.4 会粗到 5 px），
+/// 是把世界单位当成了像素 —— 单位错了，视觉上反而"缩到最小时描边最粗"。
+#[must_use]
+pub fn 描边宽(zoom: f32) -> f32 {
+    2.0 / zoom.max(0.4) * zoom
+}
+
+/// 诊断框里两条对角线两端的内缩量（**屏幕**像素；上游 `:85-91` 的 `new Point(7,7)` 是世界 px）。
+#[must_use]
+pub fn 对角内缩(zoom: f32) -> f32 {
+    7.0 * zoom
+}
+
+/// 可见区判据：该格要不要画（上游 `:67-69` 的 `visible.Inflate(2/max(Zoom,0.4))`）。
+#[must_use]
+pub fn 在可见区(格: egui::Rect, viewport: egui::Rect, zoom: f32) -> bool {
+    // 上游的膨胀量也是**世界**单位 ⇒ 换算到屏幕同样乘 Zoom
+    // 上游用的是 `area.Intersects(visible)`（**相交**即画），不是"完全包含"
+    viewport.expand(描边宽(zoom)).intersects(格)
+}
+
+/// 画 Alt 落位预览：**内容（半透明）→ 轮廓 → 受阻诊断**（上游同一顺序）。
+///
+/// * 内容：`painter.image` 贴到 [`crate::stamp_place::outline_rect`] 的矩形（与轮廓**同一份矩形**），
+///   着色 `from_white_alpha(opacity*255)`（`NEAREST` 在加载纹理时决定）；
+/// * 轮廓：复用 [`draw_stamp_outline`]（只描边，不填）；
+/// * 诊断：只画**可见区**里的受阻格；每格 48×32，填充 α95，描边同色 [`描边宽`]，
+///   主对角线两端内缩 [`对角内缩`]；**非** `MapBoundary` 再加副对角线。
+pub fn draw_stamp_preview(p: &egui::Painter, canvas: Rect, view: &CanvasView, d: &PreviewData) {
+    let 矩形 = crate::stamp_place::outline_rect(view, canvas, d.anchor, d.bounds);
+
+    // ① 内容（半透明）：没有纹理就**什么都不画**（降级只画轮廓，绝不画假像素）
+    if let Some((tex, _w, _h)) = d.tex {
+        if 矩形.width() > 0.0 && 矩形.height() > 0.0 {
+            let uv = Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0));
+            let alpha = (d.opacity.clamp(0.0, 1.0) * 255.0).round() as u8;
+            p.with_clip_rect(canvas).image(
+                tex,
+                矩形,
+                uv,
+                egui::Color32::from_white_alpha(alpha),
+            );
+        }
+    }
+    // ② 轮廓（与上面同一份矩形 ⇒ 内容与框永远对齐）
+    draw_stamp_outline(p, canvas, view, d.anchor, d.bounds);
+    // ③ 受阻诊断
+    let zoom = view.scale;
+    let 宽 = 描边宽(zoom);
+    let 内缩 = 对角内缩(zoom);
+    let clip = p.with_clip_rect(canvas);
+    for b in &d.blocked {
+        let 格 = view.cell_rect(canvas, b.x, b.y);
+        if !在可见区(格, canvas, zoom) {
+            continue;
+        }
+        let 色 = match b.reason {
+            miredit_core::StampBlockReason::MapBoundary => t::ui().stamp_boundary,
+            miredit_core::StampBlockReason::OccupiedObject => t::ui().stamp_blocked,
+        };
+        // 填充 α95（上游 `Color.FromArgb(95, …)`）
+        let 填充 = egui::Color32::from_rgba_unmultiplied(色.r(), 色.g(), 色.b(), 95);
+        clip.rect_filled(格, 0.0, 填充);
+        // 描边同色、宽度按屏幕像素算
+        clip.rect_stroke(
+            格,
+            0.0,
+            egui::Stroke::new(宽, 色),
+            egui::StrokeKind::Inside,
+        );
+        // 主对角线（两端内缩 7*zoom 屏幕 px）
+        clip.line_segment(
+            [
+                pos2(格.left() + 内缩, 格.top() + 内缩),
+                pos2(格.right() - 内缩, 格.bottom() - 内缩),
+            ],
+            egui::Stroke::new(宽, 色),
+        );
+        // 副对角线：只有"已有物件"才画（上游 `:87-91`：`if(!outside)`）
+        if b.reason != miredit_core::StampBlockReason::MapBoundary {
+            clip.line_segment(
+                [
+                    pos2(格.right() - 内缩, 格.top() + 内缩),
+                    pos2(格.left() + 内缩, 格.bottom() - 内缩),
+                ],
+                egui::Stroke::new(宽, 色),
+            );
+        }
+    }
+}
+
+#[cfg(test)]
+mod preview_tests {
+    use super::*;
+    use egui::pos2;
+
+    /// **描边宽 = `2/max(zoom,0.4) × zoom`**（世界单位 × Zoom）。
+    ///
+    /// 上游 `StampRendering.cs:103` 的 Pen 宽在场景坐标系里（`MapViewport.cs:236` 压了
+    /// `SceneScale(Zoom)`）⇒ 屏幕上：≥0.4× 恒 2 px、0.25× 只有 1.25 px（**不是** 5 px）。
+    #[test]
+    fn 描边宽按世界单位换算到屏幕() {
+        assert!((描边宽(0.25) - 1.25).abs() < 1e-6, "0.25× ⇒ 1.25 px");
+        assert!((描边宽(0.4) - 2.0).abs() < 1e-6, "0.4× 是折点 ⇒ 2 px");
+        assert!((描边宽(1.0) - 2.0).abs() < 1e-6, "1× ⇒ 2 px");
+        assert!((描边宽(4.0) - 2.0).abs() < 1e-6, "4× ⇒ 仍是 2 px（不随放大变粗）");
+        assert!(描边宽(0.25) < 描边宽(1.0), "缩到最小时描边不许反而变粗");
+    }
+
+    /// **对角线内缩 = `7 × zoom`**（上游 `:85-91` 的 `new Point(7,7)` 也是世界 px）。
+    #[test]
+    fn 对角内缩按世界单位换算() {
+        assert!((对角内缩(1.0) - 7.0).abs() < 1e-6);
+        assert!((对角内缩(0.25) - 1.75).abs() < 1e-6);
+        assert!((对角内缩(4.0) - 28.0).abs() < 1e-6);
+    }
+
+    /// **可见区判据**：格矩形落在 `viewport.expand(描边宽)` 之外就不画（上游 `:67-69`）。
+    #[test]
+    fn 可见区按描边宽膨胀() {
+        let vp = Rect::from_min_size(pos2(0.0, 0.0), egui::vec2(100.0, 80.0));
+        let 里面 = Rect::from_min_size(pos2(10.0, 10.0), egui::vec2(48.0, 32.0));
+        assert!(在可见区(里面, vp, 1.0), "完全在视口内必须画");
+        let 贴边 = Rect::from_min_size(pos2(98.0, 10.0), egui::vec2(48.0, 32.0));
+        assert!(在可见区(贴边, vp, 1.0), "与视口相交（哪怕只露一角）⇒ 还要画");
+        let 远处 = Rect::from_min_size(pos2(400.0, 400.0), egui::vec2(48.0, 32.0));
+        assert!(!在可见区(远处, vp, 1.0), "视口外不许画");
+    }
+}

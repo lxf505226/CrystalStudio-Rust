@@ -381,6 +381,7 @@ fn 门6_type5拒绝带地表内容_注入验证() {
             id: "mir/mir_00000".to_string(),
             name: "mir_00000".to_string(),
             bounds: Some((-1, -2, 4, 3)),
+            cells: None,
         };
         let out = stamp_place::place(
             &mut ed,

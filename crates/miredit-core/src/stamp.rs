@@ -254,6 +254,134 @@ pub(crate) enum PlanMode {
     Paste,
 }
 
+
+// ───────────────────── A-011：落位**检查**（只读诊断） ─────────────────────
+
+/// 落位受阻的原因（上游 `MapViewport.StampRendering.cs:81` 的 `StampBlockReason`）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StampBlockReason {
+    /// 落到地图外（上游 `MapBoundary`）：琥珀 `#F5AE32`。
+    MapBoundary,
+    /// 目标格已有物件（`fr_img & 0x7FFF != 0`，= C# `Document.cs:26` 的 `HasForeground`）：红 `#F74255`。
+    OccupiedObject,
+}
+
+/// 一格受阻（世界格坐标，**可能为负**：锚点贴近左上角时偏移会出界）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BlockedCell {
+    /// 世界格 X（`i32`：出界的格可以是负数，不夹取 —— 夹了就不是真实坐标）。
+    pub x: i32,
+    /// 世界格 Y。
+    pub y: i32,
+    /// 为什么受阻。
+    pub reason: StampBlockReason,
+}
+
+/// 落位检查结果（**只读诊断**：不改地图、不进撤销栈、不动 [`PlaceOutcome`]）。
+///
+/// 与 [`plan_stamp`] 的分工：`plan_stamp` 是**执行计划**（拒绝即整枚不落），本结构是
+/// **预览诊断**（把每一处受阻都收集出来给界面画红/琥珀格）。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct StampPlacementCheck {
+    /// 全部受阻格（按格表顺序；越界与占用**都收集**，不早退）。
+    pub blocked: Vec<BlockedCell>,
+    /// 整枚就落不下去的原因（空集 / 超限 / 坐标重复 / 未开图）；`None` = 没有这类错误。
+    pub error: Option<String>,
+}
+
+impl StampPlacementCheck {
+    /// 能否落位：**没有 error 且没有受阻格**。
+    ///
+    /// ⚠ 这是**预览**口径，不是 `plan_stamp` 的口径：图外格在 `plan_stamp` 里是"逐格跳过、
+    /// 整枚仍可落"，而这里把它算作受阻（因为界面上它确实"贴不上"）。两道口径的差异见
+    /// 模块文档 §一 第 6 条的说明。
+    #[must_use]
+    pub fn allowed(&self) -> bool {
+        self.error.is_none() && self.blocked.is_empty()
+    }
+}
+
+/// **只读**：把「印章 + 锚点」在当前地图上过一遍落位闸门，**收集全部**受阻格。
+///
+/// 判据与 [`plan_stamp`] 的两道闸门逐条对齐（`stamp.rs` 模块文档 §一 第 6/9 条）：
+///
+/// | 情形 | 本函数 | `plan_stamp` |
+/// |---|---|---|
+/// | 格落到图外 | 收集 [`StampBlockReason::MapBoundary`]，**继续**看下一格 | **逐格跳过**（`skipped`），其余照落 |
+/// | 图内且 `fr_img & 0x7FFF != 0` | 收集 [`StampBlockReason::OccupiedObject`] | **整枚拒绝**（`PlacedStamps.cs:62-63`） |
+/// | 空格表 / 超过 [`STAMP_MAX_CELLS`] / 坐标重复 / 未开图 | 写 [`Self::error`] | 同样拒绝（早期闸门） |
+///
+/// 上游对照：`MapViewport.StampRendering.cs:45-56`（`GetStampPreviewPlacement` 缓存
+/// `Document.CheckStampPlacement(...)` 的结果）+ `:58-109`（据 `Allowed` 与
+/// `BlockedCells` 画半透明内容与红/琥珀诊断格）。
+///
+/// ⚠ **不判**地表能力闸门（Type5）：那一道要 `FormatId`，本检查刻意不依赖字节层
+/// （界面只需要"格能不能贴"）。因此 Type5 上带地表的印章，本检查可能报 `allowed()`
+/// 而 `plan_stamp` 会拒绝 —— 已作为已知差异登记，落位仍以 `plan_stamp` 为准。
+#[must_use]
+pub fn check_stamp_placement(
+    view: &Map,
+    cells: &[StampCellInput],
+    x: u16,
+    y: u16,
+) -> StampPlacementCheck {
+    let mut out = StampPlacementCheck::default();
+    let (w, h) = (view.width, view.height);
+    if w == 0 || h == 0 {
+        out.error = Some(format!(
+            "未开图：当前文档的宽×高 = {w}×{h}，没有可落笔的格"
+        ));
+        return out;
+    }
+    if cells.is_empty() {
+        out.error = Some("印章没有任何格（cells 为空），没有可放置的内容".to_string());
+        return out;
+    }
+    if cells.len() > STAMP_MAX_CELLS {
+        out.error = Some(format!(
+            "印章格数 {} 超过上限 {STAMP_MAX_CELLS}，拒绝检查",
+            cells.len()
+        ));
+        return out;
+    }
+    // 坐标重复 ⇒ 与 `plan_stamp` 的重复闸门同一判据（`PlacedStamps.cs:65-66`）
+    let mut 已见 = std::collections::HashSet::with_capacity(cells.len());
+    for c in cells {
+        if !已见.insert((c.dx, c.dy)) {
+            out.error = Some(format!(
+                "印章自身坐标重复：({}, {}) 出现了不止一次（拒绝放置）",
+                c.dx, c.dy
+            ));
+            return out;
+        }
+    }
+    let (ax, ay) = (i64::from(x), i64::from(y));
+    let (wi, hi) = (i64::from(w), i64::from(h));
+    for c in cells {
+        let sx = ax + i64::from(c.dx);
+        let sy = ay + i64::from(c.dy);
+        if sx < 0 || sy < 0 || sx >= wi || sy >= hi {
+            out.blocked.push(BlockedCell {
+                x: i32::try_from(sx).unwrap_or(i32::MIN),
+                y: i32::try_from(sy).unwrap_or(i32::MIN),
+                reason: StampBlockReason::MapBoundary,
+            });
+            continue;
+        }
+        let (ux, uy) = (sx as u16, sy as u16);
+        if let Some(格) = view.cell(ux, uy) {
+            if 格.fr_img & SPRITE_MAX != 0 {
+                out.blocked.push(BlockedCell {
+                    x: i32::from(ux),
+                    y: i32::from(uy),
+                    reason: StampBlockReason::OccupiedObject,
+                });
+            }
+        }
+    }
+    out
+}
+
 /// 把「一枚印章 + 锚点」算成一份可执行计划；`Err(中文原因)` = 拒绝（一格不写）。
 ///
 /// 判据顺序（早退顺序，也是原因文案的优先级）：
@@ -896,5 +1024,140 @@ mod tests {
         let 一 = vec![StampCellInput { dx: -2, dy: -3, bk: 33, ..Default::default() }];
         let plan = plan_stamp(&map, FormatId::Shanda14, 5, 5, &一, PlanMode::Stamp).expect("应能放置");
         assert_eq!((plan.changes[0].x, plan.changes[0].y), (3, 2));
+    }
+
+    // ─────────────────── A-011：`check_stamp_placement`（只读诊断） ───────────────────
+
+    /// **空图**：0×0 ⇒ `error`（未开图），不会拿 0 尺寸去算下标。
+    #[test]
+    fn 落位检查空图报错() {
+        // `造图(0,0)` 会被解析器拒（`Map::parse` 要求 1..=32767），直接手搓一张 0×0 的空图
+        let 空 = Map {
+            header_raw: [0u8; mir2_map::HEADER_LEN],
+            width: 0,
+            height: 0,
+            format: CellFormat::Old12,
+            cells: Vec::new(),
+        };
+        let c = check_stamp_placement(&空, &小印章(), 0, 0);
+        assert!(!c.allowed());
+        assert!(c.blocked.is_empty(), "未开图时不该逐格收集");
+        let why = c.error.expect("必须给原因");
+        assert!(why.contains("未开图"), "{why}");
+    }
+
+    /// **空格表** ⇒ `error`。
+    #[test]
+    fn 落位检查空格表报错() {
+        let c = check_stamp_placement(&图(), &[], 0, 0);
+        assert!(!c.allowed());
+        assert!(c.error.unwrap().contains("没有任何格"));
+    }
+
+    /// **坐标重复** ⇒ `error`（与 `plan_stamp` 的重复闸门同一判据，`PlacedStamps.cs:65-66`）。
+    #[test]
+    fn 落位检查坐标重复报错() {
+        let 印 = vec![
+            格(1, 1, 11, 12, 13, 0, 0, 0),
+            格(1, 1, 14, 15, 16, 0, 0, 0),
+        ];
+        let c = check_stamp_placement(&图(), &印, 2, 2);
+        assert!(!c.allowed());
+        let why = c.error.expect("必须给原因");
+        assert!(why.contains("坐标重复"), "{why}");
+        assert!(c.blocked.is_empty(), "有 error 时不再逐格收集");
+    }
+
+    /// **超过 `STAMP_MAX_CELLS`** ⇒ `error`。
+    #[test]
+    fn 落位检查超限报错() {
+        let 印 = vec![格(0, 0, 0, 0, 0, 0, 0, 0); STAMP_MAX_CELLS + 1];
+        let c = check_stamp_placement(&图(), &印, 0, 0);
+        assert!(!c.allowed());
+        let why = c.error.expect("必须给原因");
+        assert!(why.contains("超过上限"), "{why}");
+    }
+
+    /// **出界的格全部收集**（不早退、不当成 error），负数坐标如实保留。
+    #[test]
+    fn 落位检查出界全部收集() {
+        let 印 = vec![
+            格(-5, 0, 11, 12, 13, 0, 0, 0),
+            格(0, -3, 11, 12, 13, 0, 0, 0),
+            格(100, 0, 11, 12, 13, 0, 0, 0),
+        ];
+        let c = check_stamp_placement(&图(), &印, 2, 2);
+        assert!(c.error.is_none(), "出界不是 error（整枚仍可落，只是逐格跳过）");
+        assert_eq!(c.blocked.len(), 3, "三格都出界，必须全收集");
+        assert!(c
+            .blocked
+            .iter()
+            .all(|b| b.reason == StampBlockReason::MapBoundary));
+        // 负数世界坐标不夹取（夹了就不是真实坐标）
+        assert_eq!((c.blocked[0].x, c.blocked[0].y), (-3, 2));
+        assert_eq!((c.blocked[1].x, c.blocked[1].y), (2, -1));
+        assert!(!c.allowed(), "有受阻格 ⇒ allowed() = false");
+    }
+
+    /// **占用格**（`fr_img & 0x7FFF != 0`）⇒ `OccupiedObject`。
+    #[test]
+    fn 落位检查占用格() {
+        let mut map = 图();
+        // 给 (3,3) 一个物件图号（列优先 index = x*h + y）
+        let i = crate::document::index_of(&map, 3, 3).expect("图内格");
+        map.cells[i].fr_img = 777;
+        let c = check_stamp_placement(&map, &小印章(), 2, 2);
+        assert!(c.error.is_none());
+        assert_eq!(c.blocked.len(), 1, "2×2 印章里只有 (3,3) 被占");
+        assert_eq!((c.blocked[0].x, c.blocked[0].y), (3, 3));
+        assert_eq!(c.blocked[0].reason, StampBlockReason::OccupiedObject);
+    }
+
+    /// **混合**：一格占用 + 一格出界 ⇒ 两类都在 `blocked` 里，`error` 仍是 `None`。
+    #[test]
+    fn 落位检查混合受阻() {
+        let mut map = 图();
+        let i = crate::document::index_of(&map, 1, 1).expect("图内格");
+        map.cells[i].fr_img = 0x8000 | 5; // bit15 只是标记，低 15 位非 0 ⇒ 有物件
+        let 印 = vec![
+            格(0, 0, 11, 12, 13, 0, 0, 0),  // (1,1)：被占
+            格(-9, 0, 11, 12, 13, 0, 0, 0), // (-8,1)：出界
+        ];
+        let c = check_stamp_placement(&map, &印, 1, 1);
+        assert!(c.error.is_none(), "逐格受阻不是 error");
+        assert_eq!(c.blocked.len(), 2);
+        let 原因: Vec<StampBlockReason> = c.blocked.iter().map(|b| b.reason).collect();
+        assert_eq!(
+            原因,
+            vec![
+                StampBlockReason::OccupiedObject,
+                StampBlockReason::MapBoundary
+            ],
+            "顺序 = 格表顺序"
+        );
+    }
+
+    /// **只读**：调用前后 `to_bytes()` / 撤销栈长度 / `note` 一个都不许变。
+    ///
+    /// 这条是"预览不得污染撤销/脏标记"的机器判据：检查走的是 `session.map()`
+    /// （只读借用），连 `document_mut()` 都拿不到。
+    #[test]
+    fn 落位检查只读不污染会话() {
+        use crate::session::EditSession;
+        let mut ed = EditSession::new(crate::testutil::造文档(8, 8, CellFormat::New14));
+        // 先做一步真编辑，让 `note` / 撤销栈都非空，才看得出"没被改"
+        let _ = ed.apply_once(1, 1);
+        let 字节前 = ed.document().to_bytes();
+        let 撤销前 = ed.undo_len();
+        let 脏前 = ed.dirty();
+        let 提醒前 = ed.note().map(str::to_string);
+
+        let c = check_stamp_placement(ed.map(), &小印章(), 2, 2);
+        assert!(c.error.is_none(), "空位上应无 error");
+
+        assert_eq!(ed.document().to_bytes(), 字节前, "地图字节不许变");
+        assert_eq!(ed.undo_len(), 撤销前, "撤销栈不许变");
+        assert_eq!(ed.dirty(), 脏前, "脏标记不许变");
+        assert_eq!(ed.note().map(str::to_string), 提醒前, "note 不许被改写");
     }
 }
