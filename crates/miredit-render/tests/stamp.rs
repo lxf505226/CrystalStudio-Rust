@@ -12,6 +12,31 @@
 //!
 //! 真实资源缺失时一律「打印原因 + 跳过」，**不 panic**，保证换机器也能 `cargo test` 绿。
 //!
+//! # 真实图库根（A-020，2026-11-07）
+//!
+//! 「真实印章」这一批要**真的解码 `.X` 并断言像素**，图库根取自 **`MIREDIT_CLIENT_ROOT`**
+//! （经 [`mir2_assets::client_root`] 读运行时环境；**不再**用那个恒为空串的
+//! `DEFAULT_CLIENT_ROOT` —— 它正是 A-020 之前「真实用例恒跳过、只跑了 `.X` 断言」的根因）。
+//!
+//! ```text
+//! $env:MIREDIT_CLIENT_ROOT='G:\Crystal Mir 2\Data'   # .lib（Crystal v2/v3）
+//! $env:MIREDIT_UPSTREAM_ROOT='I:\miredit\_upstream'  # .X 印章所在（缺省就是它）
+//! cargo test -p miredit-render --test stamp
+//! ```
+//!
+//! 三种模式都必须绿：
+//!
+//! | 模式 | 行为 |
+//! |---|---|
+//! | `MIREDIT_CLIENT_ROOT=G:\Crystal Mir 2\Data`（`.lib`） | 真实解码 + [`LIB_STAMP00000`] 的哈希/内容框/计数逐条断言 |
+//! | `MIREDIT_CLIENT_ROOT=E:\GodM2\client\热血传奇23周年客户端\data`（`.wzl/.wil`） | 同上，但基线换成 [`WIL_STAMP00000`]（两批美术资源） |
+//! | 没设根 | 每条真实用例打印 `[跳过]` 并返回（CI 默认态） |
+//!
+//! ⚠ `.X` 的三族库号是 **C# `Assets` 分配号**（`0/1/2` = `Tiles`/`Smtiles`/`Objects`），
+//! 不是 `PositionedCell` 要的族内序号 ⇒ 本文件的 [`适配`] **只调产品核心**
+//! [`miredit_core::cells_from_stamp`]（Wemade 号段）再掩 `0x7FFF`，**没有**测试私有的减基址表
+//! （A-024 已把换算沉到 core，GUI / web / 本测试共用同一份）。
+//!
 //! ⚠ `mir2-stamp` **只在本测试里出现**（`[dev-dependencies]`）：渲染库本体只吃
 //! `miredit_render::stamp::PositionedCell`，不认识 `mir2_stamp::Stamp`。
 
@@ -84,22 +109,163 @@ fn 印章列表() -> Option<Vec<PathBuf>> {
     Some(v)
 }
 
-/// 打开图源；根目录/图库不可用时打印原因并返回 `None`（调用方跳过，不 panic）。
-fn 打开图源() -> Option<WilSource> {
-    let root = Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-    if !root.is_dir() {
-        eprintln!("[跳过] 图库根不存在：{}", root.display());
-        return None;
+/// 图库容器的两种来源 —— 决定**像素基线取哪一套常量**。
+///
+/// 为什么必须分开：两个客户端里 `Objects` 的**帧内容本来就不一样**（`.lib` 是
+/// `G:\Crystal Mir 2\Data\Map\WemadeMir2\Objects.Lib`，WIL 是 23 周年客户端的
+/// `Objects.wzl`），所以"同一枚 `.X` 渲染出来的像素哈希"在两个根下**注定不同**。
+/// 用一套常量卡两种根 = 假基线；两套常量各自钉住"这个根下的画面没变"才是真基线。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum 源类 {
+    /// Crystal `.lib`（v2/v3）：`Map\WemadeMir2\*.Lib`。
+    Lib,
+    /// `.wzl/.wil`：客户端 `Tiles.wzl` / `Objects.wzl` 那一套。
+    Wil,
+}
+
+impl 源类 {
+    const fn 名(self) -> &'static str {
+        match self {
+            Self::Lib => ".lib（Crystal v2/v3）",
+            Self::Wil => ".wzl/.wil（客户端）",
+        }
     }
-    let paths = match mir2_assets::LibPaths::discover(root) {
+}
+
+/// 记账图源：包一层真实图源，记下**每个 (族, 页) 命中/缺帧次数**。
+///
+/// 目的：真实用例必须能打印「逐层命中库」，把"到底问了哪个库的哪一页"钉成可对账的事实
+/// （A-024 的病根正是前景被问到 `Objects3` 的页 2 上；只断言"图非空"看不出来）。
+///
+/// 账本形状见 [`账本`]（`type` 别名：同一形状在字段与 [`记账::快照`] 的返回类型里各出现一次）。
+type 账本 = std::collections::BTreeMap<(&'static str, u16), (usize, usize)>;
+
+struct 记账<'a> {
+    内: &'a dyn SpriteSource,
+    账: std::cell::RefCell<账本>,
+}
+
+impl<'a> 记账<'a> {
+    fn 新(内: &'a dyn SpriteSource) -> Self {
+        Self {
+            内,
+            账: std::cell::RefCell::new(std::collections::BTreeMap::new()),
+        }
+    }
+
+    /// 记账快照（克隆一份，借用不外泄）。
+    fn 快照(&self) -> 账本 {
+        self.账.borrow().clone()
+    }
+
+    /// 一行可打印的「逐层命中库」。
+    fn 逐层(&self) -> String {
+        let 行: Vec<String> = self
+            .快照()
+            .into_iter()
+            .map(|((族, 页), (中, 缺))| format!("{族}[页{页}] 命中{中}/缺{缺}"))
+            .collect();
+        行.join(" · ")
+    }
+}
+
+impl SpriteSource for 记账<'_> {
+    fn frame(&self, lib: LibRef, index: u32) -> Option<Frame> {
+        let r = self.内.frame(lib, index);
+        let 键 = (族名(lib.family), lib.index);
+        let mut 账 = self.账.borrow_mut();
+        let e = 账.entry(键).or_insert((0, 0));
+        if r.is_some() {
+            e.0 += 1;
+        } else {
+            e.1 += 1;
+        }
+        r
+    }
+}
+
+/// `Family` 的短名（只用于诊断打印，不进产品词表）。
+const fn 族名(f: mir2_assets::Family) -> &'static str {
+    match f {
+        mir2_assets::Family::Ground => "Ground",
+        mir2_assets::Family::Middle => "Middle",
+        mir2_assets::Family::Surface => "Surface",
+    }
+}
+
+/// 打开**真实**图源：
+/// **不是**那个恒为空串的 `DEFAULT_CLIENT_ROOT` —— 后者正是 A-020 里「真实用例恒跳过」的根因）。
+///
+/// 两种容器都收（与本仓图库登记的既有规则一致）：
+///
+/// | 容器 | 本机样例 | 走哪个源 |
+/// |---|---|---|
+/// | `.lib`（Crystal v2/v3） | `G:\Crystal Mir 2\Data\Map\WemadeMir2\*.Lib` | [`CrystalLibSource`] |
+/// | `.wzl/.wix` 或 `.wil/.wix` | `E:\GodM2\client\热血传奇23周年客户端\data` | [`WilSource`] |
+///
+/// 未设根 / 根不是目录 / 两种容器都扫不到库 ⇒ **打印原因 + `None`**（调用方 `[跳过]`，不 panic，
+/// 换机器照样能 `cargo test` 绿）。
+fn 打开图源() -> Option<(Box<dyn SpriteSource>, 源类)> {
+    let Some(root) = mir2_assets::client_root() else {
+        eprintln!(
+            "[跳过] 未设置 {}（图库根）或它不是目录",
+            mir2_assets::CLIENT_ROOT_ENV
+        );
+        return None;
+    };
+
+    // ① `.lib`（Crystal v2/v3）：先 `Auto` 探测（WemadeMir2 → ShandaMir2 → Flat），与 C# 一致。
+    match mir2_assets::CrystalLibPaths::discover(&root, mir2_assets::CrystalAssetFormat::Auto) {
+        Ok(paths) if !paths.is_empty() => {
+            eprintln!(
+                "[图库] .lib 已登记 {}（地面 {} / 中层 {} / 表层 {}）根={}",
+                paths.available(),
+                paths.available_in(mir2_assets::Family::Ground),
+                paths.available_in(mir2_assets::Family::Middle),
+                paths.available_in(mir2_assets::Family::Surface),
+                paths.scan_dir().display()
+            );
+            return match mir2_assets::CrystalLibSource::open(&paths) {
+                Ok(s) => Some((Box::new(s), 源类::Lib)),
+                Err(e) => {
+                    eprintln!("[跳过] .lib 图源打开失败：{e}");
+                    None
+                }
+            };
+        }
+        Ok(paths) => eprintln!(
+            "[信息] 根 {} 里没扫到 .lib（扫的是 {}），改试 .wzl/.wil",
+            root.display(),
+            paths.scan_dir().display()
+        ),
+        Err(e) => eprintln!("[信息] .lib 扫描失败：{e}（改试 .wzl/.wil）"),
+    }
+
+    // ② `.wzl/.wil`
+    let paths = match mir2_assets::LibPaths::discover(&root) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("[跳过] 图库扫描失败：{e}");
             return None;
         }
     };
+    if paths.available() == 0 {
+        eprintln!(
+            "[跳过] 根 {} 下两种容器都没有可用图库（.lib 与 .wzl/.wil 都是 0）",
+            root.display()
+        );
+        return None;
+    }
+    eprintln!(
+        "[图库] .wzl/.wil 已登记 {}（地面 {} / 中层 {} / 表层 {}）根={}",
+        paths.available(),
+        paths.available_in(mir2_assets::Family::Ground),
+        paths.available_in(mir2_assets::Family::Middle),
+        paths.available_in(mir2_assets::Family::Surface),
+        root.display()
+    );
     match WilSource::open(&paths) {
-        Ok(s) => Some(s),
+        Ok(s) => Some((Box::new(s), 源类::Wil)),
         Err(e) => {
             eprintln!("[跳过] 图源打开失败：{e}");
             None
@@ -107,33 +273,37 @@ fn 打开图源() -> Option<WilSource> {
     }
 }
 
-/// 库号 `i16` → `PositionedCell` 的 `u8`。
-///
-/// 真实印章的库号都在 `0..=255`（本机 9,159 个 `.X` 实测），越界说明遇到了本库
-/// 表达不了的数据 ⇒ **当场炸测试**，绝不静默截断成另一个库（那会取到别的图 = 假数据）。
-fn 库号(v: i16) -> u8 {
-    u8::try_from(v).unwrap_or_else(|_| panic!("印章库号 {v} 超出 u8：PositionedCell 表达不了"))
-}
 
-/// `mir2_stamp::Stamp` → 本 crate 的 [`PositionedCell`]（**适配在测试侧，渲染库不认识 `.X`**）。
+/// `mir2_stamp::Stamp` → 本 crate 的 [`PositionedCell`]（渲染库不认识 `.X`）。
+///
+/// # 适配**只剩搬运**：库号换算走产品核心
+///
+/// `.X` 里的三族库号是 **C# `Assets` 分配号**（`0/1/2` = `Tiles`/`Smtiles`/`Objects`，
+/// 见 `Assets.cs:361-365@901dbe2f`），而 [`PositionedCell`] 要的是**族内序号**（地图格字节
+/// `btTiles`/`btsmTiles`/`btArea` 口径）。这一步的唯一实现在
+/// [`miredit_core::cells_from_stamp`]（A-024 已下沉，GUI / web / 本测试共用同一份）——
+/// **本文件不再自带任何减基址的换算表**（A-020 早期版本曾有，已删）。
+///
+/// 图号一律掩 `0x7FFF`（高位是编辑器的阻挡/标记位，见 `mir2-stamp` 模块文档 §五）：
+/// `miredit-core` 转换时已掩过，这里再掩一次是**有意的冗余**（渲染库的输入口径必须自证，
+/// 不能依赖上游"应该已经掩了"）。
+///
+/// 号段固定 [`miredit_core::库号号段::Wemade`]：真实印章取样全是 Wemade 档（实测 9,159 枚
+/// 分配号落在 `0/1/2..=27`）；换成 Shanda/Sanxiu 素材时这里要跟着换号段，转换失败会当场炸。
 fn 适配(stamp: &Stamp) -> Vec<PositionedCell> {
-    stamp
-        .cells
-        .iter()
+    let cells = miredit_core::cells_from_stamp(stamp, miredit_core::库号号段::Wemade)
+        .unwrap_or_else(|e| panic!("真实印章应能在 Wemade 号段内换算：{e}"));
+    cells
+        .into_iter()
         .map(|c| PositionedCell {
-            dx: c.x,
-            dy: c.y,
-            // 低 15 位才是图号（高位是编辑器的阻挡/标记位，见 `mir2-stamp` 模块文档 §五）
-            bk: (c.cell.back_image & 0x7FFF) as u16,
-            mid: c.cell.middle_image & 0x7FFF,
-            fr: c
-                .cell
-                .foreground
-                .map(|f| (f.image as u16) & 0x7FFF)
-                .unwrap_or(0),
-            bk_lib: 库号(c.cell.back_library),
-            mid_lib: 库号(c.cell.middle_library),
-            fr_lib: 库号(c.cell.foreground.map(|f| f.library).unwrap_or(0)),
+            dx: c.dx,
+            dy: c.dy,
+            bk: c.bk & 0x7FFF,
+            mid: c.mid & 0x7FFF,
+            fr: c.fr & 0x7FFF,
+            bk_lib: c.bk_lib,
+            mid_lib: c.mid_lib,
+            fr_lib: c.fr_lib,
         })
         .collect()
 }
@@ -807,11 +977,13 @@ fn 真实印章_mir00000_原始尺寸与计数() {
     assert_eq!(stamp.cells.len(), 25, "README 范例：25 格");
     assert_eq!(stamp.bounds(), (-1, -2, 4, 3), "README 范例：包围盒 (-1,-2,4,3)");
 
-    let Some(src) = 打开图源() else {
+    let Some((src, _类)) = 打开图源() else {
         return;
     };
+    // 记账：真实用例必须打印「逐层命中库」（A-020），把"问了哪个库的哪一页"变成可对账的事实
+    let 记账 = 记账::新(src.as_ref());
     let opts = StampRenderOptions::raw();
-    let img = render_stamp(&cells, &src, &opts).expect("真实印章渲染应成功");
+    let img = render_stamp(&cells, &记账, &opts).expect("真实印章渲染应成功");
 
     // 包围盒 6×6 格 ⇒ 288×192
     assert_eq!(
@@ -844,6 +1016,179 @@ fn 真实印章_mir00000_原始尺寸与计数() {
         .filter(|c| c.bk == 0 && c.mid == 0 && c.fr == 0)
         .count();
     println!("[真实印章] 三图号全零的格数={全零格}");
+    println!("[真实印章] 逐层命中库: {}", 记账.逐层());
+}
+
+// ---------------------------------------------------------------------------
+// 三·五、**真实像素基线**（A-020：真实 `.X` + 真实 `.lib`，不只是"非空"）
+// ---------------------------------------------------------------------------
+
+/// `mir_00000.X` 的像素基线（A-020，2026-11-07 实跑取证）。
+///
+/// # 为什么是哈希而不是"尺寸 + 非空"
+///
+/// 基线要能挡住**像素级**回归：滤镜换掉、锚点算错、层序反了、库号取错文件……
+/// 只查"图有多大 / 有没有画东西"一律挡不住（A-020 之前那版正是这样，等于没基线）。
+///
+/// # 两套常量，按**图库容器**分开（[`源类`]）
+///
+/// 同一枚 `.X` 在两个客户端里渲染出来的像素**本来就不同**（`Objects.Lib` 与
+/// `Objects.wzl` 是两批美术资源；WIL 侧帧数也更少）。所以：
+///
+/// | 根 | 容器 | 基线 |
+/// |---|---|---|
+/// | `MIREDIT_CLIENT_ROOT=G:\Crystal Mir 2\Data` | `.lib`（WemadeMir2，28 库：地面 1 / 中层 1 / 表层 26） | [`LIB_STAMP00000`] |
+/// | `MIREDIT_CLIENT_ROOT=E:\GodM2\client\热血传奇23周年客户端\data` | `.wzl/.wil` | [`WIL_STAMP00000`] |
+///
+/// 库号换算走**产品核心** [`miredit_core::cells_from_stamp`]（Wemade 号段），与本文件
+/// 的 [`适配`] 同一入口 —— 测试侧没有第二份减基址表。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct 基线 {
+    /// 原始尺寸成品 `rgba` 的逐字节 FNV-1a64。
+    raw_fnv: u64,
+    /// `thumbnail(46,46)` 成品 `rgba` 的逐字节 FNV-1a64。
+    thumb46_fnv: u64,
+    /// 原始尺寸里 `alpha != 0` 的像素数。
+    不透明: usize,
+    /// 原始尺寸内容框（闭区间，由真实像素算出）。
+    内容框: (u32, u32, u32, u32),
+    /// 缩略图实际尺寸。
+    缩略: (u32, u32),
+    /// 缩略图内容框。
+    缩略内容: (u32, u32, u32, u32),
+    /// 真的往画布写过像素的格数。
+    cells_drawn: usize,
+    /// 真的解码过的帧数。
+    frames: usize,
+    /// 缺帧数。
+    missing: usize,
+}
+
+impl 基线 {
+    /// 按图库容器选基线（两套美术资源，互不通用）。
+    const fn 选(类: 源类) -> Self {
+        match 类 {
+            源类::Lib => LIB_STAMP00000,
+            源类::Wil => WIL_STAMP00000,
+        }
+    }
+}
+
+/// `.lib` 根（`G:\Crystal Mir 2\Data`）下的基线。
+const LIB_STAMP00000: 基线 = 基线 {
+    raw_fnv: 0x7482_CA46_E11A_3C99,
+    thumb46_fnv: 0x512E_BAD5_C9D8_59C6,
+    不透明: 31_389,
+    内容框: (22, 0, 287, 191),
+    缩略: (46, 34),
+    缩略内容: (2, 2, 43, 31),
+    cells_drawn: 8,
+    frames: 8,
+    missing: 0,
+};
+
+/// `.wzl/.wil` 根（23 周年客户端 `data`）下的基线。
+///
+/// ⚠ 与 [`LIB_STAMP00000`] **不是**同一批美术资源：帧内容不同、帧数也更少
+/// （同批样本里 `mir_04580` / `mir_09159` 在 WIL 根下缺帧 —— 属**数据差异**，不是渲染缺陷）。
+const WIL_STAMP00000: 基线 = 基线 {
+    raw_fnv: 0xDE1A_DDE4_8276_B176,
+    thumb46_fnv: 0xCDEC_F44F_0556_9F77,
+    不透明: 31_496,
+    内容框: (22, 0, 287, 191),
+    缩略: (46, 34),
+    缩略内容: (2, 2, 43, 31),
+    cells_drawn: 8,
+    frames: 8,
+    missing: 0,
+};
+
+#[test]
+fn 真实印章_mir00000_像素基线() {
+    let Some((stamp, cells)) = 读范例() else {
+        return;
+    };
+    let Some((src, 类)) = 打开图源() else {
+        return;
+    };
+    let 记账 = 记账::新(src.as_ref());
+
+    // ① 原始尺寸：尺寸 / 内容框 / 计数 / **像素哈希**，四样一起钉
+    let img = render_stamp(&cells, &记账, &StampRenderOptions::raw()).expect("真实印章渲染应成功");
+    let 不透明 = img
+        .rgba
+        .iter()
+        .skip(3)
+        .step_by(4)
+        .filter(|a| **a != 0)
+        .count();
+    // ② 缩略图：走另一条缩放/留白路径，几何与哈希单独钉
+    let th = render_stamp(&cells, &记账, &StampRenderOptions::thumbnail(46, 46))
+        .expect("缩略图渲染应成功");
+
+    let 实测 = 基线 {
+        raw_fnv: fnv1a(&img.rgba),
+        thumb46_fnv: fnv1a(&th.rgba),
+        不透明,
+        内容框: img.content,
+        缩略: (th.width, th.height),
+        缩略内容: th.content,
+        cells_drawn: img.cells_drawn,
+        frames: img.frames_decoded,
+        missing: img.missing,
+    };
+
+    // 真实用例必须"说话"：几何 / 计数 / 内容框 / 逐层命中库都要打出来
+    println!(
+        "[像素基线] 源={} 印章=mir_00000.X 格数={} 包围盒={:?}",
+        类.名(),
+        cells.len(),
+        stamp.bounds()
+    );
+    println!(
+        "[像素基线] 原始 {}×{} content={:?} ({}×{}) 不透明={} cells_drawn={} frames_decoded={} missing={} fnv={:016x}",
+        img.width,
+        img.height,
+        img.content,
+        img.content_width(),
+        img.content_height(),
+        不透明,
+        img.cells_drawn,
+        img.frames_decoded,
+        img.missing,
+        实测.raw_fnv
+    );
+    println!(
+        "[像素基线] 缩略图 {}×{} content={:?} ({}×{}) cells_drawn={} fnv={:016x}",
+        th.width,
+        th.height,
+        th.content,
+        th.content_width(),
+        th.content_height(),
+        th.cells_drawn,
+        实测.thumb46_fnv
+    );
+    println!("[像素基线] 逐层命中库: {}", 记账.逐层());
+
+    let 望 = 基线::选(类);
+    assert_eq!(
+        (img.width, img.height),
+        (288, 192),
+        "6×6 格 ⇒ 288×192（两个根都成立：几何只由包围盒决定）"
+    );
+    assert_eq!(img.rgba.len(), 288 * 192 * 4, "RGBA 字节数");
+    assert_eq!(
+        实测, 望,
+        "像素基线不符（源={}）—— 实测：{实测:?} / 期望：{望:?}；要么真改坏了（滤镜/锚点/层序/库号），\
+         要么这批美术资源换了 ⇒ 换数据后按实测值更新常量",
+        类.名()
+    );
+    // 内容框必须真的由像素算出：全图不透明就说明框算错了
+    assert!(
+        实测.不透明 < 288 * 192,
+        "全图不透明 ⇒ 内容框算错（它只应框住有像素的部分）"
+    );
+    assert!(实测.不透明 > 0, "一枚有前景的印章不该一个像素都没有");
 }
 
 #[test]
@@ -851,12 +1196,12 @@ fn 真实印章_mir00000_确定性() {
     let Some((_, cells)) = 读范例() else {
         return;
     };
-    let Some(src) = 打开图源() else {
+    let Some((src, _类)) = 打开图源() else {
         return;
     };
     let opts = StampRenderOptions::raw();
-    let a = render_stamp(&cells, &src, &opts).unwrap();
-    let b = render_stamp(&cells, &src, &opts).unwrap();
+    let a = render_stamp(&cells, src.as_ref(), &opts).unwrap();
+    let b = render_stamp(&cells, src.as_ref(), &opts).unwrap();
     assert_eq!(a.rgba, b.rgba, "同一输入两次渲染，RGBA 必须逐字节相等");
     assert_eq!(a, b);
     println!(
@@ -869,8 +1214,8 @@ fn 真实印章_mir00000_确定性() {
 
     // 缩略图路径同样要确定
     let opts = StampRenderOptions::thumbnail(46, 46);
-    let a = render_stamp(&cells, &src, &opts).unwrap();
-    let b = render_stamp(&cells, &src, &opts).unwrap();
+    let a = render_stamp(&cells, src.as_ref(), &opts).unwrap();
+    let b = render_stamp(&cells, src.as_ref(), &opts).unwrap();
     assert_eq!(a.rgba, b.rgba, "缩略图两次渲染必须逐字节相等");
     println!(
         "[确定性] 缩略图 {}×{}：两次渲染字节相同 ✔（{} 字节，FNV-1a64 = {:016x}）",
@@ -886,10 +1231,10 @@ fn 真实印章_mir00000_缩略图46() {
     let Some((_, cells)) = 读范例() else {
         return;
     };
-    let Some(src) = 打开图源() else {
+    let Some((src, _类)) = 打开图源() else {
         return;
     };
-    let img = render_stamp(&cells, &src, &StampRenderOptions::thumbnail(46, 46)).unwrap();
+    let img = render_stamp(&cells, src.as_ref(), &StampRenderOptions::thumbnail(46, 46)).unwrap();
 
     assert!(
         img.width <= 46 && img.height <= 46,
@@ -945,7 +1290,7 @@ fn 性能_200枚真实印章() {
     let Some(列表) = 印章列表() else {
         return;
     };
-    let Some(src) = 打开图源() else {
+    let Some((src, _类)) = 打开图源() else {
         return;
     };
     let 取 = 列表.iter().take(200).collect::<Vec<_>>();
@@ -967,7 +1312,7 @@ fn 性能_200枚真实印章() {
     let 缩略 = StampRenderOptions::thumbnail(46, 46);
 
     // 预热一遍（让图库页头/调色板进缓存，计时只反映渲染本身）
-    let _ = render_stamp(&数据[0].1, &src, &原尺寸);
+    let _ = render_stamp(&数据[0].1, src.as_ref(), &原尺寸);
 
     let mut 单枚耗时 = Vec::with_capacity(数据.len());
     let mut 空图数 = 0usize;
@@ -983,7 +1328,7 @@ fn 性能_200枚真实印章() {
     let 总 = Instant::now();
     for (_, cells) in &数据 {
         let t = Instant::now();
-        let img = render_stamp(cells, &src, &原尺寸).expect("真实印章渲染应成功");
+        let img = render_stamp(cells, src.as_ref(), &原尺寸).expect("真实印章渲染应成功");
         assert!(img.width == 0 || img.rgba.len() == img.width as usize * img.height as usize * 4);
         if img.width == 0 {
             空图数 += 1;
@@ -998,7 +1343,7 @@ fn 性能_200枚真实印章() {
     let 缩略总 = Instant::now();
     for (_, cells) in &数据 {
         let t = Instant::now();
-        let img = render_stamp(cells, &src, &缩略).expect("缩略图渲染应成功");
+        let img = render_stamp(cells, src.as_ref(), &缩略).expect("缩略图渲染应成功");
         assert!(img.width <= 46 && img.height <= 46);
         缩略耗时.push(t.elapsed());
     }
@@ -1046,7 +1391,7 @@ fn 四枚印章缩略图拼图() {
     let Some(列表) = 印章列表() else {
         return;
     };
-    let Some(src) = 打开图源() else {
+    let Some((src, _类)) = 打开图源() else {
         return;
     };
     let dir = refs_目录();
@@ -1066,7 +1411,7 @@ fn 四枚印章缩略图拼图() {
         let Some((_, cells)) = 读印章(p) else {
             continue;
         };
-        let img = render_stamp(&cells, &src, &StampRenderOptions::thumbnail(边, 边)).unwrap();
+        let img = render_stamp(&cells, src.as_ref(), &StampRenderOptions::thumbnail(边, 边)).unwrap();
         let (ox, oy) = (
             间隔 + (i as u32 % 2) * (边 + 间隔),
             间隔 + (i as u32 / 2) * (边 + 间隔),
@@ -1091,4 +1436,104 @@ fn 四枚印章缩略图拼图() {
         Ok(()) => println!("[出图] {}（{拼宽}×{拼高}，{成功} 枚）", out.display()),
         Err(e) => eprintln!("[跳过出图] {}：{e}", out.display()),
     }
+}
+
+/// **`.X` 的库号：分配号 ≠ 族内序号**（A-024）—— 适配走产品核心，三族落 0 号库。
+///
+/// 三件事一起钉，缺一条这个坑就会再回来：
+///
+/// 1. **实测原文**：`mir_00000.X` 25 格的库号是 **地表 `0` / 中层 `1` / 前景 `2`**
+///    —— 正是 `Assets.cs:361-365@901dbe2f` 登记表的前三行（`Tiles` / `Smtiles` / `Objects`）；
+/// 2. **原样当族内序号用会取错文件**：前景 `2` 会解析到 `Objects3.Lib`（`surface(2)`），
+///    而正确要的是 `Objects.Lib`（`surface(0)`）—— 两者是**不同的图**
+///    （A-024 取证：原样渲染 `fnv=91cb7906…` 是别的画，换算后 `7482cb46…` 才是这枚印章）；
+/// 3. 本文件的 [`适配`] 与产品核心 `miredit_core::cells_from_stamp` **逐字段相等**
+///    （`dx/dy` 三图号 三库号 全比），三族都落 **0 号库**。
+#[test]
+fn 适配走产品核心_三族落零号库() {
+    use std::collections::BTreeSet;
+
+    let Some((stamp, cells)) = 读范例() else {
+        return;
+    };
+
+    // ① 原文是分配号（0/1/2），不是族内序号
+    let bk: BTreeSet<i16> = stamp.cells.iter().map(|c| c.cell.back_library).collect();
+    let mid: BTreeSet<i16> = stamp.cells.iter().map(|c| c.cell.middle_library).collect();
+    let fr: BTreeSet<i16> = stamp
+        .cells
+        .iter()
+        .filter_map(|c| c.cell.foreground.map(|f| f.library))
+        .collect();
+    assert_eq!(bk, BTreeSet::from([0]), "地表库号原文（= 分配号 0 = Tiles）");
+    assert_eq!(mid, BTreeSet::from([1]), "中层库号原文（= 分配号 1 = Smtiles）");
+    assert_eq!(fr, BTreeSet::from([2]), "前景库号原文（= 分配号 2 = Objects）");
+
+    // ② 适配后三族都落在 0 号库
+    assert!(
+        cells.iter().all(|c| (c.bk_lib, c.mid_lib, c.fr_lib) == (0, 0, 0)),
+        "适配后三族库号必须都是 0（Tiles / Smtiles / Objects 的族内序号）"
+    );
+
+    // ③ 适配 == 产品核心（防再分叉：测试侧不许自带第二份换算）
+    let 核心 = miredit_core::cells_from_stamp(&stamp, miredit_core::库号号段::Wemade)
+        .expect("真实印章应能在 Wemade 号段内换算");
+    assert_eq!(cells.len(), 核心.len(), "格数一致");
+    for (i, (a, b)) in cells.iter().zip(核心.iter()).enumerate() {
+        assert_eq!(
+            (a.dx, a.dy, a.bk, a.mid, a.fr, a.bk_lib, a.mid_lib, a.fr_lib),
+            (b.dx, b.dy, b.bk, b.mid, b.fr, b.bk_lib, b.mid_lib, b.fr_lib),
+            "第 {} 格：适配结果必须与 core 逐字段相等",
+            i + 1
+        );
+    }
+
+    // ④ 只有 `.lib` 图库判得了"取错文件"这一半（`.wzl` 命名不同）
+    let Some((src, 类)) = 打开图源() else {
+        return;
+    };
+    let _ = &src;
+    if 类 != 源类::Lib {
+        eprintln!("[跳过] 当前根不是 .lib（{}），跳过「取错文件」这一半", 类.名());
+        return;
+    }
+    let Some(root) = mir2_assets::client_root() else {
+        return;
+    };
+    let Ok(paths) =
+        mir2_assets::CrystalLibPaths::discover(&root, mir2_assets::CrystalAssetFormat::Auto)
+    else {
+        return;
+    };
+    if paths.is_empty() {
+        eprintln!("[跳过] 根 {} 下没有 .lib，跳过「取错文件」这一半", root.display());
+        return;
+    }
+    let 名 = |lib: LibRef| -> String {
+        paths
+            .resolve(lib)
+            .and_then(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_lowercase())
+            .unwrap_or_else(|| "<未登记>".to_owned())
+    };
+    assert_eq!(
+        名(LibRef::surface(0)),
+        "objects.lib",
+        "族内序号 0 = Objects.Lib（正确的那份）"
+    );
+    assert_eq!(
+        名(LibRef::surface(2)),
+        "objects3.lib",
+        "原样透传分配号 2 = Objects3.Lib（**另一个文件**，画面因此不同）"
+    );
+    assert_ne!(
+        名(LibRef::surface(2)),
+        名(LibRef::surface(0)),
+        "这条不变式就是缺陷的全部内容：分配号 ≠ 族内序号"
+    );
+    println!(
+        "[库号语义] 分配号 0/1/2 → 族内序号 0/0/0；surface(0)={} · surface(2)={}",
+        名(LibRef::surface(0)),
+        名(LibRef::surface(2))
+    );
 }

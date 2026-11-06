@@ -17,6 +17,10 @@ png = "0.18"
 # `mir2-format` + `mir2-assets`。`tests/stamp.rs` 用它把真实 `.X` 适配成
 # `miredit_render::stamp::PositionedCell`（渲染库本体不认识 `mir2_stamp::Stamp`）。
 mir2-stamp = { path = "../mir2-stamp" }
+# A-020：真实印章的 `.X → PositionedCell` 适配要走**产品核心**的换算
+# （`miredit_core::cells_from_stamp`，含「全局分配号 → 族内页号」这一步）——
+# 测试侧**不许**再自带一份减基址表。只进 dev-dependencies，渲染库本体仍不依赖 core。
+miredit-core = { path = "../miredit-core" }
 
 [[bin]]
 name = "render_maps"

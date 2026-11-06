@@ -765,6 +765,17 @@ impl MireditApp {
         if !self.cell_hover {
             return None;
         }
+        // **模态浮层打开时一个像素都不画**（A-008 P3，2026-11-07）：
+        //
+        // 上游的模态是**独立窗口**（`MainWindow.axaml` 里的对话框），悬停框永远不可能
+        // 从它的边缘露出来；本仓的模态是画在同一张画布上的**浮层**，如果不拦，
+        // 对话框旁边会露出半截悬停面板（错位的六行信息 + 压在对话框上的边框）。
+        //
+        // 判据用 `Overlay::is_some()` 而不是逐个变体列举：**将来新增的模态自动被拦**，
+        // 不需要记得回来改这里（这正是"按开关真值判"而不是"按枚举清单判"的理由）。
+        if self.overlay.is_some() {
+            return None;
+        }
         let (x, y) = self.hover?;
         let d = self.doc.doc.as_ref()?;
         let cell = d.map.cell(x, y)?;
@@ -3329,6 +3340,62 @@ mod tests {
         assert!(app.hover_panel(&l).is_none(), "关掉后必须立刻不画");
         assert!(!path.exists(), "关也不许写设置文件");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **模态浮层打开时悬停框必须让位**（A-008 P3）。
+    ///
+    /// 上游的模态是独立窗口（`MainWindow.axaml` 的对话框），悬停框与它**不可能同屏**；
+    /// 本仓模态是同一张画布上的浮层 ⇒ 不拦就会从对话框边缘露出半截面板。
+    /// 判据刻意用 `Overlay::is_some()`（而不是逐个变体列举）：新增模态自动被拦。
+    #[test]
+    fn 模态浮层打开时不画悬停框() {
+        let mut app = 有图应用();
+        let l = Layout::compute(Rect::from_min_size(
+            egui::pos2(0.0, 0.0),
+            egui::vec2(m::WINDOW_W, m::WINDOW_H),
+        ));
+        // 前提：开关开着 + 有悬停格 ⇒ 正常状态下**必须**排得出来（否则本用例是空转）
+        app.cell_hover = true;
+        app.hover = Some((1, 1));
+        app.refresh_cell_lines();
+        app.overlay = menu::Overlay::None;
+        let 基线 = app.hover_panel(&l);
+        assert!(基线.is_some(), "开着 + 有悬停格 ⇒ 必须排版（否则本用例测不到东西）");
+
+        // 逐个模态（含空变体与带载荷的）都必须让位
+        let 模态们 = [
+            menu::Overlay::OpenMap {
+                path: "E:\\x.map".to_string(),
+            },
+            menu::Overlay::SaveAs {
+                path: "E:\\y.map".to_string(),
+            },
+            menu::Overlay::Shortcuts,
+            menu::Overlay::About,
+        ];
+        for 模态 in 模态们 {
+            let 名 = format!("{模态:?}");
+            app.overlay = 模态;
+            assert!(
+                app.overlay.is_some(),
+                "{名} 应当算「模态打开」（判据是 `Overlay::is_some`）"
+            );
+            assert!(
+                app.hover_panel(&l).is_none(),
+                "{名} 打开时不许画悬停框（对话框边缘会露出来）"
+            );
+        }
+
+        // 关掉模态 ⇒ 立刻恢复（不残留、不需要重新悬停）
+        app.overlay = menu::Overlay::None;
+        assert!(
+            app.hover_panel(&l).is_some(),
+            "模态关掉后悬停框必须恢复（不许把状态改坏）"
+        );
+
+        // 开关本身仍然生效：模态关掉 + 开关关掉 ⇒ 依旧是 `None`
+        app.cell_hover = false;
+        assert!(app.hover_panel(&l).is_none(), "开关关着时与模态无关");
     }
 
     /// **开启门**（视图 → 开启门，2026-11-05 接线）：`--open-doors` 置初值、菜单项翻转、
