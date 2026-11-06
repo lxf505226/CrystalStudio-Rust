@@ -219,23 +219,104 @@ impl CanvasView {
         self.snap();
     }
 
-    /// 「适应窗口」：整张图缩到可见区里，并居中。
+    /// **「适应地图」的缩放倍数**（`fit_map` 与 resize 重 fit 共用的唯一算法）。
     ///
-    /// 缩放夹在 `CANVAS_MIN_SCALE..=CANVAS_MAX_SCALE`：700×700 的图在 987×815 的画布里
-    /// 只需 0.25×（3072 px 宽 / 987），再小就没意义了（夹到 0.25 后会有滚动余量，如实可见）。
+    /// 上游 `MapViewport.cs:166@901dbe2f`：
+    ///
+    /// ```csharp
+    /// private double FitZoom => Math.Min(1, Math.Min(Math.Max(1, ActualWidth - 80) / (Document.Width * 48.0),
+    ///                                              Math.Max(1, ActualHeight - 80) / (Document.Height * 32.0)));
+    /// ```
+    ///
+    /// 本仓口径（与上游逐条对齐，除两处**有意**差异）：
+    ///
+    /// | 规则 | 上游 | 本仓 |
+    /// |---|---|---|
+    /// | 边距 | 每轴各减 **80 px**（两条边各约 40） | [`m::FIT_MARGIN`]，`usable = (边长 - 80).max(1)` |
+    /// | 居中 | `Fit()` 里按 `ActualWidth/Height` 算 origin | [`Self::fit_map`] 同一套居中 |
+    /// | 上限 | `Math.Min(1, …)`（fit 永不超过 100%） | **不套这一条**（本仓缩放域是 0.25..=4.0，见下） |
+    /// | 下限 | 动态 `FitZoom` 本身就是下限（`LimitZoom` 夹 `[FitZoom, 1]`） | 固定 [`m::CANVAS_MIN_SCALE`] = 0.25 |
+    ///
+    /// 两处差异都是**既有的缩放域差异**（台账 A-014 的「区间差异」，`CANVAS_MIN_SCALE = 0.25`
+    /// 与上游 `Zoom<0.25` 触发总览 mip 的阈值同值），本单（A-012）只补边距与 resize，
+    /// **不动** `CANVAS_MIN_SCALE` / `CANVAS_MAX_SCALE`。
+    ///
+    /// ⚠ 边距只在 `fit ∈ (0.25, 4)` 时可见：`0.map`（700×700）算出来 ≈0.027，被夹到 0.25
+    /// ⇒ 那张图上"fit 前后逐字节相同"（有回归用例钉住）。
+    pub fn fit_scale(canvas: Rect, w: u16, h: u16) -> f32 {
+        if w == 0 || h == 0 || canvas.width() <= 1.0 || canvas.height() <= 1.0 {
+            return m::CANVAS_DEFAULT_SCALE;
+        }
+        let map_w = w as f32 * CELL_W as f32;
+        let map_h = h as f32 * CELL_H as f32;
+        // 上游的 `Math.Max(1, ActualWidth - 80)`：窗口比 80 还窄时分子退化成 1，不出现 0/负数
+        let usable_w = (canvas.width() - m::FIT_MARGIN).max(1.0);
+        let usable_h = (canvas.height() - m::FIT_MARGIN).max(1.0);
+        (usable_w / map_w)
+            .min(usable_h / map_h)
+            .clamp(m::CANVAS_MIN_SCALE, m::CANVAS_MAX_SCALE)
+    }
+
+    /// 「适应窗口」：整张图缩到**留 80 px 边距**的可见区里，并居中。
+    ///
+    /// 缩放取 [`Self::fit_scale`]（与 resize 重 fit 同一份算法），夹在
+    /// `CANVAS_MIN_SCALE..=CANVAS_MAX_SCALE`：700×700 的图在 987×815 的画布里只需 0.25×
+    /// （33600 px 宽 / 987），再小就没意义了（夹到 0.25 后会有滚动余量，如实可见）。
+    ///
+    /// 居中口径同上游 `Fit()`（`MapViewport.cs:167`）：`pan = (map - canvas/scale) / 2`，
+    /// 即整幅图在画布里的左右/上下留白相等 —— 边距只影响**倍数**，不改变居中方式。
     pub fn fit_map(&mut self, canvas: Rect, w: u16, h: u16) {
         if w == 0 || h == 0 || canvas.width() <= 1.0 || canvas.height() <= 1.0 {
             return;
         }
         let map_w = w as f32 * CELL_W as f32;
         let map_h = h as f32 * CELL_H as f32;
-        let sx = canvas.width() / map_w;
-        let sy = canvas.height() / map_h;
-        self.scale = sx.min(sy).clamp(m::CANVAS_MIN_SCALE, m::CANVAS_MAX_SCALE);
-        // 居中：整幅图在画布里的左右/上下留白相等
+        self.scale = Self::fit_scale(canvas, w, h);
         self.pan_x = (map_w - canvas.width() / self.scale) * 0.5;
         self.pan_y = (map_h - canvas.height() / self.scale) * 0.5;
         self.snap();
+    }
+
+    /// **窗口尺寸变化后的重 fit**（对齐上游 `OnSizeChanged`，`MapViewport.cs:169-179@901dbe2f`）。
+    ///
+    /// 上游逻辑逐条：
+    ///
+    /// ```csharp
+    /// if (Zoom >= FitZoom) return;                        // ① 够大就不动（不打断用户）
+    /// var worldCentre = (new Point(prevSize.W / 2, prevSize.H / 2) - origin) / Zoom;
+    /// Zoom = FitZoom;                                     // ② 抬到新的 fit
+    /// origin = new Point(ActualWidth / 2, ActualHeight / 2) - worldCentre * Zoom;  // ③ 世界中心不动
+    /// ```
+    ///
+    /// 换成我们的坐标：`pan` 是**可见区左上角的世界坐标**（`screen = (world - pan) * scale`），
+    /// 所以 `world_c = pan + prev_size / (2 * 旧 scale)`、`pan = world_c - new_size / (2 * new_fit)`。
+    ///
+    /// 三条**行为**（都是上游的）：
+    /// * **手动放大不被覆盖**：当前 scale 已 ≥ 新 fit ⇒ 一个像素都不动（窗口变大也一样，
+    ///   只要 fit 没超过用户当前的倍数）；
+    /// * **窗口缩小不重 fit**：新 fit 必然 ≤ 旧 fit ≤ 当前 scale ⇒ 走①分支；
+    /// * **手动平移不 opt-out**：上游只按 scale 判，不含"用户平移过"的标记 ⇒ 本函数同样
+    ///   只按 scale 判（平移过的图在"窗口变大到装不下当前倍数"时会被重新居中到新 fit，
+    ///   与上游一致）。
+    ///
+    /// 返回 `true` = 真的改了缩放（调用方据此决定要不要重渲/刷新状态栏）。
+    pub fn refit_on_resize(&mut self, prev_size: Vec2, canvas: Rect, w: u16, h: u16) -> bool {
+        if w == 0 || h == 0 || canvas.width() <= 1.0 || canvas.height() <= 1.0 {
+            return false;
+        }
+        let new_fit = Self::fit_scale(canvas, w, h);
+        // ① 已经够大 ⇒ 不动（手动放大过、或窗口变小）
+        if self.scale >= new_fit {
+            return false;
+        }
+        // ③ 先按**旧**倍数与旧尺寸算出当前可见中心的世界点，再让它落在新中心
+        let world_cx = self.pan_x + prev_size.x / (2.0 * self.scale);
+        let world_cy = self.pan_y + prev_size.y / (2.0 * self.scale);
+        self.scale = new_fit; // ② 抬到新的 fit
+        self.pan_x = world_cx - canvas.width() / (2.0 * new_fit);
+        self.pan_y = world_cy - canvas.height() / (2.0 * new_fit);
+        self.snap();
+        true
     }
 
     /// 平移（`delta_screen` 是**屏幕像素**，方向与鼠标移动一致）。
@@ -829,24 +910,29 @@ mod tests {
     /// ⚠ 画布/地图都取小尺寸：egui 默认 `Context` 的纹理边长上限是 2048，
     /// 0.25× 下 987×815 的画布会渲出 4992×3904 的纹理（那是产品代码的真实上限问题，
     /// 与本条要验证的东西无关，别在这里炸）。
+    ///
+    /// ⚠ 2026-11-07（A-012）：`fit_map` 加了 80 px 边距后，20×20@300×200 的 fit 从 0.3125
+    /// 掉到 **0.25**（→ 可见区更宽 → 加上 `margin_cells` 后纹理 2208 px > 2048，本条会在
+    /// egui 里炸）。所以地图缩到 10×10（fit=0.375、纹理 1776 px），要验的东西
+    /// （"非整数倍 ⇒ LINEAR；放大到 1× ⇒ NEAREST"）一条都没少。
     #[test]
     fn 适应窗口后放大到一倍切到最近邻() {
         use egui::TextureFilter;
-        // 20×20 的 Old12 图（每格都有地表图号 1），尺寸与 fit_map 的参数一致
-        let mut bytes = vec![0u8; 52 + 12 * 400];
-        bytes[0..2].copy_from_slice(&20u16.to_le_bytes());
-        bytes[2..4].copy_from_slice(&20u16.to_le_bytes());
-        for i in 0..400 {
+        // 10×10 的 Old12 图（每格都有地表图号 1），尺寸与 fit_map 的参数一致
+        let mut bytes = vec![0u8; 52 + 12 * 100];
+        bytes[0..2].copy_from_slice(&10u16.to_le_bytes());
+        bytes[2..4].copy_from_slice(&10u16.to_le_bytes());
+        for i in 0..100 {
             let base = 52 + i * 12;
             bytes[base..base + 2].copy_from_slice(&1u16.to_le_bytes());
         }
-        let map = Map::parse(&bytes).expect("20×20 合成图应能解析");
+        let map = Map::parse(&bytes).expect("10×10 合成图应能解析");
         let src = 全有源;
         let ctx = egui::Context::default();
         let canvas = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(300.0, 200.0));
         let mut v = CanvasView::default();
-        v.fit_map(canvas, 20, 20);
-        assert!(v.scale < 1.0, "20×20 的图在 300×200 画布里必须缩到 1× 以下");
+        v.fit_map(canvas, 10, 10);
+        assert!(v.scale < 1.0, "10×10 的图在 300×200 画布里必须缩到 1× 以下");
         assert_ne!(
             v.filter_class(),
             FilterClass::Nearest,
@@ -1142,6 +1228,153 @@ mod tests {
                 .contains(&(mir2_assets::Family::Surface, 1005)),
             "切光照时门态必须保住（应请求开门帧 1005），实际：{:?}",
             src.0.borrow()
+        );
+    }
+
+    // ───────────────────── A-012：fit 的 80 px 边距 + 窗口尺寸变化后的重 fit ─────────────────────
+
+    /// **边距数值**：20×20 的图在 987×815 画布里被**宽度**这条轴限制，
+    /// 那条轴（宽）两侧各留 **≈40 px**（共 80 px，上游 `MapViewport.cs:166` 的 `- 80`）。
+    ///
+    /// 960×640 的图：`usable=(907, 735)` ⇒ `fit = min(907/960, 735/640) = 0.9448`（宽度轴限制）
+    /// ⇒ 上屏宽度 `= 960 × 0.9448 = 907 = 987 - 80` ⇒ 左右各 40 px；高度只占 604.8 ⇒ 上下余量更大。
+    #[test]
+    fn 适应地图每轴留八十像素边距() {
+        let c = canvas(); // 987×815
+        let (w, h) = (20u16, 20u16);
+        let s = CanvasView::fit_scale(c, w, h);
+        assert!((0.25..=4.0).contains(&s), "fit 必须落在缩放域里：{s}");
+
+        // 上屏尺寸（世界像素 × 倍数）
+        let (map_w, map_h) = (w as f32 * CELL_W as f32, h as f32 * CELL_H as f32);
+        let 上屏宽 = map_w * s;
+        let 上屏高 = map_h * s;
+        // 限制轴 = 宽：`987 - 80 = 907`
+        assert!(
+            (上屏宽 - (c.width() - m::FIT_MARGIN)).abs() < 0.01,
+            "限制轴必须正好用掉「画布 - 80」：上屏 {上屏宽} vs 期望 {}",
+            c.width() - m::FIT_MARGIN
+        );
+        // 两侧各约 40 px（居中 ⇒ 相等）
+        let mut v = CanvasView::default();
+        v.fit_map(c, w, h);
+        let 左右留白 = (c.width() - 上屏宽) * 0.5;
+        assert!(
+            (左右留白 - m::FIT_MARGIN * 0.5).abs() < 0.01,
+            "左右各应留 40 px（共 80）：{左右留白}"
+        );
+        assert!(
+            上屏高 < c.height() - m::FIT_MARGIN + 0.01,
+            "非限制轴必须还有余量：上屏高 {上屏高}"
+        );
+        // 居中：可见区左上角的世界坐标 = (图 - 画布/倍数)/2（上游 `Fit()` 同一套）
+        assert!((v.pan_x - (map_w - c.width() / s) * 0.5).abs() < 0.51, "pan_x 居中");
+        assert!((v.pan_y - (map_h - c.height() / s) * 0.5).abs() < 0.51, "pan_y 居中");
+    }
+
+    /// **窗口变大（装不下当前倍数）⇒ 重 fit 到新的 fit，且世界中心不动**。
+    ///
+    /// 5×5 的图：300×200 时 `fit = min(220/240, 120/160) = 0.75`；
+    /// 600×400 时 `fit = min(520/240, 320/160) = 2.0` ⇒ 必须抬到 2.0。
+    /// 中心保持：旧 `pan=(-80,-53.33)`、旧中心世界点 `(120, 80)`；
+    /// 新 `pan = (120,80) - (600,400)/(2×2.0) = (-30, -20)`。
+    #[test]
+    fn 窗口变大后重适应且中心不动() {
+        let (w, h) = (5u16, 5u16);
+        let 旧 = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(300.0, 200.0));
+        let 新 = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(600.0, 400.0));
+        assert!((CanvasView::fit_scale(旧, w, h) - 0.75).abs() < 1e-4);
+        assert!((CanvasView::fit_scale(新, w, h) - 2.0).abs() < 1e-4);
+
+        let mut v = CanvasView::default();
+        v.fit_map(旧, w, h);
+        let 旧中心 = (v.pan_x + 旧.width() / (2.0 * v.scale), v.pan_y + 旧.height() / (2.0 * v.scale));
+
+        assert!(v.refit_on_resize(旧.size(), 新, w, h), "窗口变大必须重 fit");
+        assert!((v.scale - 2.0).abs() < 1e-4, "必须抬到新的 fit：{}", v.scale);
+        let 新中心 = (v.pan_x + 新.width() / (2.0 * v.scale), v.pan_y + 新.height() / (2.0 * v.scale));
+        assert!(
+            (新中心.0 - 旧中心.0).abs() < 1e-3 && (新中心.1 - 旧中心.1).abs() < 1e-3,
+            "世界中心必须保持：旧 {旧中心:?} vs 新 {新中心:?}"
+        );
+        // 具体数值（settle 到 snap 之后的整屏像素网格上）
+        assert!((v.pan_x + 30.0).abs() < 0.51, "pan_x 应 ≈ -30：{}", v.pan_x);
+        assert!((v.pan_y + 20.0).abs() < 0.51, "pan_y 应 ≈ -20：{}", v.pan_y);
+    }
+
+    /// **手动放大过（倍数 ≥ 新 fit）⇒ resize 不动作**（上游 `if (Zoom >= FitZoom) return;`）。
+    ///
+    /// 5×5 的图在 300×200 里 fit=0.75；手动放到 1.5；再变成 400×260（新 fit=1.125 ≤ 1.5）
+    /// ⇒ `scale` 与 `pan` 一个都不许动。
+    #[test]
+    fn 手动放大后窗口变化不覆盖() {
+        let (w, h) = (5u16, 5u16);
+        let 旧 = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(300.0, 200.0));
+        let 新 = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(400.0, 260.0));
+        assert!((CanvasView::fit_scale(新, w, h) - 1.125).abs() < 1e-4);
+
+        let mut v = CanvasView::default();
+        v.fit_map(旧, w, h);
+        // 手动放大到 1.5（锚点随意：只关心 scale/pan 之后不被 resize 抢掉）
+        v.zoom_at(旧, Pos2::new(120.0, 80.0), 1.5 / v.scale);
+        assert!((v.scale - 1.5).abs() < 1e-4, "手动放大失败：{}", v.scale);
+        let (缩放前, 平移前) = (v.scale, (v.pan_x, v.pan_y));
+
+        assert!(
+            !v.refit_on_resize(旧.size(), 新, w, h),
+            "当前倍数 ≥ 新 fit ⇒ 不许重 fit"
+        );
+        assert_eq!(v.scale, 缩放前, "手动放大过的倍数不许被覆盖");
+        assert_eq!((v.pan_x, v.pan_y), 平移前, "手动平移过的位置不许被覆盖");
+    }
+
+    /// **窗口缩小 ⇒ 不动作**（新 fit 必然 ≤ 旧 fit ≤ 当前倍数）。
+    #[test]
+    fn 窗口缩小后不重适应() {
+        let (w, h) = (5u16, 5u16);
+        let 大 = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(600.0, 400.0));
+        let 小 = Rect::from_min_size(Pos2::new(0.0, 0.0), Vec2::new(300.0, 200.0));
+        let mut v = CanvasView::default();
+        v.fit_map(大, w, h); // 2.0
+        let (缩放前, 平移前) = (v.scale, (v.pan_x, v.pan_y));
+        assert!(
+            !v.refit_on_resize(大.size(), 小, w, h),
+            "窗口缩小不许重 fit（否则用户的视野会被强行拉远）"
+        );
+        assert_eq!(v.scale, 缩放前);
+        assert_eq!((v.pan_x, v.pan_y), 平移前);
+    }
+
+    /// **`0.map`（700×700）在 987×815 上 fit 被 0.25 夹住** ⇒ 80 px 边距在那张图上**不可见**
+    /// （算出来 ≈0.027 < 0.25），因此"加边距前后像素相同"。
+    #[test]
+    fn 零点图fit被下限夹住边距不可见() {
+        let c = canvas();
+        let s = CanvasView::fit_scale(c, 700, 700);
+        assert!((s - m::CANVAS_MIN_SCALE).abs() < 1e-6, "必须夹到 0.25：{s}");
+        // 不带边距的老公式也是同一个值（987/33600 与 907/33600 都 < 0.25）
+        let 无边界 = (c.width() / (700.0 * CELL_W as f32))
+            .min(c.height() / (700.0 * CELL_H as f32))
+            .clamp(m::CANVAS_MIN_SCALE, m::CANVAS_MAX_SCALE);
+        assert!(
+            (s - 无边界).abs() < 1e-6,
+            "0.map 上边距不可见（两者都夹到 0.25）：{s} vs {无边界}"
+        );
+        // 居中方式没变 ⇒ pan 与老公式逐位相同 ⇒ 像素必然相同
+        let mut v = CanvasView::default();
+        v.fit_map(c, 700, 700);
+        let 老pan = (
+            (700.0 * CELL_W as f32 - c.width() / s) * 0.5,
+            (700.0 * CELL_H as f32 - c.height() / s) * 0.5,
+        );
+        // 0.25× 下 `snap()` 把 pan 吸附到**屏幕**整数像素 ⇒ 世界坐标网格是 1/0.25 = 4 px，容差取 2 px
+        assert!(
+            (v.pan_x - 老pan.0).abs() <= 2.0 && (v.pan_y - 老pan.1).abs() <= 2.0,
+            "0.map 的 fit 居中必须与老公式一致（pan {} / {} vs {} / {}）",
+            v.pan_x,
+            v.pan_y,
+            老pan.0,
+            老pan.1
         );
     }
 }

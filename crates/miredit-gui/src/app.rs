@@ -191,6 +191,11 @@ pub struct MireditApp {
     last_canvas: Rect,
     /// 最近一次布局算出的缩放浮层矩形（截图比对时要排除它）。
     last_overlay: Rect,
+    /// **上一帧的画布尺寸**（A-012：`None` = 还没布局过）。
+    ///
+    /// 只用于「窗口尺寸是否变了」这一个判断 —— `Some(旧) != 当前` 时才走一次
+    /// [`CanvasView::refit_on_resize`]，**不是每帧都 fit**（否则用户手动缩放/平移会被抢掉）。
+    canvas_size: Option<Vec2>,
     /// 关闭拦截模态是否已经弹出（有未保存修改时点第一次 × 变成 `true`）。
     confirm_close: bool,
     /// 已发给窗口系统的标题（变了才发 `ViewportCommand::Title`，避免每帧发指令）。
@@ -598,6 +603,7 @@ impl MireditApp {
             update_ms: 0.0,
             last_frame: None,
             last_canvas: Rect::NOTHING,
+            canvas_size: None,
             last_overlay: Rect::NOTHING,
             confirm_close: false,
             shown_title: String::new(),
@@ -710,6 +716,37 @@ impl MireditApp {
             );
         }
         self.centered = true;
+    }
+
+    /// **窗口尺寸变化后修 fit 不变量**（A-012，对齐上游 `MapViewport.cs:169-179`）。
+    ///
+    /// 触发条件与上游 `OnSizeChanged` 相同 —— **画布矩形尺寸真的变了**才动手：
+    ///
+    /// | 情形 | 行为 |
+    /// |---|---|
+    /// | 首次布局（`canvas_size == None`） | 只**记住**尺寸，不重 fit（初次对准归 `init_view` / 开图时的 `fit_map`） |
+    /// | 尺寸没变 | **什么都不做**（保证不每帧抢用户的手动缩放/平移） |
+    /// | 尺寸变了 | 交给 [`CanvasView::refit_on_resize`]（它自带"当前倍数已经够大就不动"的 guard） |
+    fn refit_after_resize(&mut self, l: &Layout) {
+        let 当前 = l.viewport.size();
+        match self.canvas_size {
+            None => self.canvas_size = Some(当前),
+            Some(旧) if (旧.x - 当前.x).abs() < 0.5 && (旧.y - 当前.y).abs() < 0.5 => {}
+            Some(旧) => {
+                self.canvas_size = Some(当前);
+                if let Some(d) = self.doc.doc.as_ref() {
+                    if self
+                        .view
+                        .refit_on_resize(旧, l.viewport, d.map.width, d.map.height)
+                    {
+                        eprintln!(
+                            "[视口] 窗口尺寸变化 ⇒ 重适应：缩放 {:.0}%",
+                            self.view.scale * 100.0
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /// 重渲调度：只在视口/图层/**渲染选项（门态 + 光照档）**/地图变化时真调渲染库
@@ -2229,6 +2266,9 @@ impl eframe::App for MireditApp {
                 self.drive_palette_autoscroll(ctx);
                 // ② 首次对准（需要画布矩形）
                 self.init_view(&l);
+                // ②a **窗口尺寸变化 ⇒ 按上游 guard 重 fit**（A-012）。必须在
+                //     `ensure_texture` 之前：重 fit 改的是 `scale`/`pan`，纹理按它取可见区。
+                self.refit_after_resize(&l);
                 self.last_canvas = l.viewport;
                 self.last_overlay = l.zoom_pill;
 
@@ -4413,5 +4453,152 @@ mod tests {
         assert!(warn, "没改动要按「没做事」提示");
         assert_eq!(app.edit.undo_len(), undo_before, "不许开撤销步");
         assert_eq!(app.doc.doc.as_ref().expect("有文档").map.to_bytes(), 原2);
+    }
+
+    // ─────────────────────── A-012：fit 边距与窗口尺寸变化 ───────────────────────
+
+    /// 造一张 `n×n` 的 12 B/格合成图当应用（每格地表图号 1）。
+    fn 有图应用n(n: u16) -> MireditApp {
+        let mut app = 空应用();
+        let 格数 = n as usize * n as usize;
+        let mut b = vec![0u8; 52 + 12 * 格数];
+        b[0..2].copy_from_slice(&n.to_le_bytes());
+        b[2..4].copy_from_slice(&n.to_le_bytes());
+        for i in 0..格数 {
+            let base = 52 + i * 12;
+            b[base..base + 2].copy_from_slice(&1u16.to_le_bytes());
+        }
+        app.doc.doc = Some(
+            crate::mapdoc::MapDoc::from_bytes(std::path::Path::new(r"E:\x\fit.map"), b)
+                .expect("合成图应能解析"),
+        );
+        app.doc.map_error = None;
+        if let Some(d) = app.doc.doc.as_ref() {
+            let _ = app.edit.bind_document(&d.path, d.orig_bytes());
+        }
+        app
+    }
+
+    /// 窗口 `(w,h)` 下的布局。
+    fn 布局(w: f32, h: f32) -> Layout {
+        Layout::compute(Rect::from_min_size(
+            egui::pos2(0.0, 0.0),
+            egui::vec2(w, h),
+        ))
+    }
+
+    /// **「适应地图」只有一条算法**：菜单动作算出的 `scale`/`pan` 必须与
+    /// [`CanvasView::fit_scale`] + 居中公式逐位一致，且**重复点结果不变**（幂等）。
+    ///
+    /// 三条入口（`menu/action.rs:511` 的适应地图、`app.rs:2824` 的缩放条按钮、
+    /// `open_map_path` 开图时的首次 fit）都调同一个 [`CanvasView::fit_map`] ——
+    /// 本用例钉住菜单那条，另两条由"只存在一份实现"结构保证（回执里给 grep 证据）。
+    #[test]
+    fn 适应地图三条入口同一条fit() {
+        let mut app = 有图应用n(40);
+        let l = 布局(m::WINDOW_W, m::WINDOW_H);
+        let canvas = l.viewport;
+
+        app.dispatch_menu(menu::model::Action::FitMap, canvas);
+        let 期望 = CanvasView::fit_scale(canvas, 40, 40);
+        assert!(
+            (app.view.scale - 期望).abs() < 1e-6,
+            "菜单「适应地图」必须用 fit_scale：{} vs {期望}",
+            app.view.scale
+        );
+        // 居中：pan = (图 - 画布/倍数)/2（与上游 `Fit()` 同一套）
+        let (map_w, map_h) = (40.0 * 48.0, 40.0 * 32.0);
+        let (pan_x, pan_y) = (
+            (map_w - canvas.width() / 期望) * 0.5,
+            (map_h - canvas.height() / 期望) * 0.5,
+        );
+        assert!((app.view.pan_x - pan_x).abs() <= 0.51, "pan_x 必须居中");
+        assert!((app.view.pan_y - pan_y).abs() <= 0.51, "pan_y 必须居中");
+
+        // 幂等：手动改一通再点一次，仍然回到同一个 fit
+        app.view.zoom_at(canvas, canvas.center(), 1.7);
+        app.view.pan_by(egui::vec2(37.0, -21.0));
+        app.dispatch_menu(menu::model::Action::FitMap, canvas);
+        assert!((app.view.scale - 期望).abs() < 1e-6, "重复适应必须同值");
+        assert!((app.view.pan_x - pan_x).abs() <= 0.51);
+        assert!((app.view.pan_y - pan_y).abs() <= 0.51);
+    }
+
+    /// **窗口变大 ⇒ 重新适应到新的 fit，且世界中心不动**（上游 `OnSizeChanged` 的等价物）。
+    #[test]
+    fn 窗口尺寸变化后重适应() {
+        let mut app = 有图应用n(40);
+        let 小 = 布局(m::WINDOW_W, m::WINDOW_H);
+        let 大 = 布局(m::WINDOW_W + 500.0, m::WINDOW_H + 350.0);
+        let 旧fit = CanvasView::fit_scale(小.viewport, 40, 40);
+        let 新fit = CanvasView::fit_scale(大.viewport, 40, 40);
+        assert!(
+            新fit > 旧fit + 1e-3,
+            "用例前提：窗口变大后 fit 必须变大（{旧fit} → {新fit}）"
+        );
+
+        // 首次布局：只记住尺寸，不动缩放（缩放由开图时的 fit_map 负责）
+        app.view.fit_map(小.viewport, 40, 40);
+        app.refit_after_resize(&小);
+        assert!((app.view.scale - 旧fit).abs() < 1e-6, "首次布局不许改 fit");
+
+        let 旧中心 = (
+            app.view.pan_x + 小.viewport.width() / (2.0 * app.view.scale),
+            app.view.pan_y + 小.viewport.height() / (2.0 * app.view.scale),
+        );
+        app.refit_after_resize(&大);
+        assert!(
+            (app.view.scale - 新fit).abs() < 1e-4,
+            "窗口变大必须抬到新 fit：{} vs {新fit}",
+            app.view.scale
+        );
+        let 新中心 = (
+            app.view.pan_x + 大.viewport.width() / (2.0 * app.view.scale),
+            app.view.pan_y + 大.viewport.height() / (2.0 * app.view.scale),
+        );
+        // `snap()` 把 pan 吸附到**屏幕**整数像素 ⇒ 世界坐标容差是 1/新fit（这里 ≈1.36 px）
+        let 容差 = 0.5 / 新fit + 0.01;
+        assert!(
+            (新中心.0 - 旧中心.0).abs() < 容差 && (新中心.1 - 旧中心.1).abs() < 容差,
+            "重 fit 后世界中心必须不动（容差 {容差}）：{旧中心:?} vs {新中心:?}"
+        );
+    }
+
+    /// **不每帧抢用户的手动缩放/平移**（这是最容易写错的一条）。
+    ///
+    /// 两个角度都要钉：
+    /// ① 尺寸没变 ⇒ `refit_after_resize` 什么都不做（哪怕当前倍数比 fit 小 ——
+    ///    那种情况只该由"真的 resize 了"来纠正，否则用户永远缩不小）；
+    /// ② 尺寸变了但当前倍数已经 ≥ 新 fit（用户手动放大过）⇒ 也不动。
+    #[test]
+    fn 不每帧抢用户缩放与平移() {
+        let mut app = 有图应用n(40);
+        let l = 布局(m::WINDOW_W, m::WINDOW_H);
+        app.view.fit_map(l.viewport, 40, 40);
+        app.refit_after_resize(&l); // 记住尺寸
+
+        // ① 手动缩到 fit 以下（0.3× < fit 0.47×），同一尺寸再走一遍 ⇒ 不许被拉回
+        app.view.zoom_at(l.viewport, l.viewport.center(), 0.3 / app.view.scale);
+        app.view.pan_by(egui::vec2(19.0, 11.0));
+        let (缩放前, 平移前) = (app.view.scale, (app.view.pan_x, app.view.pan_y));
+        app.refit_after_resize(&l);
+        assert_eq!(app.view.scale, 缩放前, "尺寸没变时不许改缩放");
+        assert_eq!(
+            (app.view.pan_x, app.view.pan_y),
+            平移前,
+            "尺寸没变时不许改平移"
+        );
+
+        // ② 手动放大到 2×（> 任何 fit），再"变大窗口"也没关系 —— 新 fit 仍 ≤ 2×
+        app.view.zoom_at(l.viewport, l.viewport.center(), 2.0 / app.view.scale);
+        let 大 = 布局(m::WINDOW_W + 200.0, m::WINDOW_H + 150.0);
+        let (缩放前, 平移前) = (app.view.scale, (app.view.pan_x, app.view.pan_y));
+        app.refit_after_resize(&大);
+        assert_eq!(app.view.scale, 缩放前, "手动放大过的倍数不许被覆盖");
+        assert_eq!(
+            (app.view.pan_x, app.view.pan_y),
+            平移前,
+            "手动平移过的位置不许被覆盖"
+        );
     }
 }
