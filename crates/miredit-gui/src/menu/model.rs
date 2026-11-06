@@ -1,4 +1,4 @@
-//! **菜单项静态表**：5 个菜单 / **43 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
+//! **菜单项静态表**：5 个菜单 / **44 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
 //! 逐项照抄官方（分组 = 官方 `<Separator />` 的位置）。
 //!
 //! # 数据来源（两处互相印证）
@@ -10,16 +10,16 @@
 //! 运行时由代码追加的那几项（语言 / 7 个面板开关 / 锁定 / 重置）见
 //! `ui_text` 里「下拉菜单项」小节的说明与 [`crate::menu::panels`] 的模块文档。
 //!
-//! # 43 项的账
+//! # 44 项的账
 //!
 //! ```text
-//! 文件 10 + 编辑 5 + 视图 20 + 工具 6 + 帮助 2 = 43
+//! 文件 10 + 编辑 5 + 视图 20 + 工具 7 + 帮助 2 = 44
 //! 视图 20 = XAML 9 + 语言 1 + 面板开关 8 + 锁定/重置 2
 //!
 //! ⚠ **2026-11-05 起是 40 项**（原 39）：上游 `901dbe2f` 新增了第 8 个面板
 //! （`docking.Add("Maps", …)`），而 `DockWorkspace.cs:269 AddSectionMenu` 会为
 //! **每一个**面板生成一条 CheckBox 菜单项 ⇒ 面板开关 7 → 8，视图 18 → 19。
-//! ⚠ **2026-11-07 起是 43 项**（编辑 4 → 5）：补了「单元格属性…」（R12-F1）；此前同日视图 19 → 20 补了「地砖信息悬浮」
+//! ⚠ **2026-11-07 起是 44 项**（编辑 4 → 5、工具 6 → 7）：补了「单元格属性…」（R12-F1）；此前同日视图 19 → 20 补了「地砖信息悬浮」
 //! （[`Action::CellHover`]），照官方 `MainWindow.axaml` 的 `CellHoverToggle`
 //! （CheckBox、缺省不勾、**它前面有一条分隔线**）。
 //! ⚠ **2026-11-06 起是 41 项**（帮助 1 → 2）：本仓补了「帮助 → 关于 Crystal Studio」
@@ -44,7 +44,7 @@
 //!
 //! 静态子项共 **5** 个（[`sub_count`]），另有 1 个动态列表（行数随 `recent` 变：0 条 ⇒ 1 行空态）。
 //! 子项**不进** [`MENUS`] 的 `items`（那是"顶级 42 项"的口径），
-//! 所以 [`item_count`] 仍是 43、`--menu-dump` 的汇总行仍是 43 —— 子项在 dump 里
+//! 所以 [`item_count`] 仍是 44、`--menu-dump` 的汇总行仍是 44 —— 子项在 dump 里
 //! 靠 `parent=` 列自证（见 [`crate::menu::dump_lines`]）。
 //!
 //! [`tests::顶级39项与子项5项计数`] 把这两笔账都钉住。
@@ -204,7 +204,7 @@ impl Lang {
 ///
 /// # 为什么需要它
 ///
-/// 顶级 43 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
+/// 顶级 44 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
 /// 单元格网格（`app.grid`）、开启门（`app.doors_open`）、**地图光照（`app.lighting`）**、
 /// **地砖信息悬浮（`app.cell_hover`）**、8 个面板显隐（`app.panels`）—— 它们由
 /// [`check`] / [`check_with`] / [`check_with_hover`] 直接从宿主字段读，
@@ -367,6 +367,15 @@ pub enum Action {
     GenTerrain,
     GenProvince,
     GenDungeon,
+    /// **检查地图**（A-015 / R32-R33；官方 `MainWindow.axaml` 的 `CheckMap`，无快捷键）。
+    ///
+    /// 只读诊断：在**当前编辑结果**的字节层快照上跑三项检查（图号引用 / 门两警告 /
+    /// 不连通可走区），结果进 [`crate::menu::Overlay::CheckMap`] 模态
+    /// （760×480 滚动列表 / summary / 定位 / 关闭 / 陈旧提示 / 未检查提示）。
+    /// **不碰**文档、不进撤销栈、不置脏（`miredit_core::check_map` 的入参就是只读 `&RawMap`）。
+    ///
+    /// 顺序：官方 Tools 菜单里它在 `Identify` **之前**，且**带一条分隔线**（生成器组之后）。
+    CheckMap,
     IdentifyObjects,
     ExtractObjects,
     // ── 帮助 ──
@@ -428,6 +437,7 @@ impl Action {
             Action::GenTerrain => "tools.gen_terrain",
             Action::GenProvince => "tools.gen_province",
             Action::GenDungeon => "tools.gen_dungeon",
+            Action::CheckMap => "tools.check_map",
             Action::IdentifyObjects => "tools.identify_objects",
             Action::ExtractObjects => "tools.extract_objects",
             Action::KeyboardShortcuts => "help.keyboard_shortcuts",
@@ -475,6 +485,7 @@ impl Action {
             Action::GenTerrain => tx::MENU_GEN_TERRAIN,
             Action::GenProvince => tx::MENU_GEN_PROVINCE,
             Action::GenDungeon => tx::MENU_GEN_DUNGEON,
+            Action::CheckMap => tx::MENU_CHECK_MAP,
             Action::IdentifyObjects => tx::MENU_IDENTIFY_OBJECTS,
             Action::ExtractObjects => tx::MENU_EXTRACT_OBJECTS,
             Action::KeyboardShortcuts => tx::MENU_KEYBOARD_SHORTCUTS,
@@ -663,13 +674,25 @@ pub const VIEW_ITEMS: [Item; 20] = [
     it(Action::ResetLayout, false),
 ];
 
-/// 工具菜单（6 项，分隔线在 4/5 之间）。
-pub const TOOLS_ITEMS: [Item; 6] = [
+/// 工具菜单（**7 项**，分隔线在 4/5 之间）。
+///
+/// 官方 `MainWindow.axaml` 的 Tools 组顺序是：裁剪 / 扩边 / 分隔线 / 四个生成器 /
+/// 分隔线 / 模块三项 / 分隔线 / **CheckMap** / Identify / Extract，其中模块三项与
+/// 裁剪/扩边不在本仓范围（Crop/Expand 另开单）。本仓只取与上游**相对次序**一致的那段：
+///
+/// ```text
+/// 生成器四项 │ CheckMap │ Identify │ Extract
+/// ```
+///
+/// ⇒ 分隔线落在 4/5（四个生成器之后），`CheckMap` 在 `Identify` **之前**
+/// （官方在 axaml 里的先后：`CheckMap` → `IdentifyButton` → `ExtractObjectsButton`）。
+pub const TOOLS_ITEMS: [Item; 7] = [
     it(Action::GenTown, false),
     it(Action::GenTerrain, false),
     it(Action::GenProvince, false),
     it(Action::GenDungeon, false),
-    it(Action::IdentifyObjects, true),
+    it(Action::CheckMap, true),
+    it(Action::IdentifyObjects, false),
     it(Action::ExtractObjects, false),
 ];
 
@@ -709,7 +732,7 @@ pub const MENUS: [Menu; 5] = [
     },
 ];
 
-/// 全部菜单项总数（= **43**：文件 10 + 编辑 5 + 视图 20 + 工具 6 + 帮助 2）。
+/// 全部菜单项总数（= **44**：文件 10 + 编辑 5 + 视图 20 + 工具 7 + 帮助 2）。
 pub fn item_count() -> usize {
     MENUS.iter().map(|m| m.items.len()).sum()
 }
@@ -718,7 +741,7 @@ pub fn item_count() -> usize {
 ///
 /// 「最近打开」的动态列表**不计入**（行数随设置文件里的 `recent` 变：
 /// 0 条 ⇒ 1 行官方空态行）。子项**不进** [`MENUS`] 的 `items`，所以 [`item_count`] 仍是 42
-/// —— 两笔账分开数，免得"加了子项就把顶级 43 撑成 46"。
+/// —— 两笔账分开数，免得"加 5 个子项就把顶级 44 撑成 49"。
 pub fn sub_count() -> usize {
     let mut n = 0;
     for m in &MENUS {
@@ -888,6 +911,9 @@ pub const fn state(action: Action) -> State {
         Action::GenTerrain => State::Todo(tx::WHY_GEN_TERRAIN),
         Action::GenProvince => State::Todo(tx::WHY_GEN_PROVINCE),
         Action::GenDungeon => State::Todo(tx::WHY_GEN_DUNGEON),
+        // 「检查地图」2026-11-07 起**真实现**（A-015 / R32-R33）：没有图时灰显
+        // （与缩放/适应那几项同档：检查的对象就是当前地图本身，没图可查）。
+        Action::CheckMap => State::NeedsMap,
         Action::IdentifyObjects => State::Todo(tx::WHY_IDENTIFY_OBJECTS),
         Action::ExtractObjects => State::Todo(tx::WHY_EXTRACT_OBJECTS),
     }
@@ -1028,7 +1054,7 @@ mod tests {
     use crate::menu::panels::PanelVis;
     use std::collections::BTreeSet;
 
-    /// **43 项的账**：文件 10 / 编辑 5 / 视图 20 / 工具 6 / 帮助 2（2026-11-06 加「关于」；`n    /// 2026-11-07 加「地砖信息悬浮」与「单元格属性…」）。
+    /// **44 项的账**：文件 10 / 编辑 5 / 视图 20 / 工具 7 / 帮助 2（2026-11-06 加「关于」；`n    /// 2026-11-07 加「地砖信息悬浮」与「单元格属性…」）。
     ///
     /// 这条是验收门 §四.2 的机器判据：任何人加/删一项，这里先红。
     #[test]
@@ -1040,9 +1066,9 @@ mod tests {
             20,
             "视图菜单（XAML 9 + 语言 1 + 面板 8 + 锁定/重置 2）"
         );
-        assert_eq!(TOOLS_ITEMS.len(), 6, "工具菜单");
+        assert_eq!(TOOLS_ITEMS.len(), 7, "工具菜单（含检查地图）");
         assert_eq!(HELP_ITEMS.len(), 2, "帮助菜单（键盘快捷键 + 关于）");
-        assert_eq!(item_count(), 43, "5 个菜单合计");
+        assert_eq!(item_count(), 44, "5 个菜单合计");
         assert_eq!(MENUS.len(), 5);
         // 视图里的面板开关正好 8 个，且与 PanelId::ALL 一一对应
         let panels: Vec<_> = VIEW_ITEMS
@@ -1073,7 +1099,7 @@ mod tests {
                 assert_eq!(MENUS[mi].items[ii].action.id(), id);
             }
         }
-        assert_eq!(ids.len(), 43);
+        assert_eq!(ids.len(), 44);
         assert!(find_by_id("no.such_item").is_none());
     }
 
@@ -1211,7 +1237,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(ready + need_map + todo, 43);
+        assert_eq!(ready + need_map + todo, 44);
         // 任务书 §三.3 点名必须真接上的那一批：逐条钉住，防止有人把它们改回 Todo
         for a in [
             Action::OpenMap,
@@ -1424,6 +1450,45 @@ mod tests {
         // （官方帮助菜单没有 About，见 `HELP_ITEMS` 的文档），目的是把"查手势"与"查身份"分开。
         assert_eq!(seps(&HELP_ITEMS), vec![1], "帮助：关于之前");
     }
+    /// **工具菜单顺序**（官方 axaml：生成器组 │ `CheckMap` │ `Identify` │ `Extract`）。
+    ///
+    /// 这条钉三件事，缺一条都是"看不见的错位"：
+    /// ① 7 项且**检查地图在识别物体之前**（官方 `MainWindow.axaml` 的先后）；
+    /// ② `检查地图` 自己**带分隔线**（官方它是分隔线之后的第一项）；
+    /// ③ `识别物体` **不再带分隔线**（它原来那条被 `检查地图` 接管了）。
+    #[test]
+    fn 工具菜单顺序与分隔线() {
+        let ids: Vec<&str> = TOOLS_ITEMS.iter().map(|i| i.action.id()).collect();
+        assert_eq!(
+            ids,
+            [
+                "tools.gen_town",
+                "tools.gen_terrain",
+                "tools.gen_province",
+                "tools.gen_dungeon",
+                "tools.check_map",
+                "tools.identify_objects",
+                "tools.extract_objects",
+            ],
+            "工具菜单顺序与官方不一致"
+        );
+        let cm = ids.iter().position(|id| *id == "tools.check_map").expect("检查地图");
+        let id = ids
+            .iter()
+            .position(|id| *id == "tools.identify_objects")
+            .expect("识别物体");
+        assert!(cm < id, "检查地图必须在识别物体之前（官方 axaml 次序）");
+        assert!(TOOLS_ITEMS[cm].sep_before, "检查地图要带分隔线");
+        assert!(!TOOLS_ITEMS[id].sep_before, "识别物体的分隔线已被检查地图接管");
+        // 三态：有图才能查；官方没给 InputGesture ⇒ 不显示快捷键
+        assert_eq!(state(Action::CheckMap), State::NeedsMap);
+        assert_eq!(Action::CheckMap.shortcut(), None);
+        assert_eq!(Action::CheckMap.id(), "tools.check_map");
+        assert_eq!(Action::CheckMap.label(), tx::MENU_CHECK_MAP);
+        // 文案取自官方中文字符串（Strings.json 的 `CheckMap`）
+        assert_eq!(tx::MENU_CHECK_MAP, "检查地图");
+    }
+
 
     /// **子项文案的字形覆盖**（补 `fonts::tests::文案全部字符都有字形` 的缺口）。
     ///
@@ -1480,7 +1545,7 @@ mod tests {
     #[test]
     fn 顶级42项与子项5项计数() {
         // ① 顶级是 42（2026-11-06 帮助 1 → 2；2026-11-07 视图 19 → 20），子项不许把它撑大
-        assert_eq!(item_count(), 43);
+        assert_eq!(item_count(), 44);
         // ② 静态子项 5，且顺序照官方
         assert_eq!(sub_count(), 5, "地图光照 3 + 语言 2");
         assert_eq!(

@@ -99,6 +99,19 @@ fn main() -> eframe::Result {
         return Ok(());
     }
 
+    // 检查地图（A-015 / R32-R33）：不开窗，跑一次只读诊断后退出。
+    // 走的是与「工具 → 检查地图」同一个 `miredit_core::check_map` + 同一个探针适配器，
+    // 只是把结果打到 stderr（与 `--menu-dump` / `--probe` 同一口径），退出码见 `run_check_map`。
+    if cli.check_map {
+        let show = cli
+            .check_map_show
+            .unwrap_or(miredit_gui::menu::check_map::CHECK_MAP_SHOW_DEFAULT);
+        std::process::exit(miredit_gui::menu::check_map::run_check_map(
+            cli.map.as_deref(),
+            show,
+        ));
+    }
+
     // 菜单清单转储：不开窗，把 5 个菜单 41 项逐条打到 stderr 后退出（验收门 §四.2 的证据来源）
     if cli.menu_dump {
         let _ = miredit_gui::menu::dump(

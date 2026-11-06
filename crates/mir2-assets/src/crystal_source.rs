@@ -261,14 +261,22 @@ impl CrystalLibSource {
 impl SpriteSource for CrystalLibSource {
     /// 覆盖缺省实现：**只读帧头**（`CrystalLibrary::read_header_checked`），不解码像素。
     ///
-    /// 四态：库不可得 ⇒ `MissingLibrary`；`read_header_checked` 给 `Ok(None)` ⇒ `Empty`；
-    /// `Err` ⇒ `Unreadable`；`Ok(Some)` ⇒ `Ok`（越界由 `Err`/`None` 覆盖，
-    /// 因为该接口对越界图号不返回 `Ok(Some)`）。
+    /// 五态（2026-11-07 R33 补齐 `OutOfRange`）：
+    /// 库不可得 ⇒ `MissingLibrary`；**图号 ≥ 帧数 ⇒ `OutOfRange`**；`Ok(None)`（帧头宽高
+    /// 非正 / 超 8192 等「帧本身无效」）⇒ `Empty`；`Err`（帧头截断 / 数据损坏）⇒
+    /// `Unreadable`；`Ok(Some)` ⇒ `Ok`。
+    ///
+    /// ⚠ **为什么必须先判 `count()`**：`read_header_checked` 对越界图号返回的是
+    /// `Ok(None)`（「帧本身无效」那一支），不先比帧数就会把**越界**报成上游的
+    /// `Empty image`（`MapCheck.cs:31-32` 两者是不同文案）。
     fn frame_state(&self, lib: LibRef, index: u32) -> crate::ImageState {
         use crate::ImageState;
         let Some(slot) = self.slot(lib) else {
             return ImageState::MissingLibrary;
         };
+        if index >= slot.count() {
+            return ImageState::OutOfRange;
+        }
         match slot.read_header_checked(index) {
             Ok(Some(_)) => ImageState::Ok,
             Ok(None) => ImageState::Empty,
@@ -334,6 +342,77 @@ mod tests {
         let src = CrystalLibSource::with_cache_capacity(&paths, 0).expect("应能打开");
         assert_eq!(src.cache_capacity(), 1);
         assert_eq!(src.cached(), 0);
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **五态单测**（2026-11-07 R33）：缺库 / 越界 / 空帧 / 读不出 / 正常各一条。
+    ///
+    /// 全部用**合成 `.lib`**（不依赖 `MIREDIT_LIB_ROOT`，任何机器上都能跑）：
+    /// v2 容器 = `version(i32) + count(i32) + count×offset(i32)`，帧头 17 字节
+    /// （`w,h,x,y` 各 i16 + 5 未用 + `length(i32)`；依据 `crystal_lib.rs` 的
+    /// `LEGACY_HEADER_LEN` 与 `legacy_frame` 的读取顺序）。
+    #[test]
+    fn frame_state五态() {
+        let dir = std::env::temp_dir().join(format!(
+            "mir2_assets_lib_state_{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("建临时目录");
+        let count: i32 = 3;
+        let 帧0 = 8 + 4 * count as usize; // 头 8 + 偏移表
+        let 帧1 = 帧0 + 17 + 16; // 帧0 头 + 2×2×4 像素
+        let 帧2 = 帧1 + 17; // 帧1 头（空帧，无像素）
+        let mut b = Vec::new();
+        b.extend_from_slice(&2i32.to_le_bytes()); // version = 2
+        b.extend_from_slice(&count.to_le_bytes());
+        b.extend_from_slice(&(帧0 as i32).to_le_bytes());
+        b.extend_from_slice(&(帧1 as i32).to_le_bytes());
+        // 帧 2 的偏移**必须落在文件内**（`parse_legacy` 会拒绝整库否则），
+        // 但只留 4 字节 ⇒ 17 字节帧头被截断 ⇒ `read_header_checked` 给 `Err`。
+        b.extend_from_slice(&(帧2 as i32).to_le_bytes());
+        // 帧 0：2×2、锚点 (0, 0)、length = 16
+        for v in [2i16, 2, 0, 0] {
+            b.extend_from_slice(&v.to_le_bytes());
+        }
+        b.extend_from_slice(&[0u8; 5]);
+        b.extend_from_slice(&16i32.to_le_bytes());
+        b.extend_from_slice(&[0x11u8; 16]);
+        // 帧 1：空帧（w = h = 0）
+        for v in [0i16, 0, 0, 0] {
+            b.extend_from_slice(&v.to_le_bytes());
+        }
+        b.extend_from_slice(&[0u8; 5]);
+        b.extend_from_slice(&0i32.to_le_bytes());
+        b.extend_from_slice(&[0u8; 4]); // 帧 2：只剩 4 字节 ⇒ 帧头截断
+        std::fs::write(dir.join("Objects.lib"), &b).expect("写合成 .lib");
+
+        let paths =
+            CrystalLibPaths::discover(&dir, CrystalAssetFormat::Flat).expect("扫描应成功");
+        let src = CrystalLibSource::open(&paths).expect("应能打开");
+        let objs = LibRef::surface(0);
+        assert_eq!(src.frame_state(objs, 0), crate::ImageState::Ok, "有效帧");
+        assert_eq!(src.frame_state(objs, 1), crate::ImageState::Empty, "w=h=0 ⇒ 空帧");
+        assert_eq!(
+            src.frame_state(objs, 2),
+            crate::ImageState::Unreadable,
+            "帧头被截断 ⇒ 读不出"
+        );
+        assert_eq!(
+            src.frame_state(objs, 3),
+            crate::ImageState::OutOfRange,
+            "越界必须先判越界（否则会被 read_header_checked 的 Ok(None) 误判成空帧）"
+        );
+        assert_eq!(
+            src.frame_state(LibRef::surface(7), 0),
+            crate::ImageState::MissingLibrary,
+            "没登记的库"
+        );
+        assert!(
+            !src.failures().is_empty(),
+            "帧头截断必须留痕（不许静默当成空帧）"
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

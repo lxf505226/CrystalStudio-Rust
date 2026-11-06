@@ -293,6 +293,71 @@ pub const MENU_IDENTIFY_OBJECTS: &str = "识别物体(I)…"; // EN: _Identify O
 /// 工具 → 提取地图物体。
 pub const MENU_EXTRACT_OBJECTS: &str = "提取地图物体"; // EN: Extract Map Objects ｜ 官方: ExtractMapObjects_1151B2C9
 
+// ───────────────────────── 工具 → 检查地图（A-015 / R32-R33） ─────────────────────────
+
+/// 工具 → **检查地图**（插在「识别物体」之前，带一条分隔线；官方 `CheckMap` 无快捷键）。
+///
+/// 官方中文取自 `Localization/Strings.json` 的 `CheckMap`（`Chinese: "检查地图"`），
+/// 本仓**不加**(C) 这类加速键后缀 —— 官方没给 `InputGesture`，加了就是假承诺。
+pub const MENU_CHECK_MAP: &str = "检查地图"; // EN: Check Map ｜ 官方: CheckMap（Strings.json「检查地图」）
+
+/// 检查结果模态的标题（官方 `LocalText.T("Check Map")`）。
+pub const CHECK_MAP_TITLE: &str = "检查地图"; // EN: Check Map ｜ 官方: Check Map
+
+/// 汇总行（官方 `"{0:N0} findings; showing {1:N0}. Disconnected areas may be intentional."`）。
+///
+/// 占位符：`{total}` 全量条数、`{shown}` 清单里实际显示的条数。
+/// ⚠ 本仓**不带千分位**（上游 `N0` 会输出 `1,234`）：[`crate::menu::check_map`] 用
+/// `usize::to_string()`，与状态栏/悬停浮层同一套数字口径。
+pub const CHECK_MAP_SUMMARY_TMPL: &str =
+    "共 {total} 条；显示 {shown} 条。不连通的部分可能是有意设计。"; // EN: {total} findings; showing {shown}. Disconnected areas may be intentional. ｜ 官方: {0:N0} findings; showing {1:N0}. Disconnected areas may be intentional.
+
+/// 没有图库时的追加提示（官方 `"Load libraries to check image references."`）。
+///
+/// 语义：**图号引用这一项整体没查**（上游 `MapCheck.cs:26` 在 `libraries == null` 时
+/// 直接 `return`），报告里的条数只剩「门两警告 + 不连通区」。
+pub const CHECK_MAP_NO_LIBS: &str =
+    "加载图库后才能检查图号引用。"; // EN: Load libraries to check image references. ｜ 官方: 同
+
+/// 文档变了（官方 `"The map changed. Run the check again."`）。
+pub const CHECK_MAP_STALE: &str =
+    "地图已变化，请重新检查。"; // EN: The map changed. Run the check again. ｜ 官方: 同
+
+/// 「未检查的层」前缀（本仓新增：R33 要求**按层**如实标出哪一族没查）。
+///
+/// 占位符：`{layers}` = 逐层原因用 [`CHECK_MAP_UNCHECKED_SEP`] 连起来。
+pub const CHECK_MAP_UNCHECKED_TMPL: &str = "未检查：{layers}"; // EN: Not checked: {layers}
+
+/// 「未检查的层」里每一段之间的分隔符（`地面层（原因）；中层（原因）`）。
+pub const CHECK_MAP_UNCHECKED_SEP: &str = "；"; // EN: ;
+
+/// 「未检查」里一层的写法：`层名（原因）`。
+///
+/// 占位符：`{layer}` 层名、`{why}` 原因（`miredit_core` 的 `UNCHECKED_*` 原文）。
+pub const CHECK_MAP_UNCHECKED_LAYER_TMPL: &str = "{layer}（{why}）"; // EN: {layer} ({why})
+
+/// 结果为空时的列表占位（不是错误，只是没发现问题）。
+pub const CHECK_MAP_EMPTY: &str = "没有发现问题。"; // EN: No findings.
+
+/// 模态按钮：把当前选中行定位到画布（官方 `"Locate"`）。
+pub const CHECK_MAP_LOCATE: &str = "定位"; // EN: Locate ｜ 官方: Locate
+
+/// 模态按钮：关闭（官方 `"Close"`；检查是同步的，没有「取消」这一档）。
+pub const CHECK_MAP_CLOSE: &str = "关闭"; // EN: Close ｜ 官方: Close
+
+/// 「定位」成功后的状态栏回执。占位符：`{x}` / `{y}`。
+pub const STATUS_CHECK_MAP_LOCATE_TMPL: &str = "已定位到单元格 {x},{y}"; // EN: Located cell {x},{y}
+
+/// 检查完成后的状态栏回执。占位符：`{total}` / `{shown}`。
+pub const STATUS_CHECK_MAP_TMPL: &str = "检查地图：共 {total} 条，显示 {shown} 条"; // EN: Check map: {total} findings, showing {shown}
+
+/// 没有地图却点了「检查地图」（回执，警示色）。
+pub const STATUS_CHECK_MAP_NEEDS_MAP: &str =
+    "需要先开图：当前没有打开地图（文件 → 打开地图…）"; // EN: Open a map first.
+
+/// 取不到字节层快照（理论不可达）时的拒绝回执。占位符：`{err}`。
+pub const STATUS_CHECK_MAP_RAW_FAIL_TMPL: &str = "检查地图失败：取不到字节层快照（{err}）"; // EN: Check map failed: no raw snapshot ({err})
+
 /// 帮助 → 键盘快捷键。
 pub const MENU_KEYBOARD_SHORTCUTS: &str = "键盘快捷键(S)…"; // EN: Keyboard _Shortcuts… ｜ 官方: KeyboardShortcuts_873E9855
 /// 帮助 → 关于 Crystal Studio（2026-11-06 新增：只读模态，见 [`crate::menu::about`]）。
@@ -1667,7 +1732,7 @@ pub const DIAG_BAD_ARG: &str = "[参数] 无法解析：{arg}"; // EN: [cli] bad
 /// 真失败了（资源被替换/损坏）说明交付物有问题，**不许静默**用默认图标装没事。
 pub const DIAG_WINDOW_ICON_FAIL: &str = "[窗口] 图标解码失败，改用系统默认图标：{err}"; // EN: [window] icon decode failed
 /// 帮助。
-pub const DIAG_USAGE: &str = "用法：miredit-gui [--version] [--help] [--map <路径>] [--center <x,y>] [--scale <倍数>] [--layers ground,middle,front] [--layer ground|middle|front|low_collision|high_collision] [--collision low|high|all|none] [--tool <0..9>] [--brush-size <3..31 奇数>] [--edit-layer ground|middle|front|low_collision|high_collision] [--edit-size <3..31 奇数>] [--edit-pick <x,y>] [--edit-brush <x,y>] [--edit-erase <x,y>] [--edit-stroke <x0,y0,x1,y1>] [--edit-fill <x,y>] [--edit-undo <n>] [--edit-redo <n>] [--edit-check] [--save] [--save-as <路径>] [--no-window] [--shot <png>] [--gate2-client <png>] [--gate2-at <x,y>] [--autodrag <秒>] [--probe <x,y>] [--frames <帧数>] [--palette-lib <基名>] [--palette-scroll <行>] [--palette-search <图号>] [--palette-tab <0..3>] [--palette-pick <帧索引0基>] [--palette-autoscroll <秒>] [--palette-report] [--stamp-kind <all|unclassified|unlisted|英文 kind>] [--stamp-search <文字>] [--stamp-page <1基页码>] [--stamp-pick <当前页格号0基>] [--stamp-report] [--stamp-probe] [--stamp-sweep] [--stamp-arm] [--stamp-place-at <x,y>] [--select <x0,y0,x1,y1>] [--select-copy] [--theme light|dark] [--dark] [--cell-grid] [--no-cell-grid] [--open-doors] [--lighting dawn_dusk|day|night] [--menu-open <0..4>] [--menu-hover <菜单内下标，仅配合 --shot/--menu-open>] [--menu-sub-focus <父项>,<行>，仅配合 --shot/--menu-open>] [--menu-click <菜单项id[@帧号]>] [--export-selection <路径>] [--export-minimap <路径>] [--export-doors] [--minimap-width <像素>] [--minimap-height <像素>] [--minimap-preset small|medium|large] [--minimap-max-side <像素>] [--menu-dump] [--shortcuts] [--panel-hide <tools|tool_options|layers|minimap|palette|active_asset|cell_inspector>] [--open-map <路径>] [--settings <路径>]"; // EN: usage
+pub const DIAG_USAGE: &str = "用法：miredit-gui [--version] [--help] [--map <路径>] [--center <x,y>] [--scale <倍数>] [--layers ground,middle,front] [--layer ground|middle|front|low_collision|high_collision] [--collision low|high|all|none] [--tool <0..9>] [--brush-size <3..31 奇数>] [--edit-layer ground|middle|front|low_collision|high_collision] [--edit-size <3..31 奇数>] [--edit-pick <x,y>] [--edit-brush <x,y>] [--edit-erase <x,y>] [--edit-stroke <x0,y0,x1,y1>] [--edit-fill <x,y>] [--edit-undo <n>] [--edit-redo <n>] [--edit-check] [--save] [--save-as <路径>] [--no-window] [--shot <png>] [--gate2-client <png>] [--gate2-at <x,y>] [--autodrag <秒>] [--probe <x,y>] [--frames <帧数>] [--palette-lib <基名>] [--palette-scroll <行>] [--palette-search <图号>] [--palette-tab <0..3>] [--palette-pick <帧索引0基>] [--palette-autoscroll <秒>] [--palette-report] [--stamp-kind <all|unclassified|unlisted|英文 kind>] [--stamp-search <文字>] [--stamp-page <1基页码>] [--stamp-pick <当前页格号0基>] [--stamp-report] [--stamp-probe] [--stamp-sweep] [--stamp-arm] [--stamp-place-at <x,y>] [--select <x0,y0,x1,y1>] [--select-copy] [--theme light|dark] [--dark] [--cell-grid] [--no-cell-grid] [--open-doors] [--lighting dawn_dusk|day|night] [--menu-open <0..4>] [--menu-hover <菜单内下标，仅配合 --shot/--menu-open>] [--menu-sub-focus <父项>,<行>，仅配合 --shot/--menu-open>] [--menu-click <菜单项id[@帧号]>] [--export-selection <路径>] [--export-minimap <路径>] [--export-doors] [--minimap-width <像素>] [--minimap-height <像素>] [--minimap-preset small|medium|large] [--minimap-max-side <像素>] [--menu-dump] [--check-map] [--check-map-show <条数>] [--shortcuts] [--panel-hide <tools|tool_options|layers|minimap|palette|active_asset|cell_inspector>] [--open-map <路径>] [--settings <路径>]"; // EN: usage
 
 // ───────────────────────── 编辑/保存诊断（本单新增） ─────────────────────────
 
@@ -1859,6 +1924,21 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_GEN_DUNGEON", MENU_GEN_DUNGEON),
     ("MENU_IDENTIFY_OBJECTS", MENU_IDENTIFY_OBJECTS),
     ("MENU_EXTRACT_OBJECTS", MENU_EXTRACT_OBJECTS),
+    ("MENU_CHECK_MAP", MENU_CHECK_MAP),
+    ("CHECK_MAP_TITLE", CHECK_MAP_TITLE),
+    ("CHECK_MAP_SUMMARY_TMPL", CHECK_MAP_SUMMARY_TMPL),
+    ("CHECK_MAP_NO_LIBS", CHECK_MAP_NO_LIBS),
+    ("CHECK_MAP_STALE", CHECK_MAP_STALE),
+    ("CHECK_MAP_UNCHECKED_TMPL", CHECK_MAP_UNCHECKED_TMPL),
+    ("CHECK_MAP_UNCHECKED_SEP", CHECK_MAP_UNCHECKED_SEP),
+    ("CHECK_MAP_UNCHECKED_LAYER_TMPL", CHECK_MAP_UNCHECKED_LAYER_TMPL),
+    ("CHECK_MAP_EMPTY", CHECK_MAP_EMPTY),
+    ("CHECK_MAP_LOCATE", CHECK_MAP_LOCATE),
+    ("CHECK_MAP_CLOSE", CHECK_MAP_CLOSE),
+    ("STATUS_CHECK_MAP_LOCATE_TMPL", STATUS_CHECK_MAP_LOCATE_TMPL),
+    ("STATUS_CHECK_MAP_TMPL", STATUS_CHECK_MAP_TMPL),
+    ("STATUS_CHECK_MAP_NEEDS_MAP", STATUS_CHECK_MAP_NEEDS_MAP),
+    ("STATUS_CHECK_MAP_RAW_FAIL_TMPL", STATUS_CHECK_MAP_RAW_FAIL_TMPL),
     ("MENU_KEYBOARD_SHORTCUTS", MENU_KEYBOARD_SHORTCUTS),
     ("MENU_ABOUT", MENU_ABOUT),
     ("STATUS_MENU_TODO_TMPL", STATUS_MENU_TODO_TMPL),

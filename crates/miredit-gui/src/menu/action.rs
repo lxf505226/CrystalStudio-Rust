@@ -24,6 +24,7 @@ use miredit_render::MapLighting;
 use crate::canvas_view::CanvasView;
 use crate::edit::EditSession;
 use crate::mapdoc::DocState;
+use crate::menu::check_map;
 use crate::menu::model::{self, Action, State};
 use crate::menu::panels::{PanelId, PanelVis};
 use crate::menu::settings::{self, Settings};
@@ -557,6 +558,58 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         Action::LightNight => {
             *cx.lighting = MapLighting::Night;
             Outcome::ok(tx::MENU_LIGHT_NIGHT.to_owned())
+        }
+        // ───────────── 工具：检查地图（A-015 / R32-R33） ─────────────
+        //
+        // 只读诊断：取「当前编辑结果」的字节层快照（`MapDoc::raw` = 与保存同一条
+        // `sync_view_into_raw`，**不是**打开时那份），跑 `miredit_core::check_map`，
+        // 结果进 760×480 模态。**不碰**文档 / 撤销栈 / 脏标记；`map_gen` 快照进浮层，
+        // 用来判「这份结果是不是已经过期」（真改过图就显示「请重新检查」）。
+        //
+        // 探针：有图库 ⇒ `WilProbe`（只读帧头、不解像素）；没图库 ⇒ `NoLibProbe`
+        // （= 上游 `libraries == null` 的 `return`：图号引用一项整体不查，
+        // 界面追加「加载图库后才能检查图号引用。」，不刷一屏假缺库）。
+        Action::CheckMap => {
+            let Some(d) = cx.doc.doc.as_ref() else {
+                return Outcome::refused(tx::STATUS_CHECK_MAP_NEEDS_MAP.to_owned());
+            };
+            let raw = match d.raw() {
+                Ok(r) => r,
+                Err(e) => {
+                    return Outcome::refused(tx::fill(
+                        tx::STATUS_CHECK_MAP_RAW_FAIL_TMPL,
+                        &[("err", &e)],
+                    ))
+                }
+            };
+            let src = cx.doc.assets.source();
+            let has_libs = src.is_some();
+            let probe = check_map::WilProbe::new(src.map(|s| s as &dyn mir2_assets::SpriteSource));
+            const 无库: miredit_core::NoLibProbe = miredit_core::NoLibProbe;
+            let 探针: &dyn miredit_core::LibProbe = if has_libs { &probe } else { &无库 };
+            let report = miredit_core::check_map(&raw, 探针);
+            // 官方：`if (result.Issues.Count > 0) list.SelectedIndex = 0;`
+            let selected = if report.issues.is_empty() { None } else { Some(0) };
+            let 回执 = tx::fill(
+                tx::STATUS_CHECK_MAP_TMPL,
+                &[
+                    ("total", &report.total.to_string()),
+                    ("shown", &report.issues.len().to_string()),
+                ],
+            );
+            *cx.overlay = crate::menu::Overlay::CheckMap {
+                report,
+                selected,
+                scroll: 0,
+                gen: cx.doc.map_gen,
+                has_libs,
+            };
+            // 模态里写着同一组数字，但状态栏这条是**关掉对话框之后**唯一还留着的回执
+            Outcome {
+                receipt: Some((回执, false)),
+                repaint: true,
+                ..Outcome::default()
+            }
         }
         // 其余在 `model::state` 里已经是 `Todo`，上面第一个 `match` 就返回了。
         // 真走到这里说明"状态机与实现分支不一致"——**绝不 panic**（GUI 里 panic 等于崩给用户看），

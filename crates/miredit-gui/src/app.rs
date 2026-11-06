@@ -1397,6 +1397,22 @@ impl MireditApp {
                     ui.ctx().request_repaint();
                 }
             }
+        } else if matches!(self.overlay, Overlay::CheckMap { .. }) {
+            // 检查地图模态：Esc / 关闭 ⇒ 收浮层；点行 ⇒ 选中；「定位」⇒ 画布居中 +
+            // 1×1 选区 + 关模态（官方 `LocateCell(issue.X, issue.Y)` + `UpdateCellInspector`）。
+            match menu::check_map::interact(ui, l, &mut self.overlay, self.doc.map_gen) {
+                menu::check_map::动作::None | menu::check_map::动作::Select(_) => {
+                    // 选中态已写进浮层，只需重绘
+                    ui.ctx().request_repaint();
+                }
+                menu::check_map::动作::Close => act = menu::dialog::DialogAction::Cancel,
+                menu::check_map::动作::Locate { x, y } => {
+                    (self.op, self.overlay) = (None, Overlay::None);
+                    let text = self.locate_cell(x, y, l.viewport);
+                    self.op = Some((text, false));
+                    ui.ctx().request_repaint();
+                }
+            }
         } else if matches!(self.overlay, Overlay::Shortcuts | Overlay::About) {
             // 只读浮层（键盘快捷键 / 关于 Crystal Studio）：任意点击 / Esc 关闭。
             //
@@ -1917,6 +1933,26 @@ impl MireditApp {
             self.sel_drag = None;
             ui.ctx().request_repaint();
         }
+    }
+
+    /// 「检查地图」→「定位」：把世界格 `(x, y)` 居中，并把选区设成 **1×1**。
+    ///
+    /// 上游 `MainWindow.MapCheck.cs:30-35`：`Viewport.LocateCell(issue.X, issue.Y)` +
+    /// `UpdateCellInspector(x, y)` + `dialog.DialogResult = true`（关窗）。本仓的
+    /// 「单元格信息」面板每帧按悬停/选区自动更新（`cellinfo` / `dock_right`）⇒
+    /// 这里只需要「居中 + 设选区」两件事，关窗由调用方负责。
+    ///
+    /// 返回状态栏回执文案（定位是**只读**动作：不置脏、不进撤销栈，选区本来就不入栈）。
+    fn locate_cell(&mut self, x: u16, y: u16, canvas: egui::Rect) -> String {
+        self.view.center_on_cell(canvas, f32::from(x), f32::from(y));
+        if let Some(d) = self.doc.doc.as_mut() {
+            self.edit
+                .set_selection(&mut d.map, miredit_core::Selection::new(x, y, x, y));
+        }
+        tx::fill(
+            tx::STATUS_CHECK_MAP_LOCATE_TMPL,
+            &[("x", &x.to_string()), ("y", &y.to_string())],
+        )
     }
 
     /// 世界格是否在地图内（越界 = `None`，不静默夹到边界上）。
@@ -2578,6 +2614,21 @@ impl eframe::App for MireditApp {
                             *focus,
                             error.as_deref(),
                             *有门字节,
+                        )
+                    }
+                    // 工具 → 检查地图（A-015）：760×480 只读诊断面板。
+                    // 陈旧判定：浮层里存的是**检查那一刻**的 `map_gen`，与当前值不同 ⇒
+                    // summary 换成「请重新检查」并不再画列表（官方同样不填 ListBox）。
+                    Overlay::CheckMap {
+                        report,
+                        selected,
+                        scroll,
+                        gen,
+                        has_libs,
+                    } => {
+                        let stale = *gen != self.doc.map_gen;
+                        menu::check_map::draw(
+                            &p, &l, report, *selected, *scroll, stale, *has_libs,
                         )
                     }
                     Overlay::Shortcuts => menu::dialog::draw_shortcuts(&p, &l),
@@ -4835,4 +4886,217 @@ mod tests {
             );
         }
     }
+    // ───────────────────── 工具 → 检查地图（A-015 / R32-R33） ─────────────────────
+
+    /// 造一个「有图且带 2 条门警告」的应用：4×4，全图不可走，`(1, 2)` 是门格。
+    ///
+    /// 判据来自 `miredit_core::check_map`：整图不可走 ⇒ 门格 3×3 里没有可走格（1 条），
+    /// 门格没有前景图（`fr_img == 0`，再 1 条）⇒ `total == 2`。
+    /// 用合成图而不是真实 `0.map`：本组用例验的是"菜单→模态→定位"的接线，与地图多大无关。
+    fn 有门图应用() -> MireditApp {
+        let mut app = 空应用();
+        let mut b = vec![0u8; 52 + 12 * 16];
+        b[0..2].copy_from_slice(&4u16.to_le_bytes());
+        b[2..4].copy_from_slice(&4u16.to_le_bytes());
+        for i in 0..16usize {
+            let base = 52 + i * 12;
+            // 背景 bit15 = 阻挡（全图不可走）
+            b[base..base + 2].copy_from_slice(&0x8000u16.to_le_bytes());
+        }
+        // (1, 2) 的门：列优先 `x * h + y` = 1 * 4 + 2 = 6
+        b[52 + 6 * 12 + 6] = 1;
+        app.doc.doc = Some(
+            crate::mapdoc::MapDoc::from_bytes(std::path::Path::new(r"E:\x\door.map"), b)
+                .expect("4×4 合成图应能解析"),
+        );
+        app.doc.map_error = None;
+        // 图库置成「装载失败」：本组用例要的是 env 无关的「没有图库」分支
+        app.doc.assets = crate::mapdoc::Assets::Failed("测试：不装载图库".to_owned());
+        if let Some(d) = app.doc.doc.as_ref() {
+            let _ = app.edit.bind_document(&d.path, d.orig_bytes());
+        }
+        app
+    }
+
+    /// 往应用里装一个**合成 WIL 图库**（2 帧的 `Tiles`，见 `mir2_assets` 的同名用例）。
+    ///
+    /// 为什么要真装一个：`Assets::source()` 只认 `WilSource`，探针是它包出来的；
+    /// 不装就只能验「没有图库」那半边，验不到"图号问题真的会报出来"。
+    fn 装合成图库(app: &mut MireditApp) {
+        let dir = std::env::temp_dir().join(format!("miredit_app_checkmap_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let sub = dir.join("data");
+        std::fs::create_dir_all(&sub).expect("建临时目录");
+        // 帧 0：2×2 8bit、锚点 (0,0)、未压缩（csize = 0，裸数据 align4(2)×2 = 8 字节）
+        let mut 帧0 = Vec::new();
+        帧0.extend_from_slice(&3u16.to_le_bytes());
+        帧0.extend_from_slice(&0u16.to_le_bytes());
+        帧0.extend_from_slice(&2u16.to_le_bytes());
+        帧0.extend_from_slice(&2u16.to_le_bytes());
+        帧0.extend_from_slice(&0i16.to_le_bytes());
+        帧0.extend_from_slice(&0i16.to_le_bytes());
+        帧0.extend_from_slice(&0u32.to_le_bytes());
+        帧0.extend_from_slice(&[0x22u8; 8]);
+        let mut wzl = vec![0u8; 64];
+        let off0 = 64u32;
+        let off1 = off0 + 帧0.len() as u32;
+        wzl.extend_from_slice(&帧0);
+        wzl.extend_from_slice(&[0u8; 16]); // 帧 1：空帧
+        let mut wzx = vec![0u8; 48];
+        wzx[0x2C..0x30].copy_from_slice(&2u32.to_le_bytes());
+        wzx.extend_from_slice(&off0.to_le_bytes());
+        wzx.extend_from_slice(&off1.to_le_bytes());
+        std::fs::write(sub.join("Tiles.wzl"), &wzl).expect("写 wzl");
+        std::fs::write(sub.join("Tiles.wzx"), &wzx).expect("写 wzx");
+        let paths = mir2_assets::LibPaths::discover(&dir).expect("扫描应成功");
+        let src = mir2_assets::WilSource::open(&paths).expect("应能打开");
+        app.doc.assets = crate::mapdoc::Assets::Ready {
+            paths,
+            src: Box::new(src),
+            号段: miredit_core::库号号段::Wemade,
+        };
+    }
+
+    /// 打开「检查地图」：模态里有报告、预选第 0 行、`gen` = 当前地图代号、状态栏有回执。
+    ///
+    /// **只读**判据也在这一条里：前后 `to_bytes()` 逐字节相等、撤销栈长度不变。
+    #[test]
+    fn 检查地图打开模态并预选首行() {
+        let mut app = 有门图应用();
+        let 前 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        let 撤销前 = app.edit.undo_len();
+        app.dispatch_menu(menu::model::Action::CheckMap, 画布());
+        match &app.overlay {
+            Overlay::CheckMap {
+                report,
+                selected,
+                scroll,
+                gen,
+                has_libs,
+            } => {
+                assert_eq!(report.total, 2, "两条门警告：{:?}", report.issues);
+                assert_eq!(*selected, Some(0), "非空报告要预选第 0 行（官方 SelectedIndex = 0）");
+                assert_eq!(*scroll, 0);
+                assert_eq!(*gen, app.doc.map_gen, "gen 必须是检查那一刻的地图代号");
+                assert!(!*has_libs, "图库装失败 ⇒ 图号一项整体没查");
+                assert!(report.未检查.is_empty(), "Old12 三族都可查：{:?}", report.未检查);
+            }
+            other => panic!("应打开检查地图模态，实际 {other:?}"),
+        }
+        let 后 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        assert_eq!(前, 后, "检查地图不许改任何字节");
+        assert_eq!(app.edit.undo_len(), 撤销前, "检查地图不许进撤销栈");
+        let (text, warn) = app.op.as_ref().expect("必须有状态栏回执");
+        assert!(text.contains("共 2 条"), "回执要写总数：{text}");
+        assert!(!*warn, "不是警示色");
+    }
+
+    /// 没有地图时点「检查地图」：**不弹模态**、给一条带原因的拒绝回执。
+    #[test]
+    fn 检查地图无图时拒绝() {
+        let mut app = 空应用();
+        app.dispatch_menu(menu::model::Action::CheckMap, 画布());
+        assert_eq!(app.overlay, Overlay::None, "没图时不该弹模态");
+        let (text, warn) = app.op.as_ref().expect("必须有拒绝回执");
+        assert_eq!(text, tx::STATUS_CHECK_MAP_NEEDS_MAP);
+        assert!(*warn, "拒绝回执要警示色（State::NeedsMap 同口径）");
+    }
+
+    /// 「定位」：**1×1 选区**（闭区间）+ 画布把该格居中（上游 `LocateCell` 的等价物）。
+    #[test]
+    fn 检查地图定位设一基选区并居中() {
+        let mut app = 有门图应用();
+        let 画布矩形 = 画布();
+        app.dispatch_menu(menu::model::Action::CheckMap, 画布矩形);
+        // 取报告里的第 0 条问题格（门格 = (1, 2)）
+        let (x, y) = match &app.overlay {
+            Overlay::CheckMap { report, .. } => {
+                let i = report.issues.first().expect("应有问题");
+                (i.x, i.y)
+            }
+            other => panic!("应先打开模态：{other:?}"),
+        };
+        assert_eq!((x, y), (1, 2), "门格坐标");
+        let 前 = (app.view.pan_x, app.view.pan_y);
+        let 回执 = app.locate_cell(x, y, 画布矩形);
+        let sel = app.edit.selection().expect("必须有选区");
+        assert_eq!(
+            (sel.x0, sel.y0, sel.x1, sel.y1),
+            (1, 2, 1, 2),
+            "定位必须是 1×1 选区（闭区间）"
+        );
+        assert!(
+            (app.view.pan_x, app.view.pan_y) != 前,
+            "定位必须真的把视口挪到那一格"
+        );
+        assert_eq!(回执, tx::fill(tx::STATUS_CHECK_MAP_LOCATE_TMPL, &[("x", "1"), ("y", "2")]));
+        // 只读：定位不动字节、不进撤销栈
+        assert_eq!(app.edit.undo_len(), 0, "选区不入撤销栈（内核既有语义）");
+    }
+
+    /// 地图一改（`map_gen` +1）⇒ 浮层里的 `gen` 与当前值不等 ⇒ 结果算陈旧。
+    #[test]
+    fn 检查地图结果随地图变化变陈旧() {
+        let mut app = 有门图应用();
+        app.dispatch_menu(menu::model::Action::CheckMap, 画布());
+        let 检查时 = match &app.overlay {
+            Overlay::CheckMap { gen, .. } => *gen,
+            other => panic!("应先打开模态：{other:?}"),
+        };
+        assert_eq!(检查时, app.doc.map_gen, "刚检查完不陈旧");
+        app.touch_map();
+        assert_ne!(app.doc.map_gen, 检查时, "改图后地图代号必须变");
+        // 绘图/交互用的是同一个判据：`gen != map_gen` ⇒ 陈旧
+        assert_ne!(
+            match &app.overlay {
+                Overlay::CheckMap { gen, .. } => *gen,
+                _ => panic!("浮层丢了"),
+            },
+            app.doc.map_gen
+        );
+        // 陈旧文案由 `menu::check_map::summary_text(_, true)` 给
+        assert_eq!(
+            menu::check_map::summary_text(&miredit_core::MapCheckReport::default(), true),
+            tx::CHECK_MAP_STALE
+        );
+    }
+
+    /// 装了图库、图号越界 ⇒ 报告里出现 `Invalid image number`（端到端：菜单 → 探针 → 报告）。
+    #[test]
+    fn 检查地图有库时报图号问题() {
+        let mut app = 有门图应用();
+        装合成图库(&mut app);
+        // 让 (0,0) 引用一个不存在的图号（Tiles 只有 2 帧 ⇒ 图号 9 越界）
+        if let Some(d) = app.doc.doc.as_mut() {
+            d.map.cells[0].bk_img = 9;
+        }
+        app.dispatch_menu(menu::model::Action::CheckMap, 画布());
+        match &app.overlay {
+            Overlay::CheckMap { report, has_libs, .. } => {
+                assert!(*has_libs, "装了图库 ⇒ has_libs 必须为真（界面不该再提示去装库）");
+                assert!(
+                    report
+                        .issues
+                        .iter()
+                        .any(|i| i.message.contains(miredit_core::MSG_IMAGE_RANGE)),
+                    "越界图号必须报出来：{:?}",
+                    report.issues
+                );
+                assert!(
+                    report
+                        .issues
+                        .iter()
+                        .any(|i| i.message.starts_with("Ground:") && i.message.contains("Library 0")),
+                    "地面层要带上库号：{:?}",
+                    report.issues
+                );
+            }
+            other => panic!("应打开检查地图模态：{other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(std::env::temp_dir().join(format!(
+            "miredit_app_checkmap_{}",
+            std::process::id()
+        )));
+    }
+
 }

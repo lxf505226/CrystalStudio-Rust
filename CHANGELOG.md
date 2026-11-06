@@ -11,7 +11,14 @@
 
 ## [Unreleased]
 
-> 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。
+### 新增
+
+- **A-015 CheckMap 只读地图检查**：Tools → CheckMap（Identify 前，菜单 44）；检查逐格图引用（缺库/越界/空帧/不可解码，含开门帧）、门格两警告、8 邻不连通可走区；`total` 全量、清单上限 1000；结果模态支持定位（1×1 选区 + 居中）、`map_gen` 陈旧提示、无库提示；`--check-map` 供自动化。
+- core 新增 `check_map(&RawMap, &dyn LibProbe)`：只用只读 `RawMap`，不改 `Cell`/9 格式；库号按族内页号，CrystalCs/Mir3 具名槽显式 `未检查`；Mir3 可走性用 `RawCell.flag`；`mir2-assets` 新增 `frame_state` 只读帧头五态。
+
+### 已知缺口
+
+- CheckMap：Wemade2010/CrystalCs 的 bk bit15 按本仓统一位判（比上游 Type1/Type100 更严格，不会误放行）；Mir3 `255` 哨兵目前报 `Missing library`，其余具名槽未检查；`--shot` 像素门禁仍不可复现。
 
 ## [0.3.0] - 2026-11-07
 

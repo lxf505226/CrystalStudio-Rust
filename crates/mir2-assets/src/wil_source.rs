@@ -295,19 +295,28 @@ impl WilSource {
 impl SpriteSource for WilSource {
     /// 覆盖缺省实现：**只读帧头**（`ImageLib::frame_info`），不解码像素。
     ///
-    /// 三态：库不可得 ⇒ [`ImageState::MissingLibrary`]；图号 ≥ 帧数 ⇒ [`ImageState::OutOfRange`]；
-    /// 帧头 `valid == false` ⇒ [`ImageState::Empty`]（WIL/WZL 的"空帧"就是这个标志）。
-    /// 容器损坏在**解码**时才暴露 ⇒ 本实现不报 `Unreadable`（交由缺省实现或解码侧）。
+    /// 四态（2026-11-07 R33 补 `Unreadable`）：库**没登记** ⇒ [`ImageState::MissingLibrary`]；
+    /// 登记了但**打不开**（容器损坏）⇒ [`ImageState::Unreadable`]（失败原因已进 `failures`）；
+    /// 图号 ≥ 帧数 ⇒ [`ImageState::OutOfRange`]；帧头 `valid == false` ⇒ [`ImageState::Empty`]
+    /// （WIL/WZL 的"空帧"就是这个标志）；否则 [`ImageState::Ok`]。
+    ///
+    /// ⚠ 区分「没登记」与「打不开」：两者都让 `frame_count()` 返回 `None`，但上游给的是
+    /// `Missing library` 与 `Unreadable image` 两条不同文案（`MapCheck.cs:29-32`）⇒
+    /// 这里用登记表再判一次，不让一个坏容器冒充「缺库」。
     fn frame_state(&self, lib: LibRef, index: u32) -> crate::ImageState {
         use crate::ImageState;
         let Some(数) = self.frame_count(lib) else {
-            return ImageState::MissingLibrary;
+            return if self.paths.resolve(lib).is_some() {
+                ImageState::Unreadable
+            } else {
+                ImageState::MissingLibrary
+            };
         };
         if index >= 数 {
             return ImageState::OutOfRange;
         }
         let Some(slot) = self.slot(lib) else {
-            return ImageState::MissingLibrary;
+            return ImageState::Unreadable;
         };
         match slot.lib.frame_info(index as usize) {
             None => ImageState::OutOfRange,
@@ -429,6 +438,67 @@ mod tests {
         let tiles = LibRef::ground(0);
         assert!(src.frame(tiles, 0).is_none(), "空壳库必须返回 None");
         assert!(!src.failures().is_empty(), "打开失败必须留痕，不许静默");
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **五态单测**（2026-11-07 R33）：缺库 / 读不出 / 越界 / 空帧 / 正常各一条。
+    ///
+    /// 全部用**合成库**（不依赖真实素材，任何机器上都能跑）：`.wzx` = 48 字节头
+    /// （`0x2C` 放帧数）+ 每帧 4 字节偏移；`.wzl` = 64 字节头 + 帧块。布局依据
+    /// `vendor/wil2atlas/src/wzl_decoder.rs` 模块文档的「实测布局」。
+    #[test]
+    fn frame_state五态() {
+        let dir = std::env::temp_dir().join(format!("mir2_assets_state_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let sub = dir.join("data");
+        std::fs::create_dir_all(&sub).expect("建临时目录");
+        // 帧 0：2×2 8bit、锚点 (1, 2)、`csize = 0`（未压缩裸数据 4×2 = 8 字节）⇒ 有效帧
+        let mut 帧0 = Vec::new();
+        帧0.extend_from_slice(&3u16.to_le_bytes()); // 标记 0x03 = 8 bit
+        帧0.extend_from_slice(&0u16.to_le_bytes()); // 未用
+        帧0.extend_from_slice(&2u16.to_le_bytes()); // w
+        帧0.extend_from_slice(&2u16.to_le_bytes()); // h
+        帧0.extend_from_slice(&1i16.to_le_bytes()); // px
+        帧0.extend_from_slice(&2i16.to_le_bytes()); // py
+        帧0.extend_from_slice(&0u32.to_le_bytes()); // csize = 0 ⇒ 裸数据
+        帧0.extend_from_slice(&[0x33u8; 8]); // align4(2) × 2 = 8 字节
+        let mut wzl = vec![0u8; 64];
+        let off0 = 64u32;
+        let off1 = off0 + 帧0.len() as u32;
+        wzl.extend_from_slice(&帧0);
+        wzl.extend_from_slice(&[0u8; 16]); // 帧 1：全 0 ⇒ w = h = 0 ⇒ 空帧
+        let mut wzx = vec![0u8; 48];
+        wzx[0x2C..0x30].copy_from_slice(&2u32.to_le_bytes());
+        wzx.extend_from_slice(&off0.to_le_bytes());
+        wzx.extend_from_slice(&off1.to_le_bytes());
+        std::fs::write(sub.join("Tiles.wzl"), &wzl).expect("写 wzl");
+        std::fs::write(sub.join("Tiles.wzx"), &wzx).expect("写 wzx");
+
+        let paths = LibPaths::discover(&dir).expect("扫描应成功");
+        let src = WilSource::open(&paths).expect("应能打开");
+        let tiles = LibRef::ground(0);
+        assert_eq!(src.frame_count(tiles), Some(2), "合成库应有 2 帧");
+        assert_eq!(src.frame_state(tiles, 0), crate::ImageState::Ok, "有效帧");
+        assert_eq!(src.frame_state(tiles, 1), crate::ImageState::Empty, "w=h=0 ⇒ 空帧");
+        assert_eq!(src.frame_state(tiles, 2), crate::ImageState::OutOfRange, "图号 ≥ 帧数");
+        assert_eq!(
+            src.frame_state(LibRef::ground(7), 0),
+            crate::ImageState::MissingLibrary,
+            "没登记的库"
+        );
+
+        // 登记了但打不开（空壳容器）⇒ 读不出，**不许**冒充缺库
+        std::fs::write(sub.join("SmTiles.wzl"), vec![0u8; 64]).expect("写空壳数据文件");
+        std::fs::write(sub.join("SmTiles.wzx"), vec![0u8; 48]).expect("写空壳索引文件");
+        let paths = LibPaths::discover(&dir).expect("扫描应成功");
+        let src = WilSource::open(&paths).expect("应能打开");
+        assert_eq!(
+            src.frame_state(LibRef::middle(0), 0),
+            crate::ImageState::Unreadable,
+            "登记了但容器打不开 ⇒ Unreadable（失败原因另有 failures 记录）"
+        );
+        assert!(!src.failures().is_empty(), "打不开必须留痕");
 
         let _ = std::fs::remove_dir_all(&dir);
     }

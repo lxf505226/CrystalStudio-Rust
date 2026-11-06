@@ -135,6 +135,24 @@ impl MapDoc {
         self.document.ground_paint_supported()
     }
 
+    /// **检查地图用的 raw 快照**（把「当前编辑视图」同步进一份 `raw` 副本）。
+    ///
+    /// 为什么不直接给 `document.raw()`：那份是**打开那一刻**的磁盘字节
+    /// （编辑只改 [`MapDoc::map`]；写回 `raw.cells` 只发生在 [`MapDoc::to_bytes`] 的 clone 上，
+    /// 见 `miredit-core/src/document.rs` 第五节）⇒ 拿它去检查会把用户刚改的图号当成没改。
+    /// 这里与 `to_bytes` 走**同一条** `sync_view_into_raw`（`FIELD_MAP` 逐字段口径一致），
+    /// 所以「检查看到的就是保存会写出的那份格表」。
+    ///
+    /// 只读：`self` 一格不变、不写盘、不置脏。
+    ///
+    /// # Errors
+    ///
+    /// 视图与字节层的宽高/格数不一致（理论上不会发生：`map` 就是这份文档的视图）
+    /// ⇒ 中文原因（含两侧尺寸），调用方**中止检查并如实报错**，不许拿旧 raw 顶上。
+    pub fn raw(&self) -> Result<miredit_core::RawMap, String> {
+        self.document.raw_snapshot(&self.map).map_err(|e| e.to_string())
+    }
+
     /// 打开时那份**磁盘原文件字节**（只读；给编辑会话绑定真文档用）。
     pub fn orig_bytes(&self) -> &[u8] {
         self.document.orig_bytes()

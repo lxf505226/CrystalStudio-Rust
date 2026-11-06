@@ -248,6 +248,15 @@ pub struct Cli {
     pub menu_clicks: Vec<String>,
     /// `--menu-dump`：**不开窗**，把 5 菜单 41 项逐条打到 stderr 后退出。
     pub menu_dump: bool,
+    /// `--check-map`：**不开窗**，打开地图后跑一次只读检查，把 summary + 前 N 条打到 stderr。
+    ///
+    /// 与「工具 → 检查地图」走**同一个** `miredit_core::check_map` + 同一个探针
+    /// （`menu::check_map::WilProbe`），只是没有界面：`0` = 跑完（有/无问题都算跑完）、
+    /// `2` = 没图 / 读不出 / 快照失败。为什么需要它：检查结果是**只读诊断**，
+    /// 用退出码 + stderr 就能进 CI（截图与像素比对不可复现，见 §8.24）。
+    pub check_map: bool,
+    /// `--check-map-show <N>`：`--check-map` 最多打多少条（缺省 [`CHECK_MAP_SHOW_DEFAULT`]）。
+    pub check_map_show: Option<usize>,
     /// `--export-selection <路径>`：**不开窗**把当前选区按 1:1 渲成 PNG 写到该路径。
     ///
     /// 与「文件 → 导出选区(E)…」模态回车走的是**同一个**
@@ -679,6 +688,15 @@ impl Cli {
                     None => c.bad(&a, true),
                 },
                 "--menu-dump" => c.menu_dump = true,
+                // 检查地图（A-015）：不开窗、只读；`--check-map-show` 限制打印条数
+                "--check-map" => c.check_map = true,
+                "--check-map-show" => match it.next() {
+                    Some(v) => match v.parse::<usize>() {
+                        Ok(n) => c.check_map_show = Some(n),
+                        Err(_) => eprintln!("[参数] --check-map-show 的数值无法解析：{v}（忽略）"),
+                    },
+                    None => eprintln!("[参数] --check-map-show 缺少数值（忽略）"),
+                },
                 // 导出取证入口（不开窗；与菜单模态回车走同一个 `crate::export`）
                 "--export-selection" => match it.next() {
                     Some(v) => c.export_selection = Some(PathBuf::from(v)),

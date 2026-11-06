@@ -162,8 +162,36 @@ impl Document {
     // ── 双表示的两侧 ──
 
     /// **字节层真值**（只读）。`format` / `header_raw` / `trailer` / `cells` 全在这里。
+    ///
+    /// ⚠ 它是**打开那一刻**的磁盘字节：编辑只改 [`Document::view`]，
+    /// 改格写回 raw 只发生在 [`Document::try_to_bytes`] 的那份 clone 上
+    /// （见模块文档第五节）。要「当前编辑结果的字节层」请用
+    /// [`Document::raw_snapshot`]（`miredit-gui` 的 `MapDoc::raw` 就是它）。
     pub fn raw(&self) -> &RawMap {
         &self.raw
+    }
+
+    /// **以「当前编辑视图」为准的一份 raw 快照**（只读；`self` 一格不变）。
+    ///
+    /// 实现就是保存路径用的同一条 [`crate::convert::sync_view_into_raw`]（逐格按
+    /// `FIELD_MAP` 写回：`bk_img`/`tiles`/`sm_tiles` 保高位、其余整字段覆盖，
+    /// `tail` 长度不符时整段不动），所以「快照 == 现在保存会写出的那份格表」。
+    /// `format`/`header_raw`/`trailer` 原样带过来（快照不重算头部）。
+    ///
+    /// # 为什么要它
+    ///
+    /// A-015「检查地图」是**只读诊断**，但必须看**用户眼前的**图，而不是打开时的图：
+    /// 宿主（GUI）把编辑中的视图单独放在 `MapDoc::map` 里，`Document::view` 只在
+    /// 每次编辑调用前后交换一次（`edit.rs` 的 `with_map`）⇒ 它是**上一次**的副本。
+    /// 直接拿 [`Document::raw`] 去检查会把用户刚改的图号当成没改。
+    ///
+    /// # Errors
+    ///
+    /// 视图与 raw 的宽高/格数不一致 ⇒ [`ConvertError::Shape`]（**不猜**，调用方报错）。
+    pub fn raw_snapshot(&self, view: &Map) -> Result<RawMap, crate::convert::ConvertError> {
+        let mut raw = self.raw.clone();
+        crate::convert::sync_view_into_raw(view, &mut raw)?;
+        Ok(raw)
     }
 
     /// **编辑/渲染视图**（只读）。渲染层要的就是它。

@@ -42,6 +42,7 @@
 pub mod about;
 pub mod action;
 pub mod cellprops;
+pub mod check_map;
 pub mod dialog;
 pub mod model;
 pub mod panels;
@@ -115,6 +116,28 @@ pub enum Overlay {
         error: Option<String>,
         /// 本格式有没有门字节（Mir3 两档没有 ⇒ 两个门输入框禁用 + 一句原因）。
         有门字节: bool,
+    },
+    /// **「工具 → 检查地图」的结果模态**（A-015 / R32-R33）。
+    ///
+    /// 只读诊断的界面那一半（几何/绘制/输入在 `check_map` 模块）：760×480 面板、
+    /// 汇总区（汇总 + 未检查/无图库/已陈旧提示）、可滚动列表（最多 1000 行，上限由
+    /// `miredit_core::MAP_CHECK_ISSUE_CAP` 定）、行选中、「定位」= 画布居中 +
+    /// 1×1 选区 + 关模态、「关闭」= 关模态。
+    ///
+    /// 状态放在浮层里（与 [`Overlay::CellProps`] 同一套做法）：`report` 是**检查那一刻**
+    /// 的报告，`gen` 是那一刻的地图代号 ⇒ 之后只要真改过图（`map_gen` 变了），
+    /// 对话框就改显示「地图已变化，请重新检查」并且不再画列表。
+    CheckMap {
+        /// 检查报告（只读；`issues` 已按 1000 上限截断，`total` 是全量）。
+        report: miredit_core::MapCheckReport,
+        /// 列表里选中的行（`None` = 没选中；非空报告打开时预选第 0 行，同官方）。
+        selected: Option<usize>,
+        /// 列表滚动位置（首个可见行号）。
+        scroll: usize,
+        /// 检查时的地图代号（`DocState::map_gen`）—— 与当前值不同 ⇒ 结果已陈旧。
+        gen: u64,
+        /// 检查时**有没有图库**（`false` ⇒ 图号引用那一项整体没查，界面追加官方提示）。
+        has_libs: bool,
     },
     Shortcuts,
     /// 「帮助 → 关于 Crystal Studio」的只读模态（2026-11-06 新增）。
@@ -1012,11 +1035,11 @@ mod tests {
     use super::*;
     use crate::menu::model::{find_by_id, item_count};
 
-    /// 43 项、5 菜单（`dump` 的计数与静态表必须一致）。
+    /// 44 项、5 菜单（`dump` 的计数与静态表必须一致）。
     #[test]
     fn 表与常量一致() {
         assert_eq!(MENUS.len(), 5);
-        assert_eq!(item_count(), 43);
+        assert_eq!(item_count(), 44);
         assert!(find_by_id("view.dark_mode").is_some());
     }
 

@@ -115,6 +115,7 @@ mod error;
 mod fill;
 mod layer;
 mod layer_counts;
+mod map_check;
 mod metadata;
 mod paint;
 mod save;
@@ -126,6 +127,15 @@ mod undo;
 
 #[cfg(test)]
 mod testutil;
+
+/// **字节层类型原样再导出**（2026-11-07，A-015 检查地图）。
+///
+/// 宿主（`miredit-gui` / 网页版）要拿 `Document::raw` 的返回值、把它交给
+/// `check_map`，但它们**不该为此多一条 `mir2-format` 依赖边**（依赖白名单见模块文档
+/// 第一节）。这里再导出的是同一批类型，不是包装 —— 类型身份一致，能直接互传。
+///
+/// `RawCell` 就是 `mir2_format::Cell`（字节层格，不是 `mir2_map::Cell` 那份视图格）。
+pub use mir2_format::{Cell as RawCell, FormatId, RawMap};
 
 pub use brush::{
     clamp_brush_size, footprint_of, lib_ref_of, palette_index_to_sprite, pick_cell_of, Brush,
@@ -152,6 +162,14 @@ pub use layer::{
 pub use layer_counts::{
     cell_mask, cell_mask_ext, LayerCounts, MaskContext, MASK_FRONT, MASK_GROUND,
     MASK_HIGH_COLLISION, MASK_LOW_COLLISION, MASK_MIDDLE,
+};
+pub use map_check::{
+    check_map, csharp_back_lib, csharp_front_lib, csharp_middle_lib, has_door, layer_source,
+    unchecked_reason, ImageState, LibFamily, LibProbe, LibSource, MapCheckReport, MapIssue, NoLibProbe,
+    MapLibRef, MAP_CHECK_ISSUE_CAP, MSG_DISCONNECTED, MSG_DOOR_NO_FOREGROUND,
+    MSG_DOOR_NO_WALKABLE, MSG_IMAGE_EMPTY, MSG_IMAGE_RANGE, MSG_IMAGE_UNREADABLE, MSG_LIB_MISSING,
+    UNCHECKED_CRYSTALCS, UNCHECKED_MIR3_BLOCK_GROUND, UNCHECKED_MIR3_NAMED_SLOTS,
+    UNCHECKED_SIZE_MISMATCH,
 };
 pub use metadata::{clamp_area, no_door_bytes_reason, Area};
 pub use paint::{
