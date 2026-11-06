@@ -1169,6 +1169,116 @@ mod tests {
         assert_eq!((新[基 + 6], 新[基 + 7], 新[基 + 11]), (6, 8, 5));
     }
 
+    /// **New14 的字节断言**（14 B/格；与 [`改属性旧档只变三个字节`] 同一套写法，只是格长不同）。
+    ///
+    /// 布局（`mir2-format/src/formats/shanda14.rs:183-193` 的 writer 顺序）：
+    /// `bk(0..1) mid(2..3) fr(4..5) **door(6) door_offset(7)** ani_frame(8) ani_tick(9)
+    /// area(10) **light(11)** tiles(12) sm_tiles(13)` ⇒ 三个目标字段在 14 B 档里仍是
+    /// **off6 / off7 / off11**，但每格多出 `btTiles`/`btsmTiles` 两个库号字节 ——
+    /// 本用例要证明的就包括"这两个邻居一个字节都不许动"（12 B 档根本验不到它们）。
+    #[test]
+    fn 改属性新档只变三个字节() {
+        let mut ed = 会话(2, 2, CellFormat::New14);
+        let 原 = ed.map().to_bytes();
+        assert_eq!(
+            原.len(),
+            mir2_map::HEADER_LEN + 4 * 14,
+            "14 B/格（New14/Shanda14 档）"
+        );
+        let 基 = mir2_map::HEADER_LEN; // (0,0) 是第一格（列优先）
+
+        // ① 三字段全给 ⇒ 只动 off6 / off7 / off11
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(5),
+                door: Some(6),
+                offset: Some(8),
+                area: (0, 0, 0, 0),
+            },
+        )
+        .expect("改属性");
+        assert_eq!(out.changed, 1);
+        assert_eq!(ed.undo_len(), 1, "整批 = 一步撤销");
+        let 新 = ed.map().to_bytes();
+        let mut 变: Vec<usize> = (0..原.len()).filter(|i| 原[*i] != 新[*i]).collect();
+        变.sort_unstable();
+        assert_eq!(
+            变,
+            vec![基 + 6, 基 + 7, 基 + 11],
+            "14 B 档也只许动 door(off6) / door_offset(off7) / light(off11)；\
+             库号字节 off12/off13 与图号 off0..5 一个都不许变"
+        );
+        assert_eq!(
+            (新[基 + 6], 新[基 + 7], 新[基 + 11]),
+            (6, 8, 5),
+            "三个字节要落到给定的值"
+        );
+        // 夹具的库号是 3/4（`testutil.rs:31-32`），专门验"邻居没被顺手写掉"
+        assert_eq!((新[基 + 12], 新[基 + 13]), (3, 4), "btTiles/btsmTiles 保持原值");
+
+        // ② 只给 light ⇒ 只动 off11（门两字节保持原值）
+        let 原2 = 新.clone();
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(200),
+                door: None,
+                offset: None,
+                area: (0, 0, 0, 0),
+            },
+        )
+        .expect("只改光照");
+        assert_eq!(out.changed, 1);
+        let 新2 = ed.map().to_bytes();
+        let mut 变2: Vec<usize> = (0..原2.len()).filter(|i| 原2[*i] != 新2[*i]).collect();
+        变2.sort_unstable();
+        assert_eq!(变2, vec![基 + 11], "只给 light ⇒ 只许动 off11");
+        assert_eq!(
+            (新2[基 + 6], 新2[基 + 7]),
+            (6, 8),
+            "没给的门字段必须保持上一步写入的值"
+        );
+
+        // ③ 三字段全 None ⇒ 一个字节都不动、也不许开新的撤销步
+        let 撤销前 = ed.undo_len();
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: None,
+                door: None,
+                offset: None,
+                area: (0, 0, 1, 1),
+            },
+        )
+        .expect("全空不是程序故障");
+        assert_eq!(out.changed, 0);
+        assert_eq!(ed.undo_len(), 撤销前, "全空不许开撤销步");
+        assert_eq!(ed.map().to_bytes(), 新2, "全空一个字节都不许动");
+
+        // ④ 给的值与现值相同 ⇒ 跳过（字节不动、也不开步）
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(200),
+                door: Some(6),
+                offset: Some(8),
+                area: (0, 0, 0, 0),
+            },
+        )
+        .expect("值相同不是程序故障");
+        assert_eq!(out.changed, 0, "值本来就一样 ⇒ 0 格");
+        assert_eq!(ed.undo_len(), 撤销前, "值相同不许开撤销步");
+        assert_eq!(ed.map().to_bytes(), 新2);
+
+        // ⑤ 撤两步 ⇒ 逐字节回到最初
+        apply(&mut ed, Command::Undo).unwrap();
+        assert_eq!(ed.map().to_bytes(), 原2, "撤销第二步回到只改 light 之前");
+        apply(&mut ed, Command::Undo).unwrap();
+        assert_eq!(ed.map().to_bytes(), 原, "撤销到底必须逐字节回原样");
+        assert!(!ed.dirty(), "撤到底必须回到不脏");
+    }
+
     /// **Mir3 两档没有门字节**：门字段被忽略（0 格、0 撤销步、说清原因），光照照常可写。
     ///
     /// 依据：`mir2-format/src/formats/mir3_wemade.rs:61` 记 C# `MapCodec:432` 的
