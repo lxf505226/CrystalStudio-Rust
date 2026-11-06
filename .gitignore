@@ -33,3 +33,10 @@ Thumbs.db
 *token*
 *credential*
 *secret*
+
+# 大体量只读资料：随项目本地保存，但不进 git 仓库
+# 上游 C# 源码（300.7 MB / 19041 文件）与出图证据（212 MB）
+# 见 docs/README.md 的路径对照表
+/_upstream/
+/evidence/
+
