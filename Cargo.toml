@@ -23,4 +23,4 @@ members = [
 # 例外：`vendor/wil2atlas` 是 vendored 的上游解码器子集，保留它自己的上游版本号，
 # 不随本仓 bump，也不参与上面那条比对。
 [workspace.package]
-version = "0.2.0"
+version = "0.3.0"
