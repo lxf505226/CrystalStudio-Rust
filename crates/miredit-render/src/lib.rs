@@ -253,6 +253,22 @@
 //!
 //! ⚠ **偏移只给光罩用**：三层合成**不碰** `anchor`（官方画精灵时 `sprite.X/Y` 只在特例下生效，
 //! `MapSpriteDrawing.cs:19-31@901dbe2f(未入库)`）⇒ 补偏移后三层像素逐字节不变（测试钉住）。
+//!
+//! # 十一、小地图尺寸口径（[`minimap`] 模块，2026-11-06 新增）
+//!
+//! 小地图的「该出多大」属于**尺寸口径**，不是渲染算法，但 GUI 与网页后端必须用**同一份**：
+//!
+//! | 项目 | 值 | 出处 |
+//! |---|---|---|
+//! | 官方默认尺寸 | `W*12 × H*8` | `MinimapExporter.cs:20@acfbbf8a` |
+//! | 三档预设除数 | `small/medium/large = 4/2/1`（基准 `W*48 × H*32`）| `MinimapExportWindow.cs:36-38@acfbbf8a` |
+//! | 官方合法判据 | `w>0 && h>0 && w*h <= Array.MaxLength/4` | `MinimapExporter.cs:15-16@acfbbf8a` |
+//! | 本仓更严的护栏 | 单边 [`MAX_EXPORT_SIDE`]、整幅 [`MAX_EXPORT_BYTES`] | 本仓既有内存护栏 |
+//! | 16 级 mip → 4 档 | [`pick_official_scale`]（最接近且不越界）| 有据映射，非自定值 |
+//!
+//! 判据是 `grep -rn "cells_w * 48 / 4" crates/` 只应命中 [`minimap`] 一处；
+//! `miredit-gui` 与 `miredit-web` 都只做 [`MinimapSize`] → 像素尺寸的**调用**。
+
 
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
@@ -267,8 +283,10 @@ mod types;
 
 pub mod compare;
 pub mod lighting;
+pub mod minimap;
 pub mod png_io;
 pub mod stamp;
+pub mod tiled;
 
 pub use types::{
     CollisionOverlay, LayerMask, RenderError, RenderOptions, RenderScale, RenderStats, Rendered,
@@ -281,8 +299,20 @@ pub use compare::{compare_blocks, BlockReport, CompareOptions};
 // 那边抄过一份，两份必然漂，症状是「画布开门、导出闭门」。别再抄第二份。
 pub use compose::{门偏移, 帧号};
 pub use lighting::{emits_light, light_bounds, MapLighting, LIGHT_SIZES};
-pub use png_io::PngImage;
+// 小地图尺寸口径：**GUI 与网页后端共用同一份**（`minimap` 模块文档 §一）。
+// 这里的再导出只是省一层路径；口径只在 `minimap.rs` 里有一份实现。
+pub use minimap::{
+    minimap_scale_fits, pick_official_scale, valid_minimap_size, MinimapPreset, MinimapSize,
+    MAX_EXPORT_BYTES, MAX_EXPORT_SIDE, MINIMAP_MAX_PIXELS,
+};
+pub use png_io::{encode_rgba_png, PngImage};
 pub use scale::{try_render_region_scaled, try_render_region_scaled_with};
+// 分块渲染 + 拼接：**导出大图/小地图的唯一实现**（2026-11-06 从 `miredit-gui` 上移）。
+// GUI 与网页后端都只调这里，别再各写一套（两份必然漂，症状是「块边界丢像素」）。
+pub use tiled::{
+    render_tiled, scaled_size, tile_margins, SizeCache, TiledError, TiledImage, MAX_MARGIN_CELLS,
+    TILE_CELLS, TILE_CELLS_TWO,
+};
 pub use stamp::{
     render_stamp, FilterClass, PositionedCell, StampImage, StampRenderOptions,
 };

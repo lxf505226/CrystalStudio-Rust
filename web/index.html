@@ -18,6 +18,8 @@
 <link rel="stylesheet" href="css/lighting.css">
 <!-- 地图列表（GET /api/maps）的样式（同上） -->
 <link rel="stylesheet" href="css/maplist.css">
+<!-- 「导出小地图」对话框的样式（同上：app.css 已 599 行，守住「单文件 ≤600 行」） -->
+<link rel="stylesheet" href="css/minimap.css">
 </head>
 <body class="layout-pc" data-mode="offline" data-connected="false">
 
@@ -131,6 +133,12 @@
     </button>
     <button class="btn" id="btnSave" type="button" title="保存地图 · Ctrl+S">
       <span class="btn__full">保存地图</span><span class="btn__short">保存</span>
+    </button>
+    <!-- 导出小地图（GET /api/export/minimap → PNG 附件）。**不按「有没有开图」置灰**：
+         没开图 / 没图库时照样能点，失败按后端中文原因就地显示（不生成任何占位图）。 -->
+    <button class="btn" id="btnMinimap" type="button"
+            title="导出小地图（GET /api/export/minimap）：三档预设或自定义宽高，导出为 PNG 附件">
+      <span class="btn__full">导出小地图</span><span class="btn__short">导出</span>
     </button>
     <button class="btn btn--ghost only-mobile" id="btnSheet" type="button">面板</button>
     <span class="conn" id="connBadge" data-state="off"><span class="conn__dot" aria-hidden="true"></span><span id="connText">未连接</span></span>
@@ -403,6 +411,56 @@
 
     <div class="dialog__actions">
       <button class="btn btn--ghost" value="cancel" type="submit">关闭</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ========== 导出小地图对话框（GET /api/export/minimap → PNG 附件）==========
+     · 三档预设是**后端契约**：small = W×12 / H×8 像素、medium = W×24 / H×16、large = W×48 / H×32
+       （W/H 是地图格数）；默认 Small
+     · 选预设 ⇒ 自动把像素尺寸预填进两个输入框（没开图就留空，导出交给后端报中文原因）；
+       手改宽/高 ⇒ 立刻切「自定义」⇒ 请求改发 width/height，不再发 preset
+     · 失败**不生成任何 PNG / 占位图**：原因就地显示在本框里（后端 message 原文）
+     · 视觉全部复用 app.css 的 `.dialog` / `.dialog__*` / `.btn`，只补 `.minimap__*`（css/minimap.css）
+     ========== -->
+<dialog class="dialog dialog--minimap" id="minimapDialog" aria-labelledby="minimapTitle">
+  <form class="dialog__form" id="minimapForm">
+    <h2 class="dialog__title" id="minimapTitle">导出小地图</h2>
+    <p class="dialog__note" id="minimapSizeHint">地图 —×— 格</p>
+
+    <div class="minimap__presets" id="minimapPresets" role="group" aria-label="尺寸预设">
+      <button class="minimap__preset" type="button" data-preset="small" aria-pressed="true">
+        <b>Small</b><span>¼ · 每格 12×8 px</span>
+      </button>
+      <button class="minimap__preset" type="button" data-preset="medium" aria-pressed="false">
+        <b>Medium</b><span>½ · 每格 24×16 px</span>
+      </button>
+      <button class="minimap__preset" type="button" data-preset="large" aria-pressed="false">
+        <b>Large</b><span>1:1 · 每格 48×32 px</span>
+      </button>
+    </div>
+
+    <!-- type="text" + inputmode="numeric"：不是 type="number" —— 后者遇到 `12.5`/`8px`
+         会把 value 变成空串，那就分不清「没填」和「填错了」，中文原因也就说不准 -->
+    <div class="minimap__sizes">
+      <label class="dialog__field">
+        <span>宽度（像素）</span>
+        <input type="text" id="minimapWidth" inputmode="numeric" autocomplete="off"
+               spellcheck="false" placeholder="例如 8400">
+      </label>
+      <label class="dialog__field">
+        <span>高度（像素）</span>
+        <input type="text" id="minimapHeight" inputmode="numeric" autocomplete="off"
+               spellcheck="false" placeholder="例如 5600">
+      </label>
+    </div>
+
+    <p class="minimap__hint" id="minimapViewHint"></p>
+    <p class="minimap__error" id="minimapError" role="alert" hidden></p>
+
+    <div class="dialog__actions">
+      <button class="btn btn--ghost" id="minimapCancel" type="button">取消</button>
+      <button class="btn btn--primary" id="minimapGo" type="submit">导出</button>
     </div>
   </form>
 </dialog>

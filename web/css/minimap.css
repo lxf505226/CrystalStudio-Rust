@@ -1,0 +1,68 @@
+/* =============================================================================
+   minimap.css —— 「导出小地图」对话框（GET /api/export/minimap → PNG 附件）
+   · 视觉全部复用 app.css 的 `.dialog` / `.dialog__form` / `.dialog__field` /
+     `.dialog__actions` / `.btn`；这里只补「预设三档 + 宽高两栏 + 说明/错误行」
+   · 为什么单独成文件：`css/app.css` 已 599 行，本仓硬规则「单文件 ≤600 行」
+   · 触控：预设卡片桌面 ≥44px、手机 ≥56px；按钮高度沿用 app.css 手机断点的 44px
+   ============================================================================= */
+
+/* 手机横屏时对话框别超出视口：内容可滚，标题与操作区不裁 */
+.dialog--minimap { max-height: calc(100dvh - 24px); }
+.dialog--minimap .dialog__form { overflow-y: auto; }
+
+/* ---------- 三档预设 ---------- */
+.minimap__presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.minimap__preset {
+  display: flex; flex-direction: column; gap: 2px; align-items: flex-start;
+  min-height: 44px; padding: 7px 9px;
+  border: 1px solid var(--line-2); border-radius: 6px; background: #fff;
+  color: var(--ink); text-align: left; cursor: pointer;
+}
+.minimap__preset b { font-size: 12.5px; font-weight: 700; }
+.minimap__preset span { font-size: 11px; color: var(--ink-3); white-space: nowrap; }
+.minimap__preset:hover { border-color: var(--gold); background: var(--gold-soft); }
+/* 选中态与「地图光照」三选一致：金底白字 + aria-pressed 为唯一真源 */
+.minimap__preset[aria-pressed="true"] {
+  background: var(--gold); border-color: var(--gold-dark); color: #fff;
+}
+.minimap__preset[aria-pressed="true"] b { font-weight: 700; }
+.minimap__preset[aria-pressed="true"] span { color: #fdf7e6; }
+.minimap__preset:focus-visible { outline: 2px solid var(--gold-dark); outline-offset: 2px; }
+.minimap__preset[disabled] { opacity: .45; cursor: not-allowed; }
+.minimap__preset[disabled]:hover { background: #fff; border-color: var(--line-2); }
+
+/* ---------- 自定义宽 / 高 ---------- */
+.minimap__sizes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.minimap__sizes .dialog__field input[disabled] { opacity: .55; cursor: not-allowed; }
+
+/* ---------- 说明行 / 错误行 ---------- */
+.minimap__hint { margin: 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-3); }
+.minimap__error {
+  margin: 0; padding: 6px 9px;
+  border: 1px solid var(--danger); border-left-width: 3px; border-radius: 6px;
+  background: #fdf1ee; color: var(--danger);
+  font-size: 12px; line-height: 1.55; overflow-wrap: anywhere;
+}
+.minimap__error[hidden] { display: none; }
+
+/* 导出中：主按钮灰掉（`.btn[disabled]` 已给透明度，这里只补「不是禁用鼠标手势」的说明） */
+#minimapGo[disabled] { cursor: progress; }
+
+@media (max-width: 767.98px) {
+  /* 顶栏在 375px 视口里已有 6 个控件（打开 / 撤销 / 重做 / 保存 / 面板 / 连接徽标）：
+     新按钮只占「导出」两字，并压到 5px 侧内边距，避免整行被挤到溢出（触控高度仍 ≥44px） */
+  #btnMinimap { padding: 8px 5px; font-size: 12px; }
+  .minimap__preset { min-height: 56px; padding: 8px 8px; }
+  .minimap__preset b { font-size: 13px; }
+  .minimap__preset span { font-size: 10.5px; }
+  .minimap__sizes { grid-template-columns: minmax(0, 1fr); }
+  .minimap__error { font-size: 12.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .minimap__preset { transition: none; }
+}

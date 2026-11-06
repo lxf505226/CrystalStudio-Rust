@@ -461,6 +461,38 @@ GET /api/tiles?x=0&y=0&w=16&h=16&scale=0.25&layers=ground,middle,front&collision
 
 > 同一会话里同一 id 只读一次盘（已注册就直接放）。
 
+### 3.12 `GET /api/export/minimap`（**返回 PNG 附件**）
+
+顶栏「导出小地图」用它出图（前端：`js/api.js::exportMinimap` / `minimapUrl`）。
+
+| 参数 | 取值 | 说明 |
+|---|---|---|
+| `preset` | `small` / `medium` / `large` | 像素尺寸由**后端**按当前地图格数 `W/H` 算：`W*12×H*8` / `W*24×H*16` / `W*48×H*32`（= ¼ / ½ / 1:1）。缺省 `small` |
+| `width` / `height` | 正整数 | 自定义像素尺寸。**与 `preset` 二选一**：两个都给了 ⇒ 按自定义；否则用 `preset` |
+| `doors` | `0` / `1` | 与 `/api/tiles` 同口径（缺省 `0`；`?doors=` 空值仍 400，见 §7） |
+| `lighting` | `day` / `dawn_dusk` / `night` | 与 `/api/tiles` 同口径（缺省 `day`） |
+
+成功：`200` + `Content-Type: image/png` +
+`Content-Disposition: attachment; filename="<map>-minimap-<w>x<h>.png"` +
+`X-Export-Width` / `X-Export-Height`（**产物真实像素**，不是回显请求）。
+
+失败：JSON `{error:{code,message}}`（中文），错误码沿用 §3.10 ——
+未开图 `409 no_map`、图库不可用 `503 assets_unavailable`、参数非法 `400 bad_request`、
+尺寸超限 `413 too_large`。
+
+> **前端怎么用这些响应头**（与 §3.4 的 `X-Render-Scale` 同一条三态纪律）：
+> 文件名优先 `Content-Disposition`；**读不到就用本地兜底名** `<map>-minimap-<w>x<h>.png`，
+> 连尺寸头也读不到时退成 `<map>-minimap.png` —— 绝不拿「请求里的尺寸」补进文件名。
+> `Content-Disposition` 目前**不在** `EXPOSED_HEADERS` 里（该常量在 `crates/miredit-web/src/server.rs`），
+> 跨源部署时浏览器读不到这个头 ⇒ 走兜底名，轻提示会补一句「文件名是本地兜底：响应头不可读」。
+> `200` 但 `Content-Type` 不是 `image/png`、或 0 字节 ⇒ 前端按 `bad_response` 报错，**不保存任何文件**
+> （免得把反代吐的 HTML 错误页当 PNG 存到用户硬盘上）。
+
+> ⚠ **本检出还没有这个路由**：`crates/miredit-web/src/server.rs` 的路由表里只有
+> health / map / maps / tiles / edit / save / palette / stamps / events。本节描述的是**前端已按此对接的契约**，
+> Rust 侧端点另行落地；在它落地之前点「导出小地图」，界面显示的是
+> 「导出小地图失败：HTTP 404」——**如实报错，不生成任何占位图**。
+
 ---
 
 ## 4. 前端行为约定
@@ -575,6 +607,25 @@ GET /api/tiles?x=0&y=0&w=16&h=16&scale=0.25&layers=ground,middle,front&collision
 > **触控目标**：桌面 44 px、手机 52 px（`css/maplist.css`；手机断点里 `#mapList` 是
 > 底部抽屉内的滚动容器）。
 
+### 4.4 「导出小地图」对话框（2026-11-06 接入）
+
+| 步骤 | 交互 | 发给后端 |
+|---|---|---|
+| 打开 | 顶栏「导出小地图」（保存按钮右侧；手机上短名「导出」） | 无（纯前端态） |
+| 预设 | Small / Medium / Large 三选，**默认 Small**；选中即按地图格数预填宽高（700×700 ⇒ 8400×5600 / 16800×11200 / 33600×22400） | 无 |
+| 没开图 | 宽高**留空**，说明行写「未打开地图：预设尺寸无法预填」；按钮仍可点 | 仍然发 `preset`，由后端回 409 中文原因 |
+| 手改宽 / 高 | 立刻切「自定义」（三个预设按钮全部取消高亮） | 导出时发 `?width=&height=`（不再发 `preset`） |
+| 校验 | 两项都要填、必须是正整数；`12.5` / `0` / `8px` / 空 都**就地报错且不发请求** | — |
+| 导出中 | 按钮变「导出中…」并禁用；预设与宽高输入一并禁用；`aria-busy="true"`；此时提交会被忽略、Esc 也关不掉 | — |
+| 成功 | 轻提示「已导出 `<文件名>`（`<字节>` 字节 · `W×H`）」→ 关闭对话框 | `200`，`fetch` 取 blob + `<a download>` 落盘 |
+| 失败 | **对话框不关**，红色错误行显示后端 `message` 原文（+ `describe()` 的可操作指引） | 409 / 503 / 400 / 413 / 404 / 非 PNG |
+
+> **视图档不做隐藏行为**：框里那一行「沿用当前视图：开启门=否 · 光照=白天」就是实际发出去的
+> `doors` / `lighting`（与 `/api/tiles` 同一处归一化真源）。
+> **尺寸上限不在前端夹**（与笔刷尺寸同一条纪律）：越界交给后端 400/413 的中文原文，前端照抄。
+> 视觉复用 `css/app.css` 的 `.dialog` / `.dialog__*` / `.btn`，只补 `.minimap__*`
+> （`css/minimap.css`；`app.css` 已 599 行，守住「单文件 ≤600 行」）。
+
 ---
 
 ## 5. 仍未接的缺口（前端已显式标注）
@@ -584,6 +635,7 @@ GET /api/tiles?x=0&y=0&w=16&h=16&scale=0.25&layers=ground,middle,front&collision
 | 图块级列表（按库取帧/取图） | 资源库只列到库级；点开写「图块级待接入」 | `/api/palette` 只有 `{lib,name,frames}` |
 | 印章缩略图 | 只显示文字 + 格数 + 范围 | `/api/stamps` 无 `preview` |
 | 单元格图号 / 阻挡位查询 | 检查器写「待接入（后端无单元格查询端点）」，只显示真实像素色 | 无该端点 |
+| 导出小地图（`GET /api/export/minimap`） | **前端已接**（模态 + 三档预设/自定义宽高 + 下载 + 失败原文）；本检出后端**没有该路由** ⇒ 请求回 404，界面如实显示「导出小地图失败：HTTP 404」，不生成占位图 | `crates/miredit-web/src/server.rs` 路由表无该端点（契约见 §3.12） |
 
 > ✅ 已收口（2026-11-05）：**橡皮擦**（`SetTool` + `Erase` 全通）、**多格式开图**
 > （九种格式 + 宽松尾块，67 张以前 422 的图现在能开）、**印章放置**
@@ -618,4 +670,5 @@ GET /api/tiles?x=0&y=0&w=16&h=16&scale=0.25&layers=ground,middle,front&collision
 - **`too_large` 不硬渲**：目标图 > 64 MiB 或 1× 中间图 > 128 MiB ⇒ 413，文案带 `want` / `limit` 数字与处置建议。
 - **`IntermediateTooLarge` 在 HTTP 层打不到**：本端点 `w/h ≤ 64`，1× 中间图最多约 25 MB，够不到 128 MiB 阈值；该映射由单测直接构造 `RenderError` 覆盖。
 - **跨源头**：`x-render-scale` / `x-render-doors` / `x-render-lighting` 列在 `server::EXPOSED_HEADERS` 里；无 `Origin` 时不发任何 CORS 头。
+- **`Content-Disposition` 不在 `EXPOSED_HEADERS` 里**：跨源部署时即便 `X-Export-Width/Height` 已 expose（本检出的 `EXPOSED_HEADERS` 仍只有 `x-render-*` 三个，该清单由 Rust 侧随端点一起补），**文件名头仍读不到** ⇒ 前端走本地兜底名并在轻提示里说明，不静默失败、也不假装读到了。
 - **缺图/缺库如实报错**：未开图 409 `no_map`、图库不可用 503 `assets_unavailable`、`GET /` 找不到静态目录 404 —— 都不伪造数据。

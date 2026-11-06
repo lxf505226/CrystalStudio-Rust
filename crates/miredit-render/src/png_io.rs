@@ -63,6 +63,30 @@ impl PngImage {
 
 /// 把行优先 RGBA8 写成 PNG。目录不存在会直接报错（不隐式建目录，避免到处乱造路径）。
 pub fn write_rgba_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> std::io::Result<()> {
+    let file = File::create(path)?;
+    编码(BufWriter::new(file), width, height, rgba)
+}
+
+/// 把行优先 RGBA8 编码成 **PNG 字节**（内存形态，不碰磁盘）。
+///
+/// 与 [`write_rgba_png`] 是**同一个编码器**（同一组 `png::Encoder` 参数、同一个字节校验），
+/// 唯一差别是输出落到 `Vec<u8>` 而不是文件 ⇒ 同尺寸同像素的两次编码**逐字节相同**。
+///
+/// 为什么要有它：HTTP 端点（`miredit-web` 的 `/api/tiles`）为拿字节曾走
+/// 「写系统临时文件 → 读回 → 删掉」，多两次磁盘 IO 且留下一个失败窗口。
+/// 需要字节的调用方一律走本函数；**`png` 依赖仍然只住在 png_io.rs 一个文件里**
+/// （渲染核心只吃 `Vec<u8>`，见模块文档）。
+pub fn encode_rgba_png(width: u32, height: u32, rgba: &[u8]) -> std::io::Result<Vec<u8>> {
+    let mut out = Vec::new();
+    编码(std::io::Cursor::new(&mut out), width, height, rgba)?;
+    Ok(out)
+}
+
+/// 编码器本体（[`write_rgba_png`] / [`encode_rgba_png`] 共用的**唯一**实现）。
+///
+/// 字节校验在这里只做一次：`rgba.len()` 与 `width*height*4` 不符 ⇒ `InvalidInput`
+/// （不做静默补齐，也不按行截断 —— 那会编出一张尺寸对、内容错的图）。
+fn 编码<W: std::io::Write>(w: W, width: u32, height: u32, rgba: &[u8]) -> std::io::Result<()> {
     let expect = width as usize * height as usize * 4;
     if rgba.len() != expect {
         return Err(std::io::Error::new(
@@ -73,8 +97,6 @@ pub fn write_rgba_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> std:
             ),
         ));
     }
-    let file = File::create(path)?;
-    let w = BufWriter::new(file);
     let mut enc = png::Encoder::new(w, width, height);
     enc.set_color(png::ColorType::Rgba);
     enc.set_depth(png::BitDepth::Eight);
@@ -162,4 +184,38 @@ fn 解码<R: std::io::BufRead + std::io::Seek>(input: R) -> std::io::Result<PngI
         height: h,
         rgba,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// **同一个编码器**：内存形态与写文件形态必须逐字节相同，且能原样解回来。
+    ///
+    /// 这条就是 `miredit-web` 敢把「写临时文件再读回」换成 [`encode_rgba_png`] 的判据。
+    #[test]
+    fn 内存编码与文件编码逐字节相同() {
+        let (w, h) = (3u32, 2u32);
+        let rgba: Vec<u8> = (0..(w as usize * h as usize * 4)).map(|i| i as u8).collect();
+
+        let mem = encode_rgba_png(w, h, &rgba).expect("内存编码");
+        assert_eq!(&mem[..8], b"\x89PNG\r\n\x1a\n", "必须是 PNG 魔数");
+
+        let path = std::env::temp_dir().join(format!(
+            "miredit-render-png-编码比对-{}.png",
+            std::process::id()
+        ));
+        write_rgba_png(&path, w, h, &rgba).expect("写文件编码");
+        let disk = std::fs::read(&path).expect("读回文件");
+        let _ = std::fs::remove_file(&path);
+        assert_eq!(mem, disk, "两条路径必须是同一个编码器（逐字节相同）");
+
+        let img = read_png_from_memory(&mem).expect("解码");
+        assert_eq!((img.width, img.height), (w, h));
+        assert_eq!(img.rgba, rgba);
+
+        // 长度不符 ⇒ InvalidInput（不静默补齐、不按行截断）
+        let e = encode_rgba_png(w, h, &rgba[..rgba.len() - 4]).expect_err("长度不符必须报错");
+        assert_eq!(e.kind(), std::io::ErrorKind::InvalidInput);
+    }
 }

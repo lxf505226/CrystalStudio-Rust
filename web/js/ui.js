@@ -311,6 +311,185 @@
     }, 30);
   }
 
+  /* ================= 导出小地图（GET /api/export/minimap） =================
+     三档预设的**倍率是后端契约**（README §3.12）：preset=small|medium|large ⇒
+     宽 = 地图格数 W × 12 / 24 / 48、高 = 地图格数 H × 8 / 16 / 32。对应 ¼ / ½ / 1:1。
+     前端只用它**预填输入框**；真正的导出尺寸以后端响应头 `X-Export-Width/Height` 为准
+     （见 js/api.js::exportMinimap）—— 预填值不是「产物尺寸」的结论。
+     ------------------------------------------------------------------------- */
+  var MINIMAP_PRESETS = [
+    { key: 'small', label: 'Small', ratio: '¼', wmul: 12, hmul: 8 },
+    { key: 'medium', label: 'Medium', ratio: '½', wmul: 24, hmul: 16 },
+    { key: 'large', label: 'Large', ratio: '1:1', wmul: 48, hmul: 32 }
+  ];
+  /** 模态状态：`preset != null` ⇒ 导出只发 preset（输入框只是预填展示）；
+   * `null` ⇒ 已切「自定义」，导出发 width/height。 */
+  var mini = { preset: 'small', busy: false };
+
+  function presetDef(key) {
+    for (var i = 0; i < MINIMAP_PRESETS.length; i++) {
+      if (MINIMAP_PRESETS[i].key === key) return MINIMAP_PRESETS[i];
+    }
+    return null;
+  }
+
+  /** 当前地图格数；没开图 / 读不到 ⇒ `null`（**不拿 0 或别的数顶替**） */
+  function mapCells() {
+    var m = ME.state && ME.state.map;
+    if (!m || !(m.width > 0) || !(m.height > 0)) return null;
+    return { w: m.width, h: m.height };
+  }
+
+  /** 预设 → 预填像素尺寸；没开图 ⇒ `null`（留空，交给后端 400/409 报中文原因） */
+  function presetPixels(def) {
+    var c = mapCells();
+    if (!def || !c) return null;
+    return { w: c.w * def.wmul, h: c.h * def.hmul };
+  }
+
+  function syncMinimapPresets() {
+    if (!el.mmPresets) return;
+    var btns = el.mmPresets.querySelectorAll('.minimap__preset');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('aria-pressed', btns[i].dataset.preset === mini.preset ? 'true' : 'false');
+    }
+  }
+
+  /** 框内说明：地图格数 + 该预设会算出多少像素；另起一行如实交代「沿用当前视图」的档位 */
+  function syncMinimapHint() {
+    var c = mapCells();
+    var def = presetDef(mini.preset);
+    var px = presetPixels(def);
+    var txt;
+    if (!c) {
+      txt = '未打开地图：预设尺寸无法预填（导出会由后端返回中文原因）。也可直接手填宽高。';
+    } else if (px) {
+      txt = '地图 ' + c.w + '×' + c.h + ' 格 ⇒ ' + def.label + ' ' + px.w + ' × ' + px.h + ' 像素';
+    } else {
+      txt = '地图 ' + c.w + '×' + c.h + ' 格 · 自定义尺寸';
+    }
+    if (el.mmSizeHint) el.mmSizeHint.textContent = txt;
+
+    // 视图档：导出与屏幕同参数（doors / lighting），不藏着
+    var lit = ME.lightingParam(ME.state && ME.state.lighting);
+    var litLabel = lit;
+    for (var i = 0; i < ME.LIGHTINGS.length; i++) {
+      if (ME.LIGHTINGS[i].value === lit) litLabel = ME.LIGHTINGS[i].label;
+    }
+    if (el.mmViewHint) {
+      el.mmViewHint.textContent = '沿用当前视图：开启门=' +
+        (ME.doorsParam(ME.state && ME.state.doorsOpen) === '1' ? '是' : '否') +
+        ' · 光照=' + litLabel + '（与 /api/tiles 同参数）';
+    }
+  }
+
+  /** 选预设：预填该档像素尺寸（地图未知就留空）并切回「预设」模式 */
+  function pickMinimapPreset(key) {
+    var def = presetDef(key);
+    if (!def || mini.busy) return;
+    mini.preset = key;
+    var px = presetPixels(def);
+    el.mmWidth.value = px ? String(px.w) : '';
+    el.mmHeight.value = px ? String(px.h) : '';
+    el.mmWidth.placeholder = px ? String(px.w) : '例如 8400';
+    el.mmHeight.placeholder = px ? String(px.h) : '例如 5600';
+    showMinimapError('');
+    syncMinimapPresets();
+    syncMinimapHint();
+  }
+
+  /** 手改宽/高 ⇒ 立刻切「自定义」（预设按钮全部取消高亮，避免「看着是 Small 实际发自定义」） */
+  function markMinimapCustom() {
+    if (mini.preset === null) return;
+    mini.preset = null;
+    showMinimapError('');
+    syncMinimapPresets();
+    syncMinimapHint();
+  }
+
+  function showMinimapError(msg) {
+    if (!el.mmError) return;
+    el.mmError.textContent = msg || '';
+    el.mmError.hidden = !msg;
+  }
+
+  /** 导出中：按钮/预设/输入框全禁用（防连点重复请求），并给对话框打上 aria-busy */
+  function setMinimapBusy(busy) {
+    mini.busy = !!busy;
+    if (!el.mmGo) return;
+    el.mmGo.disabled = mini.busy;
+    el.mmGo.textContent = mini.busy ? '导出中…' : '导出';
+    if (el.mmCancel) el.mmCancel.disabled = mini.busy;
+    el.mmWidth.disabled = mini.busy;
+    el.mmHeight.disabled = mini.busy;
+    var btns = el.mmPresets.querySelectorAll('.minimap__preset');
+    for (var i = 0; i < btns.length; i++) btns[i].disabled = mini.busy;
+    el.mmDialog.setAttribute('aria-busy', mini.busy ? 'true' : 'false');
+  }
+
+  /** 纯数字串且 > 0 ⇒ number；`12.5` / `-3` / `8px` / 空 一律 `null` */
+  function pixelArg(s) {
+    if (!/^\d+$/.test(s)) return null;
+    var n = Number(s);
+    return (isFinite(n) && n > 0) ? n : null;
+  }
+
+  /**
+   * 读出本次导出参数并做**本地**校验：只挡「一定发不出去」的空值与非正整数。
+   * 尺寸上限**不在前端夹**（夹一次就等于伪造后端没做过的事）：越界 / 超限由后端
+   * 回 400 / 413 的中文原文，界面照抄。
+   * @returns {{ok:boolean, error?:string, req?:{preset?:string,width?:number,height?:number}}}
+   */
+  function collectMinimap() {
+    if (mini.preset) return { ok: true, req: { preset: mini.preset } };
+    var wRaw = String(el.mmWidth.value || '').trim();
+    var hRaw = String(el.mmHeight.value || '').trim();
+    if (!wRaw && !hRaw) return { ok: false, error: '请填写宽度与高度（正整数像素），或直接选一个预设。' };
+    if (!wRaw) return { ok: false, error: '宽度还没填（自定义尺寸要两项都填）。' };
+    if (!hRaw) return { ok: false, error: '高度还没填（自定义尺寸要两项都填）。' };
+    var w = pixelArg(wRaw), h = pixelArg(hRaw);
+    if (w === null) return { ok: false, error: '宽度必须是正整数像素（当前「' + wRaw + '」）。' };
+    if (h === null) return { ok: false, error: '高度必须是正整数像素（当前「' + hRaw + '」）。' };
+    return { ok: true, req: { width: w, height: h } };
+  }
+
+  function openMinimapDialog() {
+    mini.busy = false;
+    setMinimapBusy(false);
+    showMinimapError('');
+    pickMinimapPreset('small');          // 默认 Small（含预填 + 按钮态 + 说明行）
+    syncMinimapHint();                   // 没开图时 pickMinimapPreset 已设过，再刷一次视图档
+    if (typeof el.mmDialog.showModal === 'function') el.mmDialog.showModal();
+    else el.mmDialog.setAttribute('open', '');
+    setTimeout(function () { if (el.mmGo) el.mmGo.focus(); }, 30);
+  }
+
+  /** 关框：导出中不许关（关了失败原因就看不到了） */
+  function closeMinimapDialog() {
+    if (mini.busy) return;
+    if (typeof el.mmDialog.close === 'function') el.mmDialog.close();
+    else el.mmDialog.removeAttribute('open');
+  }
+
+  /**
+   * 触发浏览器下载（`<a download>` + `URL.createObjectURL`）。
+   * `revokeObjectURL` 延后一拍：立刻 revoke 在 Chromium 上会偶发取消下载。
+   */
+  function downloadBlob(blob, filename) {
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'minimap.png';
+    a.rel = 'noopener';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      try { URL.revokeObjectURL(url); } catch (e) { /* 忽略 */ }
+      if (a.parentNode) a.parentNode.removeChild(a);
+    }, 4000);
+  }
+
   /* ================= 初始化 ================= */
   function init() {
     el = {
@@ -346,6 +525,12 @@
       openNote: $('openNote'), recentPaths: $('recentPaths'),
       mapSearch: $('mapSearch'), mapRefresh: $('mapRefresh'),
       mapList: $('mapList'), mapListMeta: $('mapListMeta'), openFallback: $('openFallback'),
+      // 导出小地图（GET /api/export/minimap）
+      btnMinimap: $('btnMinimap'),
+      mmDialog: $('minimapDialog'), mmForm: $('minimapForm'), mmPresets: $('minimapPresets'),
+      mmWidth: $('minimapWidth'), mmHeight: $('minimapHeight'),
+      mmSizeHint: $('minimapSizeHint'), mmViewHint: $('minimapViewHint'),
+      mmError: $('minimapError'), mmGo: $('minimapGo'), mmCancel: $('minimapCancel'),
       libKinds: $('libKinds'), libList: $('libList'), libFoot: $('libFoot'),
       stampQ: $('stampQ'), stampSearch: $('stampSearch'), stampList: $('stampList'), stampFoot: $('stampFoot'),
       toast: $('toast')
@@ -423,6 +608,31 @@
     el.btnSave.addEventListener('click', function () { ME.emit('map:save'); });
     el.btnUndo.addEventListener('click', function () { ME.emit('map:undo'); });
     el.btnRedo.addEventListener('click', function () { ME.emit('map:redo'); });
+
+    /* --- 导出小地图 --- */
+    el.btnMinimap.addEventListener('click', openMinimapDialog);
+    el.mmPresets.addEventListener('click', function (ev) {
+      var b = ev.target.closest('.minimap__preset');
+      if (b) pickMinimapPreset(b.dataset.preset);
+    });
+    // 手改宽/高 ⇒ 切「自定义」；改回预设值的字面量也算自定义（发 width/height 更明确）
+    el.mmWidth.addEventListener('input', markMinimapCustom);
+    el.mmHeight.addEventListener('input', markMinimapCustom);
+    el.mmCancel.addEventListener('click', closeMinimapDialog);
+    // 原生 Esc 关框：导出中拦下来（否则请求还在飞，失败原因就没地方显示了）
+    el.mmDialog.addEventListener('cancel', function (ev) {
+      if (mini.busy) ev.preventDefault();
+    });
+    // ⚠ 不用 `<form method="dialog">`：那会在提交的瞬间就关框，看不到「导出中…」与失败原因。
+    //   这里自己 preventDefault，导出成功由 app.js 回调 close()。
+    el.mmForm.addEventListener('submit', function (ev) {
+      ev.preventDefault();
+      if (mini.busy) return;
+      var c = collectMinimap();
+      if (!c.ok) { showMinimapError(c.error); return; }
+      showMinimapError('');
+      ME.emit('minimap:export', c.req);
+    });
     el.bannerClose.addEventListener('click', hideBanner);
     el.warnClose.addEventListener('click', hideWarn);
     // 关掉错误条时，如果还停在印章待放置态，把提示条接回来（否则用户以为模式没了）
@@ -479,6 +689,10 @@
     document.addEventListener('keydown', function (ev) {
       var tag = (ev.target && ev.target.tagName) || '';
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      // 小地图模态开着时全局快捷键一律不接管：否则焦点在按钮上按字母会换工具、
+      // 按 Esc 会顺手清掉用户选区（撤这条会把两件事混在一起）。
+      // 注意：这里 return 不影响浏览器用 Esc 关 `<dialog>`（那是原生行为）。
+      if (el.mmDialog && el.mmDialog.open) return;
       var k = (ev.key || '').toLowerCase();
       var ctrl = ev.ctrlKey || ev.metaKey;
 
@@ -571,6 +785,19 @@
     syncSelButtons: syncSelButtons,
     openMapDialog: openMapDialog,
     rememberPath: rememberPath,
+    /** 导出小地图的模态控制（DOM 全在 ui.js；请求与下载流程由 app.js 编排） */
+    minimap: {
+      open: openMinimapDialog,
+      close: closeMinimapDialog,
+      setBusy: setMinimapBusy,
+      showError: showMinimapError,
+      collect: collectMinimap,
+      sync: syncMinimapHint,
+      get preset() { return mini.preset; },
+      get busy() { return mini.busy; }
+    },
+    /** 把 Blob 交给浏览器下载（文件名由 api.js 从响应头解析或本地兜底） */
+    downloadBlob: downloadBlob,
     get el() { return el; }
   };
 })(window.ME);

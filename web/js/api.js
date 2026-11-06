@@ -58,6 +58,59 @@
     return '光照 ' + act + '（响应头档位未识别）';
   }
 
+  /** 响应头里的正整数（`X-Export-Width` / `X-Export-Height`）：读不到、不是纯数字、
+   * 或者是 0 ⇒ 一律 `null`。**绝不当 0 也不拿请求值顶替**（那会把「读不到」洗成「实测值」）。 */
+  function readCountHeader(resp, name) {
+    var raw = resp.headers.get(name);
+    if (raw === null || raw === undefined) return null;
+    var s = String(raw).trim();
+    if (!/^\d+$/.test(s)) return null;
+    var n = Number(s);
+    return (isFinite(n) && n > 0) ? n : null;
+  }
+
+  /**
+   * `Content-Disposition` → 文件名：优先 RFC 5987 的 `filename*=UTF-8''<pct>`，
+   * 回退 `filename="…"` / `filename=…`；都读不到返回 `null`。
+   *
+   * ⚠ 跨源时这个响应头**不在** `Access-Control-Expose-Headers` 里（后端 `EXPOSED_HEADERS`
+   * 只列了 `x-render-*`）⇒ 浏览器读不到，走 [`fallbackMinimapName`] 的本地兜底名。
+   * 这里**不编一个像真的名字**去冒充后端给的。
+   */
+  function filenameFromDisposition(cd) {
+    if (!cd) return null;
+    var s = String(cd);
+    var m = /filename\*\s*=\s*([^;]+)/i.exec(s);
+    if (m) {
+      var v = m[1].trim().replace(/^["']/, '').replace(/["']$/, '');
+      var i = v.indexOf("''");
+      if (i >= 0) v = v.slice(i + 2);
+      try { v = decodeURIComponent(v); } catch (e) { /* 编码坏了就照原文用 */ }
+      if (v) return v;
+    }
+    m = /filename\s*=\s*(?:"([^"]*)"|([^;]+))/i.exec(s);
+    if (m) {
+      var f = String(m[1] !== undefined ? m[1] : m[2]);
+      f = f.trim();
+      if (f) return f;
+    }
+    return null;
+  }
+
+  /**
+   * 本地兜底文件名 `<map>-minimap-<w>x<h>.png`。
+   *
+   * `w`/`h` **只认响应头真值**（`X-Export-Width/Height`）；读不到就退成
+   * `<map>-minimap.png` —— 拿请求里的尺寸去补，等于把「我要的」当「产物的」写进文件名。
+   */
+  function fallbackMinimapName(mapName, width, height) {
+    var base = String(mapName === null || mapName === undefined ? '' : mapName).trim();
+    if (!base) base = 'map';
+    base = base.replace(/[\\/:*?"<>|]/g, '_');    // 文件名非法字符（也可能来自路径）
+    if (width === null || height === null) return base + '-minimap.png';
+    return base + '-minimap-' + width + 'x' + height + '.png';
+  }
+
   function joinUrl(base, path) {
     if (!base) return path;
     return String(base).replace(/\/+$/, '') + path;
@@ -270,6 +323,97 @@
         lightingActual: lightingActual,
         lightingUnknown: lightingActual === null,
         lightingRequested: lightingRequested  // 只代表「要了什么」，绝不冒充实际值
+      };
+    },
+
+    /**
+     * 拼 `/api/export/minimap` 的 URL（契约见 `web/README.md` §3.12）。
+     *
+     * **尺寸只有两条路，不许同时发**：
+     * · `width` **且** `height` 都有 ⇒ 发 `width=`/`height=`（自定义）；
+     * · 否则发 `preset=`（缺省 `small`）—— 预设的像素尺寸由**后端**按自己那张图的
+     *   `W/H` 算（`W*12×H*8` / `W*24×H*16` / `W*48×H*32`），前端不替它算完再发。
+     *
+     * `doors` / `lighting` 与 `/api/tiles` 用**同一处归一化真源**（`ME.doorsParam` /
+     * `ME.lightingParam`）：导出的配色必须与屏幕上看到的一致；未显式给出则**不发**，
+     * 由后端取默认（与 `/api/tiles`「没给 doors」同口径，见 README §7）。
+     */
+    minimapUrl(p) {
+      var o = p || {};
+      var w = (o.width === undefined || o.width === null || o.width === '') ? null : String(o.width).trim();
+      var h = (o.height === undefined || o.height === null || o.height === '') ? null : String(o.height).trim();
+      var qs = [];
+      if (w !== null && h !== null) {
+        qs.push('width=' + encodeURIComponent(w));
+        qs.push('height=' + encodeURIComponent(h));
+      } else {
+        qs.push('preset=' + encodeURIComponent(o.preset || 'small'));
+      }
+      if (o.doors !== undefined) qs.push('doors=' + ME.doorsParam(o));
+      if (o.lighting !== undefined) qs.push('lighting=' + encodeURIComponent(ME.lightingParam(o)));
+      return joinUrl(ME.config.apiBase, '/api/export/minimap?' + qs.join('&'));
+    },
+
+    /**
+     * GET /api/export/minimap → 小地图 PNG 附件（README §3.12）。
+     *
+     * 契约：成功 `Content-Type: image/png` + `Content-Disposition: attachment; filename="…"` +
+     * `X-Export-Width` / `X-Export-Height`；失败 JSON `{error:{code,message}}`（中文）。
+     *
+     * **读不到就说读不到**（与 `fetchTile` 的档位三态同一条纪律）：
+     * · `width` / `height` 只认响应头；读不到 ⇒ `null` + `sizeUnknown = true`，
+     *   **绝不拿请求里的尺寸顶上去**；
+     * · `filename` 优先 `Content-Disposition`；读不到（跨源未 expose 该头）⇒ 用本地
+     *   兜底名 `<map>-minimap-<w>x<h>.png`，尺寸也读不到时退成 `<map>-minimap.png`；
+     * · 200 但拿到的不是 `image/png`、或 0 字节 ⇒ 抛 `bad_response`，**不当成功**，
+     *   免得把一段 HTML 错误页当成 PNG 存到用户硬盘上。
+     *
+     * @param {{preset?:string, width?:number|string, height?:number|string,
+     *   doors?:boolean|string|number, lighting?:string, mapName?:string}} p
+     *   `mapName` 只用于本地兜底文件名（图名，不含 `.map` 后缀），不参与请求。
+     * @returns {Promise<{blob:Blob, bytes:number, filename:string,
+     *   filenameFromHeader:boolean, width:number|null, height:number|null,
+     *   sizeUnknown:boolean, contentType:string|null}>}
+     */
+    async exportMinimap(p) {
+      var o = p || {};
+      var resp;
+      try {
+        resp = await fetch(api.minimapUrl(o), { credentials: 'omit', cache: 'no-store' });
+      } catch (e) {
+        throw new ApiError('network_error', (e && e.message) || '网络不可达', 0);
+      }
+      if (!resp.ok) {
+        var text = await resp.text();
+        var err = null;
+        try { err = JSON.parse(text).error; } catch (e2) { /* 非 JSON：用状态码 */ }
+        throw new ApiError(
+          (err && err.code) || 'http_' + resp.status,
+          (err && err.message) || ('导出小地图失败：HTTP ' + resp.status),
+          resp.status
+        );
+      }
+      var ctype = String(resp.headers.get('Content-Type') || '').toLowerCase();
+      if (ctype && ctype.indexOf('image/png') < 0) {
+        throw new ApiError('bad_response',
+          '后端回了 ' + ctype + '（不是 image/png），本次不保存任何文件', resp.status);
+      }
+      var blob = await resp.blob();
+      if (!blob || !blob.size) {
+        throw new ApiError('bad_response', '后端回了 0 字节的 PNG，本次不保存任何文件', resp.status);
+      }
+      var width = readCountHeader(resp, 'X-Export-Width');
+      var height = readCountHeader(resp, 'X-Export-Height');
+      var named = filenameFromDisposition(resp.headers.get('Content-Disposition'));
+      return {
+        blob: blob,
+        bytes: blob.size,
+        filename: named || fallbackMinimapName(o.mapName, width, height),
+        filenameFromHeader: !!named,
+        width: width,
+        height: height,
+        sizeUnknown: width === null || height === null,
+        contentType: ctype || null
       };
     }
   };

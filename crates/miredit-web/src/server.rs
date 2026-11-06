@@ -9,6 +9,7 @@
 //! | POST | `/api/map/open` | `routes::map::open_map` |
 //! | GET | `/api/maps` | `routes::maps::list_maps`（地图列表，只读元数据 + 分页） |
 //! | GET | `/api/tiles` | `routes::tiles::tiles` |
+//! | GET | `/api/export/minimap` | `routes::export::export_minimap`（整图小地图导出，`image/png`） |
 //! | POST | `/api/edit` | `routes::edit::edit` |
 //! | POST | `/api/save` | `routes::save::save` |
 //! | GET | `/api/palette` | `routes::palette::palette` |
@@ -32,10 +33,14 @@
 //! 交给页面，非 CORS 安全清单里的响应头仍然读不到。本 crate 的自定义响应头是
 //! `/api/tiles` 的 `X-Render-Scale`（`routes/tiles.rs`，表示**实际出图档位**）、
 //! `X-Render-Doors`（本次门口径 `0`/`1`，排查「勾了开启门却没变」用）与
-//! `X-Render-Lighting`（本次光照档位 `day|dawn_dusk|night`，排查「切了没反应」用）。
-//! 前端 `api.js` 靠前者判断「请求档位与实测档位是否一致」，靠后者显示档位真值。
+//! `X-Render-Lighting`（本次光照档位 `day|dawn_dusk|night`，排查「切了没反应」用），
+//! 以及 `/api/export/minimap` 的 `X-Export-Width` / `X-Export-Height`
+//! （`routes/export.rs`，**实际下载图**的像素宽高，取自产物不是回显参数）。
+//! 前端 `api.js` 靠前者判断「请求档位与实测档位是否一致」，靠后者显示档位真值；
+//! 导出面板靠 `X-Export-*` 显示「这次到底给了多大一张图」。
 //! 不列进 `Expose-Headers`，跨源部署时 `response.headers.get('x-render-scale')` /
-//! `get('x-render-lighting')` 恒为 `null` —— 诊断永久失效，且从界面上看不出失效。
+//! `get('x-render-lighting')` / `get('x-export-width')` 恒为 `null` —— 诊断永久失效，
+//! 且从界面上看不出失效。
 //! 暴露清单集中在 [`EXPOSED_HEADERS`]，新增自定义响应头时改那一处即可。
 //!
 //! 为什么不用 `Access-Control-Allow-Origin: *`：一旦将来加了鉴权或写盘能力，
@@ -64,6 +69,7 @@ pub fn app(state: Shared) -> Router {
         .route("/api/map/open", post(routes::map::open_map))
         .route("/api/maps", get(routes::maps::list_maps))
         .route("/api/tiles", get(routes::tiles::tiles))
+        .route("/api/export/minimap", get(routes::export::export_minimap))
         .route("/api/edit", post(routes::edit::edit))
         .route("/api/save", post(routes::save::save))
         .route("/api/palette", get(routes::palette::palette))
@@ -89,11 +95,16 @@ pub async fn health() -> Json<Value> {
 
 /// 跨源时**必须暴露给页面 JS** 的自定义响应头（逗号分隔，HTTP 头名大小写不敏感）。
 ///
-/// 现状三条，都是 `/api/tiles` 的（`routes/tiles.rs`）：
-/// `X-Render-Scale`（实际出图档位）、`X-Render-Doors`（本次门口径 `0`/`1`）与
-/// `X-Render-Lighting`（本次光照档位 `day|dawn_dusk|night`）。
+/// 现状五条：
+/// - `/api/tiles`（`routes/tiles.rs`）：`X-Render-Scale`（实际出图档位）、
+///   `X-Render-Doors`（本次门口径 `0`/`1`）、`X-Render-Lighting`（本次光照档位
+///   `day|dawn_dusk|night`）；
+/// - `/api/export/minimap`（`routes/export.rs`）：`X-Export-Width` / `X-Export-Height`
+///   （**实际下载图**的像素宽高，取自产物不是回显参数）。
+///
 /// 新增自定义响应头（`X-*`）时**必须**加到这里，否则跨源读不到 —— 见模块文档第二节。
-const EXPOSED_HEADERS: &str = "x-render-scale, x-render-doors, x-render-lighting";
+const EXPOSED_HEADERS: &str =
+    "x-render-scale, x-render-doors, x-render-lighting, x-export-width, x-export-height";
 
 /// CORS 中间件（判据见模块文档第二节）。
 async fn cors(req: Request, next: Next) -> Response {
@@ -290,13 +301,31 @@ mod tests {
         }
     }
 
+    /// 暴露清单必须含 `/api/export/minimap` 的两个宽高头（**不能只加在 handler 里**）。
+    ///
+    /// 判据来自真实失效形态：跨源时页面 `response.headers.get('x-export-width')` 恒为
+    /// `null`，导出面板只能显示「未知尺寸」，界面上完全看不出是 CORS 的问题。
+    #[test]
+    fn 暴露清单含导出宽高头() {
+        let list: Vec<String> = EXPOSED_HEADERS
+            .split(',')
+            .map(|s| s.trim().to_ascii_lowercase())
+            .filter(|s| !s.is_empty())
+            .collect();
+        for must in ["x-export-width", "x-export-height"] {
+            assert!(
+                list.iter().any(|h| h == must),
+                "EXPOSED_HEADERS = {EXPOSED_HEADERS:?} 缺少 {must}"
+            );
+        }
+    }
+
     /// 跨源时**三条**自定义头都必须真能读到（只改常量不算，得看浏览器实际收到的头）。
     ///
     /// 与上一条一样起真 TCP 服务；`/api/tiles` 在本机没开图时是 409、没图库时是 503，
     /// 但 CORS 头由中间件统一加、与业务状态码无关。
     #[tokio::test(flavor = "multi_thread")]
-    async fn 跨源请求能读到开启门与光照头() {
-        use std::io::{Read as _, Write as _};
+    async fn 跨源请求能读到开启门与光照头() {        use std::io::{Read as _, Write as _};
 
         let state = share(AppState::from_env());
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
@@ -341,6 +370,13 @@ mod tests {
             expose.contains("x-render-lighting"),
             "Expose-Headers 未包含 x-render-lighting：{expose}"
         );
+        // 小地图导出的两个宽高头也在清单里（同一个静态清单，真实响应里必须有）
+        for must in ["x-export-width", "x-export-height"] {
+            assert!(
+                expose.contains(must),
+                "Expose-Headers 未包含 {must}：{expose}"
+            );
+        }
     }
 
     /// 非白名单来源**一条 CORS 头都不能有**（含新增的 Expose-Headers）——

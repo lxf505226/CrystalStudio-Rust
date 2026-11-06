@@ -382,6 +382,55 @@
     }
   }
 
+  /**
+   * 导出小地图（GET /api/export/minimap）：成功即触发浏览器下载；失败把**后端中文原因**
+   * 留在对话框里 —— 不生成任何 PNG / 占位图，也不清用户填的尺寸。
+   *
+   * 尺寸口径由 `ME.ui.minimap.collect()` 决定，这里不重算：
+   * · `{preset}` ⇒ 像素尺寸由后端按它自己那张图的格数算（前端预填值不作数）；
+   * · `{width,height}` ⇒ 自定义。
+   * 视图档（`doors` / `lighting`）跟当前屏幕走，保证导出的配色与看到的一致。
+   */
+  async function exportMinimap(req) {
+    if (state.mode !== 'api') {
+      ME.ui.minimap.showError('后端未连接：导出需 GET /api/export/minimap，当前不会生成任何图片。');
+      return false;
+    }
+    ME.ui.minimap.setBusy(true);
+    ME.ui.minimap.showError('');
+    var mapName = (state.map && state.map.path)
+      ? ME.util.baseName(state.map.path).replace(/\.map$/i, '')
+      : '';
+    try {
+      var r = await ME.api.exportMinimap({
+        preset: req.preset,
+        width: req.width,
+        height: req.height,
+        doors: state.doorsOpen,
+        lighting: state.lighting,
+        mapName: mapName
+      });
+      ME.ui.downloadBlob(r.blob, r.filename);
+      ME.ui.minimap.setBusy(false);        // 先解忙再关（导出中不许关，见 ui.js::closeMinimapDialog）
+      ME.ui.minimap.close();
+      var sizeTxt = r.sizeUnknown ? '尺寸响应头不可读' : (r.width + '×' + r.height);
+      ME.ui.toast('已导出 ' + r.filename + '（' + r.bytes + ' 字节 · ' + sizeTxt +
+        (r.filenameFromHeader ? '' : ' · 文件名是本地兜底：响应头不可读') + '）', 7000);
+      ME.debug.push('minimap:ok', {
+        req: req, filename: r.filename, fromHeader: r.filenameFromHeader,
+        bytes: r.bytes, width: r.width, height: r.height
+      });
+      return true;
+    } catch (e) {
+      // 失败：框不关，原因就地显示（no_map / assets_unavailable / bad_request / bad_response
+      // 都是后端原文或本端如实描述，例如「后端回了 text/html（不是 image/png），本次不保存任何文件」）
+      ME.ui.minimap.setBusy(false);
+      ME.ui.minimap.showError(ME.api.describe(e));
+      ME.debug.push('minimap:error', { req: req, code: e.code, message: e.message, status: e.status });
+      return false;
+    }
+  }
+
   function undo() {
     if (!state.map) { ME.ui.toast('尚未打开地图（撤销会返回 409 no_map）'); return; }
     if (!state.canUndo) { ME.ui.toast('没有可撤销的步骤'); return; }
@@ -455,6 +504,8 @@
     ME.on('map:save', saveMap);
     ME.on('map:undo', undo);
     ME.on('map:redo', redo);
+    // 导出小地图：模态（ui.js）只负责读参数与显示，请求 + 下载在这里接（与 map:save 同一条纪律）
+    ME.on('minimap:export', exportMinimap);
   }
 
   /* ================= WS 事件 ================= */
@@ -571,6 +622,8 @@
     undo: undo,
     redo: redo,
     loadMap: loadMap,
+    /** 供 CDP / 自动化：`{preset}` 或 `{width,height}`，与模态里点「导出」走同一条通路 */
+    exportMinimap: exportMinimap,
     /**
      * 供 CDP / 自动化：把**一帧原始报文**喂给与 WebSocket 完全同一条
      * 「解析 → 分派」通路（`ME.api.decodeFrame` + `dispatchEvent` / `onBadFrame`）。

@@ -5,6 +5,7 @@
 
 pub mod edit;
 pub mod events;
+pub mod export;
 pub mod map;
 pub mod maps;
 pub mod palette;

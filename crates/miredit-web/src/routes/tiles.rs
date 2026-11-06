@@ -363,7 +363,9 @@ fn parse_collision(raw: Option<&str>) -> ApiResult<CollisionOverlay> {
 ///
 /// ⚠ 本函数只负责**解析布尔值**，不直接返回 [`RenderOptions`]：光照是另一个开关，
 /// 两者只能在 handler 里用 [`RenderOptions::with_doors_and_lighting`] 一次组合。
-fn parse_doors_open(raw: Option<&str>) -> ApiResult<bool> {
+///
+/// `pub(crate)`：`/api/export/minimap` 也复用它 —— 两个端点的 `doors` 口径**只有一份**。
+pub(crate) fn parse_doors_open(raw: Option<&str>) -> ApiResult<bool> {
     let Some(s) = raw else {
         return Ok(false);
     };
@@ -382,7 +384,9 @@ fn parse_doors_open(raw: Option<&str>) -> ApiResult<bool> {
 /// 这是**协议值到渲染库枚举的显式映射**：`dawn_dusk` 是本接口的 URL 写法，渲染库
 /// `MapLighting::name()` 给日志用的短名是 `dawn-dusk`，两者不复用、不互相推断。
 /// `?lighting=`（给了但为空）与其它非法值一样 400，不静默当成 `day`。
-fn parse_lighting(raw: Option<&str>) -> ApiResult<MapLighting> {
+///
+/// `pub(crate)`：`/api/export/minimap` 也复用它 —— 两个端点的 `lighting` 口径**只有一份**。
+pub(crate) fn parse_lighting(raw: Option<&str>) -> ApiResult<MapLighting> {
     let Some(s) = raw else {
         return Ok(MapLighting::Day);
     };
