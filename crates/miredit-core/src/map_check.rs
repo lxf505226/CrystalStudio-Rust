@@ -698,11 +698,13 @@ fn has_foreground(format: FormatId, cell: &RawCell, k: 头部) -> bool {
 /// 可走判据（上游 `MapCheck.Walkable`：`BackImage & 0x60000000 == 0` 的等价物）。
 ///
 /// - Mir3 两支：`flag & 1 == 1 && flag & 2 == 2`（`LegacyMapReader.cs:436-437/494-495`）；
-/// - 其余七档：**还原后的**背景与前景 `bit15` 都为 0（折叠位那五档与上游逐格等价：
-///   上游把 `bit15` 搬成 `0x20000000/0x40000000`，`& 0x60000000 == 0` 正是「两位都为 0」）。
+/// - 其余非 Mir3、非 CrystalCs 档：**还原后的**背景与前景 `bit15` 都为 0（折叠位那五档与
+///   上游逐格等价：上游把 `bit15` 搬成 `0x20000000/0x40000000`，`& 0x60000000 == 0`
+///   正是「两位都为 0」）；
+/// - `CrystalCs`：原生 `bit29/bit30`（见下方分支），`bit15` 只是图号高位。
 ///
-/// 差异与理由见模块文档第四节（`Wemade2010` / `CrystalCs` 的 bk `bit15` 上游不折 ⇒
-/// 本仓更严格，不会误放行）。
+/// 差异与理由见模块文档第四节（`Wemade2010` 的 bk `bit15` 上游不折 ⇒ 本仓更严格，
+/// 不会误放行；`CrystalCs` 不在该差异内）。
 fn walkable(format: FormatId, cell: &RawCell, k: 头部) -> bool {
     use FormatId as F;
     match format {
