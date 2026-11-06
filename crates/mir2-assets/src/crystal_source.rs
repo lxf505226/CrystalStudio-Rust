@@ -259,6 +259,25 @@ impl CrystalLibSource {
 }
 
 impl SpriteSource for CrystalLibSource {
+    /// 覆盖缺省实现：**只读帧头**（`CrystalLibrary::read_header_checked`），不解码像素。
+    ///
+    /// 四态：库不可得 ⇒ `MissingLibrary`；`read_header_checked` 给 `Ok(None)` ⇒ `Empty`；
+    /// `Err` ⇒ `Unreadable`；`Ok(Some)` ⇒ `Ok`（越界由 `Err`/`None` 覆盖，
+    /// 因为该接口对越界图号不返回 `Ok(Some)`）。
+    fn frame_state(&self, lib: LibRef, index: u32) -> crate::ImageState {
+        use crate::ImageState;
+        let Some(slot) = self.slot(lib) else {
+            return ImageState::MissingLibrary;
+        };
+        match slot.read_header_checked(index) {
+            Ok(Some(_)) => ImageState::Ok,
+            Ok(None) => ImageState::Empty,
+            Err(e) => {
+                self.note_failure(format!("{lib} 第 {index} 帧读帧头失败：{e}"));
+                ImageState::Unreadable
+            }
+        }
+    }
     fn frame(&self, lib: LibRef, index: u32) -> Option<Frame> {
         self.lookup_frame(lib, index)
     }

@@ -293,6 +293,28 @@ impl WilSource {
 }
 
 impl SpriteSource for WilSource {
+    /// 覆盖缺省实现：**只读帧头**（`ImageLib::frame_info`），不解码像素。
+    ///
+    /// 三态：库不可得 ⇒ [`ImageState::MissingLibrary`]；图号 ≥ 帧数 ⇒ [`ImageState::OutOfRange`]；
+    /// 帧头 `valid == false` ⇒ [`ImageState::Empty`]（WIL/WZL 的"空帧"就是这个标志）。
+    /// 容器损坏在**解码**时才暴露 ⇒ 本实现不报 `Unreadable`（交由缺省实现或解码侧）。
+    fn frame_state(&self, lib: LibRef, index: u32) -> crate::ImageState {
+        use crate::ImageState;
+        let Some(数) = self.frame_count(lib) else {
+            return ImageState::MissingLibrary;
+        };
+        if index >= 数 {
+            return ImageState::OutOfRange;
+        }
+        let Some(slot) = self.slot(lib) else {
+            return ImageState::MissingLibrary;
+        };
+        match slot.lib.frame_info(index as usize) {
+            None => ImageState::OutOfRange,
+            Some(info) if !info.valid => ImageState::Empty,
+            Some(_) => ImageState::Ok,
+        }
+    }
     fn frame(&self, lib: LibRef, index: u32) -> Option<Frame> {
         self.lookup_frame(lib, index)
     }

@@ -108,6 +108,27 @@ impl Frame {
     }
 }
 
+/// 一帧的引用状态（A-015 图号检查）。
+///
+/// 对应上游 `MapCheck.cs` 的四类结论（正常 / 空帧 / 读不出 / 图号越界），外加"库不存在"。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ImageState {
+    /// 正常。
+    Ok,
+    /// 索引存在但帧头无效（上游 `Empty image`）。
+    Empty,
+    /// 读不出 / 损坏（上游 `Unreadable image`）。
+    Unreadable,
+    /// 图号越界（上游 `Invalid image number`）。
+    OutOfRange,
+    /// 库不存在（上游 `Missing library`）。
+    MissingLibrary,
+}
+
+/// 图库来源：把 `(库, 帧号)` 换成像素帧 / 元信息（地图渲染与印章缩略图共用）。
+///
+/// 三族索引空间互不相通（见 [`LibRef`]）；`frame_state` 是 A-015「检查地图」用的
+/// 只读探针（能只读帧头的实现应覆盖缺省实现，避免为查一个图号解码整帧）。
 /// 图库帧源抽象：按「族 + 族内索引」定位库，再按「0-based 帧号」取像素。
 ///
 /// 契约（三条必须同时成立）：
@@ -122,6 +143,18 @@ pub trait SpriteSource {
     /// `lib` 用 [`LibRef`] 而不是单个整数：三族的索引空间互不相通，
     /// 详见 [`crate::LibPaths::resolve`] 的说明。
     fn frame(&self, lib: LibRef, index: u32) -> Option<Frame>;
+
+    /// **一帧的引用状态**（A-015 图号检查用）：**只读元信息、不解码像素**。
+    ///
+    /// 默认实现退化成"取一次帧"（`Some ⇒ Ok`，`None ⇒ Unreadable`）—— 对任何实现者成立，
+    /// 但会解码像素；能只读帧头的源应覆盖它（见 `WilSource` / `CrystalLibSource`）。
+    fn frame_state(&self, lib: LibRef, index: u32) -> ImageState {
+        if self.frame(lib, index).is_some() {
+            ImageState::Ok
+        } else {
+            ImageState::Unreadable
+        }
+    }
 
     /// **只取锚点偏移**（不解码像素）；不可得返回 `None`。
     ///

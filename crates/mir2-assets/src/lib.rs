@@ -119,7 +119,7 @@ pub use crystal_paths::{
 };
 pub use crystal_source::{CrystalLibSource, DEFAULT_LIB_CACHE_CAPACITY};
 pub use error::AssetError;
-pub use frame::{Frame, SpriteSource};
+pub use frame::{Frame, ImageState, SpriteSource};
 pub use lib_paths::{Family, LibFile, LibInfo, LibPaths, LibRef, SkipReason, Skipped};
 pub use wil_source::{WilSource, DEFAULT_CACHE_CAPACITY};
 
