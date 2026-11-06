@@ -1164,6 +1164,11 @@ fn downscale_to_fit(
     let Some((tw, th)) = 目标 else {
         return Ok((img, false));
     };
+    // 官方默认 8400×5600 与 Quarter 原生输出恰好同尺寸：resize_to 只会 clone，
+    // 这时回执不能虚报「两段式 yes」（禁假数据）。
+    if img.width == tw && img.height == th {
+        return Ok((img, false));
+    }
     // 交给 render crate 的公开面积平均缩放（不自己写滤镜）
     let src = miredit_render::PngImage {
         width: img.width,

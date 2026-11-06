@@ -870,6 +870,7 @@ fn 官方尺寸链端到端() {
     assert_eq!((rep.width, rep.height), (768, 384));
     assert!(rep.official_size, "这条必须走官方尺寸链");
     assert_eq!(rep.scale, RenderScale::Quarter, "scale=0.25 ⇒ 本仓 Quarter");
+    assert!(!rep.two_stage, "同尺寸不该虚报两段式缩放");
     let img = read_png(&路径).expect("读回 PNG");
     assert_eq!((img.width, img.height), (768, 384));
 
