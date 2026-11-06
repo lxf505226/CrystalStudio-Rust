@@ -19,7 +19,7 @@
 ```bash
 cargo build -p miredit-web --release
 
-export MIREDIT_BIND=127.0.1.0:8080
+export MIREDIT_BIND=127.0.0.1:8080
 export MIREDIT_MAP_ROOT=/path/to/maps          # /api/map/open 的白名单根
 export MIREDIT_CLIENT_ROOT=/path/to/client-root
 export MIREDIT_PALETTE_JSON=/path/to/crystalstudio/catalogue/palette.json
@@ -28,7 +28,7 @@ cargo run -p miredit-web --release
 ```
 
 ```bash
-curl -s http://127.0.1.0:8080/api/health
+curl -s http://127.0.0.1:8080/api/health
 # {"ok":true,"version":"0.1.0"}
 ```
 
@@ -79,7 +79,7 @@ docker run --rm -p 8080:8080 \
   -v /path/to/crystalstudio/catalogue:/data/crystalstudio/catalogue:ro \
   -v /path/to/crystalstudio/Objects:/data/crystalstudio/Objects:ro \
   miredit-web:0.1.0
-curl http://127.0.1.0:8080/api/health
+curl http://127.0.0.1:8080/api/health
 ```
 
 > 镜像 tag 只是**示例**（用当前版本号打本地标签，方便对照 `docker/compose.yaml` 里的 `:dev`）；
@@ -327,7 +327,7 @@ core: cells_from_stamp / register_stamp / place_stamp_by_id / Command::PlaceStam
 - **路径白名单**：`resolve_map_path` 是唯一入口，四道闸 ——
   ① 非空；② **任何 `..` 分量一律拒绝**；③ `canonicalize` 后必须仍在根内（顺带挡符号链接）；
   ④ 必须是普通文件。任一条不过 ⇒ 400/403/404。
-- **CORS**：只回显 `http://localhost:<任意端口>` / `http://127.0.1.0:<端口>` / `http://[::1]:<端口>`，
+- **CORS**：只回显 `http://localhost:<任意端口>` / `http://127.0.0.1:<端口>` / `http://[::1]:<端口>`，
   **不放 `*`**（否则任意网页都能调 `/api/save` 改你的地图）。
 - **静态文件**：`..` 拒绝 + `canonicalize` 后仍在 `web_root` 内；未实现的 `/api/*` 走 JSON 404。
 

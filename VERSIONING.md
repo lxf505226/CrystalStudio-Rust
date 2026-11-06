@@ -209,7 +209,7 @@ cargo build --release
 
 ### 7.2 Release 页
 
-到 `https://github.com/lxf505226/CrystalStudio-Rust/releases` 取对应版本。若某次只发了源码包没附二进制，Release 正文会写明——**不要假设一定有 Windows 二进制**。
+到 `https://github.com/lxf505226/CrystalStudio-Rust/releases` 取对应版本。Release **可能附 Windows x64 exe**（从 tag 构建、未签名；校验以 GitHub asset 的 digest 为准，正文不写死附件大小/哈希）；没有附件时正文会写明——**不要假设每次都有二进制**。
 
 ### 7.3 Docker
 

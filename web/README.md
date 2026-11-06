@@ -41,7 +41,7 @@
 ### 2.1 起后端（**环境变量，不是命令行参数**）
 
 ```bash
-export MIREDIT_BIND=127.0.1.0:18080
+export MIREDIT_BIND=127.0.0.1:18080
 export MIREDIT_MAP_ROOT=/path/to/maps        # /api/map/open 的白名单根
 export MIREDIT_CLIENT_ROOT=/path/to/client-root
 export MIREDIT_PALETTE_JSON=/path/to/client-root/catalogue/palette.json
@@ -60,7 +60,7 @@ cargo run -p miredit-web --release
 > ⚠ 四个路径变量都**没有**内置缺省值（2026-11-06 起）：公开仓不绑任何开发机路径。
 > 不设就是「如实不可用」——503/404 + 启动横幅点名缺哪个变量，**不会**去猜迁移前的目录布局。
 
-浏览器打开 `http://127.0.1.0:18080/` 即可（前端与 API 同源，无 CORS 问题）。
+浏览器打开 `http://127.0.0.1:18080/` 即可（前端与 API 同源，无 CORS 问题）。
 
 ### 2.2 前端可覆盖配置
 
