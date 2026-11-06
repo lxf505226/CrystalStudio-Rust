@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+> 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。
+
+## [0.2.0] - 2026-11-07
+
 ### 新增
 
 - **R12-F1 单元格元数据编辑**：编辑菜单「单元格属性…」（`edit.cell_properties`）；选区或悬停格上编辑 Light / Door Index / Door Offset。共同值不同 ⇒ 空框 + `Mixed — leave unchanged`，未改动字段不写（绝不抹平 Mixed）；`light=0` 与 None 分开；非法值红字、不关窗、不写任何格；整批一步撤销。core `Command::SetMetadata` + `apply_metadata` 单点，web `/api/edit` 同步；Mir3 两档 Door 框禁用（格布局无门字节）、Light 提示 0..15。
