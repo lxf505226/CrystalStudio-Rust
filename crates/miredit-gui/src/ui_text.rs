@@ -207,6 +207,60 @@ pub const MENU_CELL_HOVER: &str = "地砖信息悬浮"; // EN: Tile information 
 pub const MENU_CELL_HOVER_ON: &str = "地砖信息悬浮：开（跟随鼠标显示格信息）"; // EN: Tile hover info: on
 /// 视图 → 地砖信息悬浮：关。
 pub const MENU_CELL_HOVER_OFF: &str = "地砖信息悬浮：关"; // EN: Tile hover info: off
+
+/// 编辑菜单：**单元格属性…**（R12-F1；官方视口右键菜单 `OpenCellProperties` 的等价入口）。
+pub const MENU_CELL_PROPS: &str = "单元格属性…"; // EN: Cell Properties… ｜ 官方: Cell Properties
+
+/// 「单元格属性」模态标题。
+pub const CELL_PROPS_TITLE: &str = "单元格属性"; // EN: Cell Properties ｜ 官方: Cell Properties
+
+/// 模态头行：**单选一格**时的写法（官方 `"Cell {0}, {1}"`）。
+///
+/// 占位符：`{x}` / `{y}`（`u16` 世界格坐标）。格式与状态栏/悬停浮层同一套
+/// （`单元格 265,261` 那种写法，**不带千分位**，理由见 [`HOVER_COORD_TMPL`]）。
+pub const CELL_PROPS_HEADER_CELL_TMPL: &str = "单元格 {x},{y}"; // EN: Cell {x},{y} ｜ 官方: Cell {0}, {1}
+
+/// 模态头行：**选区**时的写法（官方 `"Apply to Selected Cells"`；本仓多给一个格数）。
+///
+/// 占位符：`{n}` = 夹紧到图内后的格数。
+pub const CELL_PROPS_HEADER_AREA_TMPL: &str = "应用到选区 {n} 格"; // EN: Apply to selected cells ({n}) ｜ 官方: Apply to Selected Cells
+
+/// 字段标题：光照（官方 `"Light (0–255)"`）。
+pub const CELL_PROPS_LIGHT: &str = "光照 (0–255)"; // EN: Light (0–255)
+
+/// 字段标题：门索引（官方 `"Door Index (0–255)"`）。
+pub const CELL_PROPS_DOOR: &str = "门索引 (0–255)"; // EN: Door Index (0–255)
+
+/// 字段标题：门偏移（官方 `"Door Offset (0–255)"`）。
+pub const CELL_PROPS_OFFSET: &str = "门偏移 (0–255)"; // EN: Door Offset (0–255)
+
+/// 输入框的水印：**空框 = 该字段不动**（官方水印 `Mixed — leave unchanged`）。
+pub const CELL_PROPS_MIXED: &str = "混合值 — 留空表示不改"; // EN: Mixed — leave unchanged ｜ 官方: Mixed — leave unchanged
+
+/// 主按钮（官方 `"Apply Properties"`）。
+pub const CELL_PROPS_OK: &str = "应用属性"; // EN: Apply Properties ｜ 官方: Apply Properties
+
+/// 取消按钮（与其它模态同一句）。
+pub const CELL_PROPS_CANCEL: &str = "取消"; // EN: Cancel
+
+/// 非法值提示（官方 `"One or more values are outside the supported range."`）。
+pub const CELL_PROPS_ERR_RANGE: &str = "有一个或多个值超出 0–255（本次未写入任何格）"; // EN: One or more values are outside the supported range.
+
+/// Mir3 两档：门两字段**禁用**的原因（格布局里没有门字节）。
+pub const CELL_PROPS_NO_DOOR: &str = "本格式（Mir3）的格布局没有门字节（C# 原文「mir3 maps dont have doors」），门索引 / 门偏移不可编辑";
+
+/// Mir3 两档：光照的有效范围提示（`btLight` 只有低 4 位有意义）。
+pub const CELL_PROPS_LIGHT_HINT_MIR3: &str = "提示：Mir3 的有效灯号是 0–15（低 4 位），更大的数只有低 4 位生效"; // EN: On Mir3 only 0–15 is meaningful
+
+/// 提交回执：改了几格（`{n}` = 改动格数）。
+pub const CELL_PROPS_DONE_TMPL: &str = "改属性 {n} 格"; // EN: Updated properties on {n} cells
+
+/// 提交回执：**一格都没改**（值本来就是这样 / 全是混合值没填）。
+pub const CELL_PROPS_NOOP: &str = "值没有变化，一格未改"; // EN: No change
+
+/// 打开模态时**没有目标格**（既没选区、指针也不在图上）。
+pub const CELL_PROPS_NO_TARGET: &str = "先把鼠标移到要改的格上，或先框一个选区"; // EN: Point at a cell or select an area first
+
 /// 视图 → 地图光照（官方是子菜单：黎明/白天/夜晚）。
 pub const MENU_MAP_LIGHTING: &str = "地图光照(L)"; // EN: Map _Lighting ｜ 官方: MapLighting_C3B7695B
 /// 视图 → 开启门（官方是 CheckBox）。
@@ -1861,6 +1915,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_CELL_HOVER", MENU_CELL_HOVER),
     ("MENU_CELL_HOVER_ON", MENU_CELL_HOVER_ON),
     ("MENU_CELL_HOVER_OFF", MENU_CELL_HOVER_OFF),
+    ("MENU_CELL_PROPS", MENU_CELL_PROPS),
     ("MENU_OPEN_DOORS_ON", MENU_OPEN_DOORS_ON),
     ("MENU_OPEN_DOORS_OFF", MENU_OPEN_DOORS_OFF),
     ("MENU_LIGHT_DAWN_DUSK", MENU_LIGHT_DAWN_DUSK),
@@ -2007,6 +2062,21 @@ pub const ALL: &[(&str, &str)] = &[
     ("HOVER_NOT_WALKABLE", HOVER_NOT_WALKABLE),
     ("HOVER_DETAIL_TMPL", HOVER_DETAIL_TMPL),
     ("HOVER_DETAIL_JOIN", HOVER_DETAIL_JOIN),
+    ("CELL_PROPS_TITLE", CELL_PROPS_TITLE),
+    ("CELL_PROPS_HEADER_CELL_TMPL", CELL_PROPS_HEADER_CELL_TMPL),
+    ("CELL_PROPS_HEADER_AREA_TMPL", CELL_PROPS_HEADER_AREA_TMPL),
+    ("CELL_PROPS_LIGHT", CELL_PROPS_LIGHT),
+    ("CELL_PROPS_DOOR", CELL_PROPS_DOOR),
+    ("CELL_PROPS_OFFSET", CELL_PROPS_OFFSET),
+    ("CELL_PROPS_MIXED", CELL_PROPS_MIXED),
+    ("CELL_PROPS_OK", CELL_PROPS_OK),
+    ("CELL_PROPS_CANCEL", CELL_PROPS_CANCEL),
+    ("CELL_PROPS_ERR_RANGE", CELL_PROPS_ERR_RANGE),
+    ("CELL_PROPS_NO_DOOR", CELL_PROPS_NO_DOOR),
+    ("CELL_PROPS_LIGHT_HINT_MIR3", CELL_PROPS_LIGHT_HINT_MIR3),
+    ("CELL_PROPS_DONE_TMPL", CELL_PROPS_DONE_TMPL),
+    ("CELL_PROPS_NOOP", CELL_PROPS_NOOP),
+    ("CELL_PROPS_NO_TARGET", CELL_PROPS_NO_TARGET),
     ("TAB_LIBRARY", TAB_LIBRARY),
     ("TAB_FAVOURITES", TAB_FAVOURITES),
     ("TAB_RECENT", TAB_RECENT),
@@ -2299,6 +2369,21 @@ mod tests {
             ("HOVER_NOT_WALKABLE", HOVER_NOT_WALKABLE),
             ("HOVER_DETAIL_TMPL", HOVER_DETAIL_TMPL),
             ("HOVER_DETAIL_JOIN", HOVER_DETAIL_JOIN),
+    ("CELL_PROPS_TITLE", CELL_PROPS_TITLE),
+    ("CELL_PROPS_HEADER_CELL_TMPL", CELL_PROPS_HEADER_CELL_TMPL),
+    ("CELL_PROPS_HEADER_AREA_TMPL", CELL_PROPS_HEADER_AREA_TMPL),
+    ("CELL_PROPS_LIGHT", CELL_PROPS_LIGHT),
+    ("CELL_PROPS_DOOR", CELL_PROPS_DOOR),
+    ("CELL_PROPS_OFFSET", CELL_PROPS_OFFSET),
+    ("CELL_PROPS_MIXED", CELL_PROPS_MIXED),
+    ("CELL_PROPS_OK", CELL_PROPS_OK),
+    ("CELL_PROPS_CANCEL", CELL_PROPS_CANCEL),
+    ("CELL_PROPS_ERR_RANGE", CELL_PROPS_ERR_RANGE),
+    ("CELL_PROPS_NO_DOOR", CELL_PROPS_NO_DOOR),
+    ("CELL_PROPS_LIGHT_HINT_MIR3", CELL_PROPS_LIGHT_HINT_MIR3),
+    ("CELL_PROPS_DONE_TMPL", CELL_PROPS_DONE_TMPL),
+    ("CELL_PROPS_NOOP", CELL_PROPS_NOOP),
+    ("CELL_PROPS_NO_TARGET", CELL_PROPS_NO_TARGET),
             ("TAB_LIBRARY", TAB_LIBRARY),
             ("TAB_FAVOURITES", TAB_FAVOURITES),
             ("TAB_RECENT", TAB_RECENT),

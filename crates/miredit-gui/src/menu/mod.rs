@@ -41,6 +41,7 @@
 
 pub mod about;
 pub mod action;
+pub mod cellprops;
 pub mod dialog;
 pub mod model;
 pub mod panels;
@@ -96,6 +97,25 @@ pub enum Overlay {
         size: crate::menu::dialog::MinimapDlg,
     },
     /// 「帮助 → 键盘快捷键…」的只读浮层。
+    /// **「编辑 → 单元格属性…」模态**（R12-F1）：三字段（光照 / 门索引 / 门偏移）。
+    ///
+    /// 语义照上游 `MainWindow.axaml.cs:740-786`：初值 = 选区**共同值**（有差异或没选区 ⇒
+    /// 空框 + [`crate::ui_text::CELL_PROPS_MIXED`] 水印）；提交时**与初值逐字比较**，
+    /// 只把改过的字段交给内核（`None` = 这一字段不动 ⇒ 混合值不会被抹平）。
+    CellProps {
+        /// 目标区域（闭区间；打开时 = 有选区就用选区，否则悬停的那一格）。
+        area: (u16, u16, u16, u16),
+        /// 三个字段的**初值文本**（`""` = 混合值；与输入框原文逐字比较）。
+        初值: [String; 3],
+        /// 三个输入框的当前原文。
+        文本: [String; 3],
+        /// 键盘焦点（`0..=2`，顺序 = 光照 / 门索引 / 门偏移）。
+        focus: usize,
+        /// 最近一次提交被拒的中文原因（**不关窗、不提交**）。
+        error: Option<String>,
+        /// 本格式有没有门字节（Mir3 两档没有 ⇒ 两个门输入框禁用 + 一句原因）。
+        有门字节: bool,
+    },
     Shortcuts,
     /// 「帮助 → 关于 Crystal Studio」的只读模态（2026-11-06 新增）。
     ///
@@ -992,11 +1012,11 @@ mod tests {
     use super::*;
     use crate::menu::model::{find_by_id, item_count};
 
-    /// 42 项、5 菜单（`dump` 的计数与静态表必须一致）。
+    /// 43 项、5 菜单（`dump` 的计数与静态表必须一致）。
     #[test]
     fn 表与常量一致() {
         assert_eq!(MENUS.len(), 5);
-        assert_eq!(item_count(), 42);
+        assert_eq!(item_count(), 43);
         assert!(find_by_id("view.dark_mode").is_some());
     }
 

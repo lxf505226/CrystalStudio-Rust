@@ -1,4 +1,4 @@
-//! **菜单项静态表**：5 个菜单 / **42 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
+//! **菜单项静态表**：5 个菜单 / **43 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
 //! 逐项照抄官方（分组 = 官方 `<Separator />` 的位置）。
 //!
 //! # 数据来源（两处互相印证）
@@ -10,16 +10,16 @@
 //! 运行时由代码追加的那几项（语言 / 7 个面板开关 / 锁定 / 重置）见
 //! `ui_text` 里「下拉菜单项」小节的说明与 [`crate::menu::panels`] 的模块文档。
 //!
-//! # 42 项的账
+//! # 43 项的账
 //!
 //! ```text
-//! 文件 10 + 编辑 4 + 视图 20 + 工具 6 + 帮助 2 = 42
+//! 文件 10 + 编辑 5 + 视图 20 + 工具 6 + 帮助 2 = 43
 //! 视图 20 = XAML 9 + 语言 1 + 面板开关 8 + 锁定/重置 2
 //!
 //! ⚠ **2026-11-05 起是 40 项**（原 39）：上游 `901dbe2f` 新增了第 8 个面板
 //! （`docking.Add("Maps", …)`），而 `DockWorkspace.cs:269 AddSectionMenu` 会为
 //! **每一个**面板生成一条 CheckBox 菜单项 ⇒ 面板开关 7 → 8，视图 18 → 19。
-//! ⚠ **2026-11-07 起是 42 项**（视图 19 → 20）：补了「地砖信息悬浮」
+//! ⚠ **2026-11-07 起是 43 项**（编辑 4 → 5）：补了「单元格属性…」（R12-F1）；此前同日视图 19 → 20 补了「地砖信息悬浮」
 //! （[`Action::CellHover`]），照官方 `MainWindow.axaml` 的 `CellHoverToggle`
 //! （CheckBox、缺省不勾、**它前面有一条分隔线**）。
 //! ⚠ **2026-11-06 起是 41 项**（帮助 1 → 2）：本仓补了「帮助 → 关于 Crystal Studio」
@@ -44,7 +44,7 @@
 //!
 //! 静态子项共 **5** 个（[`sub_count`]），另有 1 个动态列表（行数随 `recent` 变：0 条 ⇒ 1 行空态）。
 //! 子项**不进** [`MENUS`] 的 `items`（那是"顶级 42 项"的口径），
-//! 所以 [`item_count`] 仍是 42、`--menu-dump` 的汇总行仍是 42 —— 子项在 dump 里
+//! 所以 [`item_count`] 仍是 43、`--menu-dump` 的汇总行仍是 43 —— 子项在 dump 里
 //! 靠 `parent=` 列自证（见 [`crate::menu::dump_lines`]）。
 //!
 //! [`tests::顶级39项与子项5项计数`] 把这两笔账都钉住。
@@ -204,7 +204,7 @@ impl Lang {
 ///
 /// # 为什么需要它
 ///
-/// 顶级 42 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
+/// 顶级 43 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
 /// 单元格网格（`app.grid`）、开启门（`app.doors_open`）、**地图光照（`app.lighting`）**、
 /// **地砖信息悬浮（`app.cell_hover`）**、8 个面板显隐（`app.panels`）—— 它们由
 /// [`check`] / [`check_with`] / [`check_with_hover`] 直接从宿主字段读，
@@ -324,6 +324,11 @@ pub enum Action {
     Undo,
     Redo,
     FillSelection,
+    /// **单元格属性…**（R12-F1；官方视口右键菜单的 `OpenCellProperties` 等价入口）。
+    ///
+    /// 三字段（光照 / 门索引 / 门偏移）：初值取选区共同值（有差异留空）、只写改过的字段，
+    /// 整批 = 一步撤销（语义全在 `miredit_core::EditSession::apply_metadata`）。
+    CellProperties,
     Settings,
     // ── 视图 ──
     DarkMode,
@@ -392,6 +397,7 @@ impl Action {
             Action::Undo => "edit.undo",
             Action::Redo => "edit.redo",
             Action::FillSelection => "edit.fill_selection",
+            Action::CellProperties => "edit.cell_properties",
             Action::Settings => "edit.settings",
             Action::DarkMode => "view.dark_mode",
             Action::CellHover => "view.cell_hover",
@@ -445,6 +451,7 @@ impl Action {
             Action::Undo => tx::MENU_UNDO,
             Action::Redo => tx::MENU_REDO,
             Action::FillSelection => tx::MENU_FILL_SELECTION,
+            Action::CellProperties => tx::MENU_CELL_PROPS,
             Action::Settings => tx::MENU_SETTINGS,
             Action::DarkMode => tx::MENU_DARK_MODE,
             Action::CellHover => tx::MENU_CELL_HOVER,
@@ -612,11 +619,16 @@ pub const FILE_ITEMS: [Item; 10] = [
     it(Action::Exit, true),
 ];
 
-/// 编辑菜单（4 项）。
-pub const EDIT_ITEMS: [Item; 4] = [
+/// 编辑菜单（5 项）。
+///
+/// 2026-11-07 新增「单元格属性…」（R12-F1）：上游没有顶层菜单项（它挂在视口右键菜单上），
+/// 本仓**没有右键菜单**（全仓 `PointerButton::Secondary` 零命中）⇒ 落在编辑菜单里，
+/// 等价入口 + 可 `--menu-click edit.cell_properties`。
+pub const EDIT_ITEMS: [Item; 5] = [
     it(Action::Undo, false),
     it(Action::Redo, false),
     it(Action::FillSelection, true),
+    it(Action::CellProperties, false),
     it(Action::Settings, true),
 ];
 
@@ -697,7 +709,7 @@ pub const MENUS: [Menu; 5] = [
     },
 ];
 
-/// 全部菜单项总数（= **42**：文件 10 + 编辑 4 + 视图 20 + 工具 6 + 帮助 2）。
+/// 全部菜单项总数（= **43**：文件 10 + 编辑 5 + 视图 20 + 工具 6 + 帮助 2）。
 pub fn item_count() -> usize {
     MENUS.iter().map(|m| m.items.len()).sum()
 }
@@ -706,7 +718,7 @@ pub fn item_count() -> usize {
 ///
 /// 「最近打开」的动态列表**不计入**（行数随设置文件里的 `recent` 变：
 /// 0 条 ⇒ 1 行官方空态行）。子项**不进** [`MENUS`] 的 `items`，所以 [`item_count`] 仍是 42
-/// —— 两笔账分开数，免得"加了子项就把顶级 42 撑成 45"。
+/// —— 两笔账分开数，免得"加了子项就把顶级 43 撑成 46"。
 pub fn sub_count() -> usize {
     let mut n = 0;
     for m in &MENUS {
@@ -805,6 +817,8 @@ pub const fn state(action: Action) -> State {
         | Action::Undo
         | Action::Redo
         | Action::FillSelection
+        // 「单元格属性…」（R12-F1）：**必须有图**才谈得上"改哪一格"（与填充选区同档）。
+        | Action::CellProperties
         | Action::ZoomIn
         | Action::ZoomOut
         | Action::ActualSize
@@ -1014,13 +1028,13 @@ mod tests {
     use crate::menu::panels::PanelVis;
     use std::collections::BTreeSet;
 
-    /// **42 项的账**：文件 10 / 编辑 4 / 视图 20 / 工具 6 / 帮助 2（2026-11-06 加「关于」；2026-11-07 加「地砖信息悬浮」）。
+    /// **43 项的账**：文件 10 / 编辑 5 / 视图 20 / 工具 6 / 帮助 2（2026-11-06 加「关于」；`n    /// 2026-11-07 加「地砖信息悬浮」与「单元格属性…」）。
     ///
     /// 这条是验收门 §四.2 的机器判据：任何人加/删一项，这里先红。
     #[test]
     fn 菜单项数与官方账一致() {
         assert_eq!(FILE_ITEMS.len(), 10, "文件菜单");
-        assert_eq!(EDIT_ITEMS.len(), 4, "编辑菜单");
+        assert_eq!(EDIT_ITEMS.len(), 5, "编辑菜单（撤销/重做/填充选区/单元格属性/设置）");
         assert_eq!(
             VIEW_ITEMS.len(),
             20,
@@ -1028,7 +1042,7 @@ mod tests {
         );
         assert_eq!(TOOLS_ITEMS.len(), 6, "工具菜单");
         assert_eq!(HELP_ITEMS.len(), 2, "帮助菜单（键盘快捷键 + 关于）");
-        assert_eq!(item_count(), 42, "5 个菜单合计");
+        assert_eq!(item_count(), 43, "5 个菜单合计");
         assert_eq!(MENUS.len(), 5);
         // 视图里的面板开关正好 8 个，且与 PanelId::ALL 一一对应
         let panels: Vec<_> = VIEW_ITEMS
@@ -1059,7 +1073,7 @@ mod tests {
                 assert_eq!(MENUS[mi].items[ii].action.id(), id);
             }
         }
-        assert_eq!(ids.len(), 42);
+        assert_eq!(ids.len(), 43);
         assert!(find_by_id("no.such_item").is_none());
     }
 
@@ -1197,7 +1211,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(ready + need_map + todo, 42);
+        assert_eq!(ready + need_map + todo, 43);
         // 任务书 §三.3 点名必须真接上的那一批：逐条钉住，防止有人把它们改回 Todo
         for a in [
             Action::OpenMap,
@@ -1390,7 +1404,11 @@ mod tests {
                 .collect()
         };
         assert_eq!(seps(&FILE_ITEMS), vec![6, 9], "文件：导出小地图之后、退出之前");
-        assert_eq!(seps(&EDIT_ITEMS), vec![2, 3], "编辑：撤销/重做之后、填充之后");
+        assert_eq!(
+            seps(&EDIT_ITEMS),
+            vec![2, 4],
+            "编辑：撤销/重做之后一条、设置之前一条（2026-11-07 新增「单元格属性…」插在填充之后、不自带分隔线）"
+        );
         // 2026-11-05：面板开关由 7 变 8（新增「地图列表」），分隔线**位置不变**
         // （仍是"面板组之前"一条），下标因此从 16 后移一位到 17。
         // 2026-11-07：视图第 2 项插入「地砖信息悬浮」（官方 XAML 里它**前面带分隔线**、
@@ -1462,7 +1480,7 @@ mod tests {
     #[test]
     fn 顶级42项与子项5项计数() {
         // ① 顶级是 42（2026-11-06 帮助 1 → 2；2026-11-07 视图 19 → 20），子项不许把它撑大
-        assert_eq!(item_count(), 42);
+        assert_eq!(item_count(), 43);
         // ② 静态子项 5，且顺序照官方
         assert_eq!(sub_count(), 5, "地图光照 3 + 语言 2");
         assert_eq!(

@@ -158,6 +158,7 @@ impl EditCmd {
             EditCmd::Core(Command::PasteSelection { .. }) => "PasteSelection",
             EditCmd::Core(Command::DeleteSelection) => "DeleteSelection",
             EditCmd::Core(Command::FillSelection) => "FillSelection",
+            EditCmd::Core(Command::SetMetadata { .. }) => "SetMetadata",
             EditCmd::Core(Command::PlaceStamp { .. }) => "PlaceStamp",
             EditCmd::Core(Command::Undo) => "Undo",
             EditCmd::Core(Command::Redo) => "Redo",
@@ -192,6 +193,8 @@ impl EditCmd {
             | EditCmd::Core(Command::CutSelection)
             | EditCmd::Core(Command::DeleteSelection)
             | EditCmd::Core(Command::FillSelection) => None,
+            // 元数据一次改**一整片区域**（`SetMetadata.area`）⇒ 单点装不下，与选区同口径
+            EditCmd::Core(Command::SetMetadata { .. }) => None,
             EditCmd::Core(Command::SetLayer { .. })
             | EditCmd::Core(Command::SetBrushSize { .. })
             | EditCmd::Core(Command::SetTool { .. })
@@ -322,6 +325,18 @@ fn parse_tagged(tag: &str, body: &Value) -> ApiResult<EditCmd> {
         "CutSelection" => Ok(EditCmd::Core(Command::CutSelection)),
         "DeleteSelection" => Ok(EditCmd::Core(Command::DeleteSelection)),
         "FillSelection" => Ok(EditCmd::Core(Command::FillSelection)),
+        // **单元格元数据**（R12-F1）：`null` / 缺省 = 这一字段不动（上游 `ApplyMetadata` 的 `byte?`）。
+        // ⚠ `light: 0` 与 `light: null` **不是一回事**：`0` 是"把光照设成 0"，
+        //    `null` 是"光照不动" —— 这正是上游 Mixed 留空的语义。
+        "SetMetadata" => {
+            let o = as_object(body, "SetMetadata")?;
+            Ok(EditCmd::Core(Command::SetMetadata {
+                light: opt_u8_field(o, "light", "SetMetadata")?,
+                door: opt_u8_field(o, "door", "SetMetadata")?,
+                offset: opt_u8_field(o, "offset", "SetMetadata")?,
+                area: area_field(o, "area", "SetMetadata")?,
+            }))
+        }
         "SetBrushFromPalette" => {
             let o = as_object(body, "SetBrushFromPalette")?;
             let family = parse_family(&str_field(o, "family", "SetBrushFromPalette")?)?;
@@ -348,7 +363,8 @@ fn parse_tagged(tag: &str, body: &Value) -> ApiResult<EditCmd> {
         other => Err(ApiError::bad_request(format!(
             "未知命令：{other:?}（可用：SetLayer / SetBrushSize / SetTool / Paint / Stroke / \
              Erase / Fill / Pick / SetSelection / ClearSelection / CopySelection / CutSelection / \
-             PasteSelection / DeleteSelection / FillSelection / PlaceStamp / Undo / Redo / Save / \
+             PasteSelection / DeleteSelection / FillSelection / SetMetadata / PlaceStamp / Undo / Redo / \
+             Save / \
              SetBrushFromPalette）"
         ))),
     }
@@ -436,6 +452,49 @@ fn str_field(o: &Map<String, Value>, key: &str, cmd: &str) -> ApiResult<String> 
 fn u16_field(o: &Map<String, Value>, key: &str, cmd: &str) -> ApiResult<u16> {
     let n = u64_field(o, key, cmd, u64::from(u16::MAX))?;
     Ok(n as u16)
+}
+
+/// 取**可选 `u8`** 字段：缺省或 `null` ⇒ `None`（"这一字段不动"），数字则必须落在 `0..=255`。
+///
+/// ⚠ 这是 R12-F1 的关键口径：`0` 必须解析成 `Some(0)`（"设成 0"），
+/// 只有 `null` / 缺省才是 `None`（"不动"）—— 两者混起来就会把 Mixed 选区抹平。
+fn opt_u8_field(o: &Map<String, Value>, key: &str, cmd: &str) -> ApiResult<Option<u8>> {
+    match o.get(key) {
+        None | Some(Value::Null) => Ok(None),
+        Some(_) => {
+            let n = u64_field(o, key, cmd, u64::from(u8::MAX))?;
+            Ok(Some(n as u8))
+        }
+    }
+}
+
+/// 取**区域**字段 `[x0, y0, x1, y1]`（闭区间，四元组；不是两点）。
+fn area_field(o: &Map<String, Value>, key: &str, cmd: &str) -> ApiResult<(u16, u16, u16, u16)> {
+    let arr = match o.get(key) {
+        Some(Value::Array(a)) => a,
+        Some(other) => {
+            return Err(ApiError::bad_request(format!(
+                "{cmd}.{key} 必须是 [x0, y0, x1, y1] 数组（闭区间），收到：{other}"
+            )))
+        }
+        None => return Err(ApiError::bad_request(format!("{cmd} 缺少字段 {key}"))),
+    };
+    if arr.len() != 4 {
+        return Err(ApiError::bad_request(format!(
+            "{cmd}.{key} 必须是 4 个数字 [x0, y0, x1, y1]（闭区间），收到 {} 个",
+            arr.len()
+        )));
+    }
+    let mut 值 = [0u16; 4];
+    for (i, v) in arr.iter().enumerate() {
+        let n = v.as_u64().filter(|n| *n <= u64::from(u16::MAX)).ok_or_else(|| {
+            ApiError::bad_request(format!(
+                "{cmd}.{key}[{i}] 必须是 0..=65535 的整数，收到：{v}"
+            ))
+        })?;
+        值[i] = n as u16;
+    }
+    Ok((值[0], 值[1], 值[2], 值[3]))
 }
 
 /// 取 `u32` 字段。

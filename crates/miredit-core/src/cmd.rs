@@ -168,6 +168,27 @@ pub enum Command {
         /// 下端行（**含**）。
         y1: u16,
     },
+    /// **批量改三格属性**：光照 / 门索引 / 门偏移（R12-F1）。
+    ///
+    /// `area` 是**闭区间**格坐标 `(x0, y0, x1, y1)`，越界会被夹到图内（语义见
+    /// [`crate::clamp_area`]）；`None` = **这一字段不动**（上游 `ApplyMetadata` 的 `byte?`）。
+    ///
+    /// 三条硬口径（`MapViewport.cs:579-597`）：
+    /// ① 三个都 `None` ⇒ **一格不动、不开撤销步**；② **只写给了的字段**，值没变的格跳过；
+    /// ③ 整批 = **一步撤销**，`changed` = 真正改动的格数。
+    ///
+    /// ⚠ 没有门字节的格式（Mir3 两档）：`door`/`offset` 被忽略并在 `note` 里说明
+    /// （[`crate::no_door_bytes_reason`]），绝不写一个"保存时静默消失"的值。
+    SetMetadata {
+        /// 光照（`0..=255`）；`None` = 不改。
+        light: Option<u8>,
+        /// 门索引（`0..=255`）；`None` = 不改。
+        door: Option<u8>,
+        /// 门偏移（`0..=255`）；`None` = 不改。
+        offset: Option<u8>,
+        /// 闭区间区域 `(x0, y0, x1, y1)`。
+        area: (u16, u16, u16, u16),
+    },
     /// **取消选区**（`Deselect()`，`MapViewport.cs:103-108`）。**不清剪贴板**。
     ClearSelection,
     /// **复制选区进剪贴板**（整块都抓，含空格）。来源：`RegionCopy.cs:101`、`:21-27`。
@@ -480,6 +501,41 @@ pub fn apply(session: &mut EditSession, cmd: Command) -> Result<Outcome, CoreErr
             };
             Ok(session.outcome(n, note))
         }
+        Command::SetMetadata {
+            light,
+            door,
+            offset,
+            area,
+        } => {
+            // 门字段在 Mir3 两档上无处可写 ⇒ 先滤掉（原因由 session 记进 note）
+            let 无门字节 = !session.format_has_door_bytes();
+            let 请求字段: Vec<&str> = [
+                light.map(|_| "光照"),
+                door.map(|_| "门索引"),
+                offset.map(|_| "门偏移"),
+            ]
+            .into_iter()
+            .flatten()
+            .collect();
+            let n = session.apply_metadata(light, door, offset, area);
+            let note = if n == 0 {
+                // 0 格时优先说"为什么"：要么没有门字节，要么这些值本来就是这样
+                session
+                    .note()
+                    .map(str::to_string)
+                    .unwrap_or_else(|| "这些值本来就是这样，一格未改".to_string())
+            } else {
+                let mut s = format!("改属性 {n} 格（{}）", 请求字段.join(" / "));
+                if 无门字节 {
+                    if let Some(why) = session.note() {
+                        s.push_str("；另：");
+                        s.push_str(why);
+                    }
+                }
+                s
+            };
+            Ok(session.outcome(n, Some(note)))
+        }
         Command::Undo => {
             let n = session.undo();
             let note = if n == 0 {
@@ -708,15 +764,16 @@ mod tests {
         assert!(out.note.unwrap().contains("物体层"));
     }
 
-    /// 十九条命令都必须能构造出来（`Command` 是网页层唯一契约，少一条就断链）。
+    /// 二十条命令都必须能构造出来（`Command` 是网页层唯一契约，少一条就断链）。
     ///
     /// 2026-11-05：由九条增到十条 —— 新增 [`Command::Erase`]（网页版也要擦除，
     /// 必须走同一条 `apply` 通路，否则就是"两条路径"的分叉起点）；
     /// 同日再由十条增到十二条 —— 新增 [`Command::SetTool`]（擦完必须能切回画笔，
     /// 见 [`Command::Erase`] 的文档）与 [`Command::PlaceStamp`]（印章放置）；
-    /// 同日再由十二条增到十九条 —— 新增选区/剪贴板 7 条（审计 P0-4）。
+    /// 同日再由十二条增到十九条 —— 新增选区/剪贴板 7 条（审计 P0-4）；
+    /// 2026-11-07 由十九条增到二十条 —— 新增 [Command::SetMetadata]（R12-F1 单元格元数据）。
     #[test]
-    fn 命令集封闭十九条() {
+    fn 命令集封闭二十条() {
         let cmds = [
             Command::SetLayer {
                 layer: "ground".to_string(),
@@ -744,6 +801,12 @@ mod tests {
                 x1: 1,
                 y1: 1,
             },
+            Command::SetMetadata {
+                light: Some(1),
+                door: None,
+                offset: None,
+                area: (0, 0, 0, 0),
+            },
             Command::ClearSelection,
             Command::CopySelection,
             Command::CutSelection,
@@ -754,7 +817,7 @@ mod tests {
             Command::Redo,
             Command::Save,
         ];
-        assert_eq!(cmds.len(), 19);
+        assert_eq!(cmds.len(), 20);
         // 每条都能 clone / 比较（网页层要能把它当值传来传去）
         for c in &cmds {
             assert_eq!(c.clone(), *c);
@@ -936,4 +999,238 @@ mod tests {
         assert!(out.note.unwrap().contains("越界"));
         assert_eq!(ed.brush(), before, "越界不许动笔刷");
     }
+
+    // ─────────────────── R12-F1：单元格元数据（光照 / 门索引 / 门偏移） ───────────────────
+    //
+    // 夹具口径（`testutil.rs:28-29`）：每格 `door_index = 7`（off6）、`light = 9`（off11），
+    // `door_offset` 保持 0（off7）。所以"值相同跳过"这一类用例可以直接拿 9/7/0 去撞。
+
+    /// **只写给了的字段 + 整批一步撤销**（上游 `MapViewport.cs:590-593`）。
+    #[test]
+    fn 改属性只写给了的字段且一步撤销() {
+        let mut ed = 会话(4, 4, CellFormat::Old12);
+        let 原 = ed.map().to_bytes();
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(200),
+                door: None,
+                offset: None,
+                area: (1, 1, 2, 2),
+            },
+        )
+        .expect("改属性不该 Err");
+        assert_eq!(out.changed, 4, "2×2 选区 = 4 格");
+        assert!(out.dirty && out.can_undo);
+        assert_eq!(ed.undo_len(), 1, "整批 = 一步撤销");
+        for (x, y) in [(1u16, 1u16), (2, 1), (1, 2), (2, 2)] {
+            let c = *ed.map().cell(x, y).expect("图内格");
+            assert_eq!(c.light, 200, "({x},{y}) 光照要改");
+            assert_eq!(c.door_index, 7, "({x},{y}) 门索引没给 ⇒ 原值");
+            assert_eq!(c.door_offset, 0, "({x},{y}) 门偏移没给 ⇒ 原值");
+            assert_eq!(c.bk_img, x * 4 + y + 1, "图号不许动（夹具按列优先 index = x*h + y）");
+        }
+        // 区域外的格：光照仍是夹具原值 9
+        assert_eq!(ed.map().cell(0, 0).unwrap().light, 9, "区域外不许改");
+        // 撤销一步 ⇒ 逐字节回原样
+        apply(&mut ed, Command::Undo).unwrap();
+        assert_eq!(ed.map().to_bytes(), 原, "撤销必须逐字节还原");
+        assert!(!ed.dirty());
+    }
+
+    /// **三个都没给 ⇒ 一格不动、不开撤销步**（上游 `MapViewport.cs:582` 的早退）。
+    #[test]
+    fn 改属性三个都空不开撤销步() {
+        let mut ed = 会话(4, 4, CellFormat::New14);
+        let 原 = ed.map().to_bytes();
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: None,
+                door: None,
+                offset: None,
+                area: (0, 0, 3, 3),
+            },
+        )
+        .expect("全空不是程序故障");
+        assert_eq!(out.changed, 0);
+        assert!(!out.dirty, "全空不许置脏");
+        assert!(!out.can_undo, "全空不许产生撤销步");
+        assert_eq!(ed.undo_len(), 0);
+        assert_eq!(ed.map().to_bytes(), 原);
+        assert!(out.note.unwrap().contains("本来"));
+    }
+
+    /// **值本来就是这样 ⇒ 跳过**（上游 `:593` 的 `SameContents`）。
+    #[test]
+    fn 改属性值相同跳过() {
+        let mut ed = 会话(4, 4, CellFormat::New14);
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(9),
+                door: Some(7),
+                offset: Some(0),
+                area: (0, 0, 3, 3),
+            },
+        )
+        .expect("不做改动不是程序故障");
+        assert_eq!(out.changed, 0, "夹具本来 light=9/door=7/offset=0");
+        assert_eq!(ed.undo_len(), 0, "没变就不许开撤销步");
+        assert!(!out.dirty);
+    }
+
+    /// **区域夹到图内**（上游 `:585-586` 的 `Math.Max/Min`）。
+    #[test]
+    fn 改属性区域夹紧到图内() {
+        let mut ed = 会话(4, 4, CellFormat::New14);
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(1),
+                door: None,
+                offset: None,
+                area: (2, 2, 99, 99),
+            },
+        )
+        .expect("越界区域只夹紧不报错");
+        assert_eq!(out.changed, 4, "夹成 2..=3 × 2..=3");
+        assert_eq!(ed.undo_len(), 1);
+        assert_eq!(ed.map().cell(3, 3).unwrap().light, 1);
+        assert_eq!(ed.map().cell(0, 0).unwrap().light, 9, "夹紧不许漏到区域外");
+        // 起点也在图外 ⇒ 夹成右下角那一格
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(2),
+                door: None,
+                offset: None,
+                area: (50, 50, 60, 60),
+            },
+        )
+        .expect("全越界区域夹成 1 格");
+        assert_eq!(out.changed, 1, "只夹到 (3,3)");
+    }
+
+    /// **混合值不许被抹平**：没给 `light` 时，选区里各不相同的光照必须原样留着。
+    #[test]
+    fn 改属性不抹平没给的字段() {
+        let mut ed = 会话(4, 4, CellFormat::New14);
+        {
+            let map = ed.document_mut().view_mut();
+            map.cells[0].light = 55; // (0,0)：列优先第一格
+        }
+        let 原 = ed.map().to_bytes();
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: None,
+                door: Some(4),
+                offset: None,
+                area: (0, 0, 1, 0),
+            },
+        )
+        .expect("只改门索引");
+        assert_eq!(out.changed, 2, "两格的门索引都从 7 变 4");
+        assert_eq!(ed.map().cell(0, 0).unwrap().light, 55, "没给的 light 不许被抹平成 9");
+        assert_eq!(ed.map().cell(1, 0).unwrap().light, 9, "另一格也是原值");
+        assert_eq!(ed.map().cell(0, 0).unwrap().door_index, 4);
+        apply(&mut ed, Command::Undo).unwrap();
+        assert_eq!(ed.map().to_bytes(), 原);
+    }
+
+    /// **Old12 的字节断言**：一次改三字段 ⇒ 只许动 `off6`（门索引）/ `off7`（门偏移）/
+    /// `off11`（光照）三个字节，头部与其它格一个字节都不动。
+    #[test]
+    fn 改属性旧档只变三个字节() {
+        let mut ed = 会话(2, 2, CellFormat::Old12);
+        let 原 = ed.map().to_bytes();
+        assert_eq!(原.len(), mir2_map::HEADER_LEN + 4 * 12, "12 B/格");
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(5),
+                door: Some(6),
+                offset: Some(8),
+                area: (0, 0, 0, 0),
+            },
+        )
+        .expect("改属性");
+        assert_eq!(out.changed, 1);
+        let 新 = ed.map().to_bytes();
+        let 基 = mir2_map::HEADER_LEN; // (0,0) 是第一格（列优先）
+        let mut 变: Vec<usize> = (0..原.len()).filter(|i| 原[*i] != 新[*i]).collect();
+        变.sort_unstable();
+        assert_eq!(
+            变,
+            vec![基 + 6, 基 + 7, 基 + 11],
+            "只许动 door_index(off6) / door_offset(off7) / light(off11)"
+        );
+        assert_eq!((新[基 + 6], 新[基 + 7], 新[基 + 11]), (6, 8, 5));
+    }
+
+    /// **Mir3 两档没有门字节**：门字段被忽略（0 格、0 撤销步、说清原因），光照照常可写。
+    ///
+    /// 依据：`mir2-format/src/formats/mir3_wemade.rs:61` 记 C# `MapCodec:432` 的
+    /// 「mir3 maps dont have doors」——那 3 字节只是尾区原样保留，不由 `Cell` 建模。
+    #[test]
+    fn 改属性mir3门字段被忽略且说清原因() {
+        let raw = 造mir3图(4, 2);
+        let doc = crate::document::Document::from_bytes(
+            std::path::Path::new(r"I:\__miredit_core_synth__\mir3.map"),
+            raw,
+        )
+        .expect("Mir3 合成图应能解析");
+        assert_eq!(doc.format_id(), mir2_format::FormatId::Mir3Wemade);
+        let mut ed = EditSession::new(doc);
+        let 原 = ed.map().to_bytes();
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: None,
+                door: Some(3),
+                offset: Some(4),
+                area: (0, 0, 3, 1),
+            },
+        )
+        .expect("门字段无处可写不是程序故障");
+        assert_eq!(out.changed, 0, "没有门字节 ⇒ 一格不改");
+        assert_eq!(ed.undo_len(), 0, "更不许开撤销步（否则会造出存不掉的脏状态）");
+        assert_eq!(ed.map().to_bytes(), 原);
+        let note = out.note.expect("必须说清原因");
+        assert!(note.contains("mir3 maps dont have doors"), "{note}");
+        // 光照仍然可写，并落在格内偏移 12（写回原样）
+        let out = apply(
+            &mut ed,
+            Command::SetMetadata {
+                light: Some(200),
+                door: None,
+                offset: None,
+                area: (0, 0, 0, 0),
+            },
+        )
+        .expect("光照可写");
+        assert_eq!(out.changed, 1);
+        // 格起点取**这份文档自己的**头长（= 该文档的 `cells_offset`）：Mir3 的头随"半分辨率背景块"
+        // 变化，外部重算容易和解析端差一块；用文档自己的头长最稳。
+        let 格起点 = ed.document().raw_header().len();
+        let 新 = ed.document().to_bytes();
+        assert_eq!(新[格起点 + 12], 200, "Mir3 的光照在格内偏移 12（尾区不重复存 light）");
+    }
+
+    /// 造一张 `w×h` 的 **Mir3Wemade** 合成字节流（本仓无真实样本，照格式模块测试的构造法）：
+    /// 28 字节头（`b[20..22] = 1`、`b[22..24] = w`、`b[24..26] = h`）+ 半分辨率背景块 + 14 B 格。
+    fn 造mir3图(w: u16, h: u16) -> Vec<u8> {
+        let 格起点 = mir2_format::formats::mir3_wemade::Mir3Wemade::cells_offset(w, h);
+        let mut b = vec![
+            0u8;
+            格起点
+                + mir2_format::formats::mir3_wemade::CELL_LEN * (w as usize * h as usize)
+        ];
+        b[20..22].copy_from_slice(&1i16.to_le_bytes());
+        b[22..24].copy_from_slice(&(w as i16).to_le_bytes());
+        b[24..26].copy_from_slice(&(h as i16).to_le_bytes());
+        b
+    }
+
 }

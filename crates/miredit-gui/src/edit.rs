@@ -722,6 +722,34 @@ impl EditSession {
         self.with_map(map, |core| core.place_stamp_by_id(x, y, id))
     }
 
+    // ── 单元格元数据（R12-F1：光照 / 门索引 / 门偏移） ──
+
+    /// **批量改三格属性**（光照 / 门索引 / 门偏移）。
+    ///
+    /// 语义全在内核 [`miredit_core::EditSession::apply_metadata`]：三者全空 ⇒ 一格不动、
+    /// 不开撤销步；区域夹紧；**逐格只写给了的字段**；值没变的格跳过；整批 = **一步撤销**。
+    /// 返回真正改动的格数。
+    ///
+    /// 为什么吃 `&mut Map`：宿主与内核各持一份视图（[`Self::with_map`] 的 `mem::swap`），
+    /// 改完必须让两边一致 —— 与 [`Self::place_stamp_by_id`] 同一套手法。
+    pub fn apply_metadata(
+        &mut self,
+        map: &mut Map,
+        light: Option<u8>,
+        door: Option<u8>,
+        offset: Option<u8>,
+        area: (u16, u16, u16, u16),
+    ) -> usize {
+        self.with_map(map, |core| core.apply_metadata(light, door, offset, area))
+    }
+
+    /// 本格式有没有门字节（Mir3 两档**没有**）—— 模态里禁用两个门输入框用。
+    ///
+    /// 判据在内核（[`miredit_core::no_door_bytes_reason`]），本方法只转发。
+    pub fn format_has_door_bytes(&self) -> bool {
+        self.core.format_has_door_bytes()
+    }
+
     // ── 矩形选区 / 剪贴板（内核 `session.rs` 选区段的宿主入口） ──
 
     /// 当前矩形选区（`None` = 没有选区）。**只读会话状态，不吃地图**。

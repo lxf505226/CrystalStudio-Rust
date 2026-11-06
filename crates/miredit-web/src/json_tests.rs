@@ -207,3 +207,139 @@ fn 改格命令都报坐标() {
     assert_eq!(stamp.touched_cell(), Some((11, 12)));
     assert_eq!(stamp.name(), "PlaceStamp");
 }
+
+// ───────────────────────── R12-F1：单元格元数据（SetMetadata） ─────────────────────────
+
+/// **`0` ≠ `null`**：`light: 0` 必须解析成 `Some(0)`（"设成 0"），
+/// `light: null` / 缺省才是 `None`（"不动"）。这是 Mixed 选区不被抹平的前提。
+///
+/// 顺带钉住 `area` 的四元组形状与"缺字段报 400"。
+#[test]
+fn 元数据命令零与空不是一回事() {
+    let cmd = 解析(
+        r#"{"SetMetadata":{"light":0,"door":255,"offset":null,"area":[1,2,3,4]}}"#,
+    )
+    .expect("应能解析");
+    let EditCmd::Core(Command::SetMetadata {
+        light,
+        door,
+        offset,
+        area,
+    }) = cmd
+    else {
+        panic!("必须解析成 SetMetadata");
+    };
+    assert_eq!(light, Some(0), "light: 0 ⇒ Some(0)（不是 None）");
+    assert_eq!(door, Some(255), "door: 255 ⇒ Some(255)");
+    assert_eq!(offset, None, "offset: null ⇒ None（这一字段不动）");
+    assert_eq!(area, (1, 2, 3, 4), "area 是闭区间四元组");
+
+    // 缺字段 ⇒ 全部 None（"什么都不改"），不是 400：这条让前端可以只发一个字段
+    let cmd = 解析(r#"{"SetMetadata":{"light":7,"area":[0,0,0,0]}}"#).expect("缺省字段合法");
+    let EditCmd::Core(Command::SetMetadata {
+        light,
+        door,
+        offset,
+        ..
+    }) = cmd
+    else {
+        panic!("必须解析成 SetMetadata");
+    };
+    assert_eq!((light, door, offset), (Some(7), None, None));
+
+    // 形状不对 ⇒ 400（并且不会静默当成 0）
+    for bad in [
+        r#"{"SetMetadata":{"light":256,"area":[0,0,0,0]}}"#,
+        r#"{"SetMetadata":{"light":-1,"area":[0,0,0,0]}}"#,
+        r#"{"SetMetadata":{"light":"7","area":[0,0,0,0]}}"#,
+        r#"{"SetMetadata":{"light":7,"area":[0,0,0]}}"#,
+        r#"{"SetMetadata":{"light":7}}"#,
+    ] {
+        assert!(解析(bad).is_err(), "{bad} 必须 400");
+    }
+}
+
+/// **字节断言**：`SetMetadata` 落到 `Old12` 上只许动 `off6`（门索引）/ `off7`（门偏移）/
+/// `off11`（光照）三个字节；Mixed（没给的字段）保持原值；整批 = 一步撤销且撤销回原字节。
+///
+/// 这里走的是 `parse_edit_cmd`（web 的 JSON 层）→ `miredit_core::apply` 的**同一条链路**，
+/// 只把 HTTP 那一层摘掉；字节口径由 core 的 writer 决定（`old12.rs`）。
+#[test]
+fn 元数据命令只动三个字节且一步撤销() {
+    use miredit_core::{Command as C, Document, EditSession};
+
+    /// 12 B/格合成字节：52 字节头；每格 `door=7`（off6）、`light=9`（off11）、偏移 0（off7）。
+    fn 造旧档(w: u16, h: u16) -> Vec<u8> {
+        let mut b = vec![0u8; 52 + 12 * (w as usize * h as usize)];
+        b[0..2].copy_from_slice(&w.to_le_bytes());
+        b[2..4].copy_from_slice(&h.to_le_bytes());
+        for i in 0..(w as usize * h as usize) {
+            let base = 52 + i * 12;
+            b[base..base + 2].copy_from_slice(&((i as u16) + 1).to_le_bytes());
+            b[base + 6] = 7;
+            b[base + 11] = 9;
+        }
+        b
+    }
+
+    let 原 = 造旧档(2, 2);
+    let doc = Document::from_bytes(std::path::Path::new(r"I:\__web_meta__\m.map"), 原.clone())
+        .expect("合成 Old12 图应能解析");
+    let mut ed = EditSession::new(doc);
+
+    // ① 只给 light ⇒ 只动 off11（门/偏移保持原值，Mixed 不被抹平）
+    let EditCmd::Core(cmd) = 解析(r#"{"SetMetadata":{"light":200,"area":[0,0,0,0]}}"#)
+        .expect("解析")
+    else {
+        panic!("必须是 SetMetadata");
+    };
+    let out = miredit_core::apply(&mut ed, cmd).expect("应用");
+    assert_eq!(out.changed, 1, "1 格真的改了");
+    assert!(
+        out.note.as_deref().unwrap_or("").contains("光照"),
+        "回执要说清改的是哪个字段：{:?}",
+        out.note
+    );
+    let 新 = ed.document().to_bytes();
+    let 基 = 52;
+    let mut 变: Vec<usize> = (0..原.len()).filter(|i| 原[*i] != 新[*i]).collect();
+    变.sort_unstable();
+    assert_eq!(变, vec![基 + 11], "只给 light ⇒ 只许动 off11");
+    assert_eq!((新[基 + 6], 新[基 + 7], 新[基 + 11]), (7, 0, 200));
+
+    // ② 三字段全给 ⇒ off6 / off7 / off11 各变一个字节
+    let EditCmd::Core(cmd) =
+        解析(r#"{"SetMetadata":{"light":5,"door":6,"offset":8,"area":[0,0,0,0]}}"#).expect("解析")
+    else {
+        panic!("必须是 SetMetadata");
+    };
+    let out = miredit_core::apply(&mut ed, cmd).expect("应用");
+    assert_eq!(out.changed, 1);
+    let 新2 = ed.document().to_bytes();
+    let mut 变2: Vec<usize> = (0..新.len()).filter(|i| 新[*i] != 新2[*i]).collect();
+    变2.sort_unstable();
+    assert_eq!(
+        变2,
+        vec![基 + 6, 基 + 7, 基 + 11],
+        "只许动 door(off6)/offset(off7)/light(off11)"
+    );
+    assert_eq!((新2[基 + 6], 新2[基 + 7], 新2[基 + 11]), (6, 8, 5));
+
+    // ③ 整批 = 一步撤销；撤两步回到最初字节
+    assert_eq!(ed.undo_len(), 2, "两次改属性 = 两步（每批一步）");
+    miredit_core::apply(&mut ed, C::Undo).expect("撤销第二步");
+    assert_eq!(ed.document().to_bytes(), 新);
+    miredit_core::apply(&mut ed, C::Undo).expect("撤销第一步");
+    assert_eq!(ed.document().to_bytes(), 原, "撤销到底必须逐字节回原样");
+
+    // ④ 三个都 null ⇒ 一格不动、不开撤销步
+    let EditCmd::Core(cmd) = 解析(r#"{"SetMetadata":{"light":null,"door":null,"offset":null,"area":[0,0,1,1]}}"#)
+        .expect("全空合法")
+    else {
+        panic!("必须是 SetMetadata");
+    };
+    let out = miredit_core::apply(&mut ed, cmd).expect("全空不报错");
+    assert_eq!(out.changed, 0);
+    assert_eq!(ed.undo_len(), 0, "全空不许开撤销步");
+    assert_eq!(ed.document().to_bytes(), 原);
+}

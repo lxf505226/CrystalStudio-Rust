@@ -58,6 +58,7 @@ use crate::document::{cell_at, Document};
 use crate::fill::{align_start, collect_region, fill_key, FillOutcome, RegionOutcome};
 use crate::layer::EditLayer;
 use crate::layer_counts::LayerCounts;
+use crate::metadata::{clamp_area, no_door_bytes_reason, Area};
 use crate::paint::{paint, PaintOutcome, Tool};
 use crate::selection::{clear_plan, Clipboard, Selection, SelectionState};
 use crate::stamp::{
@@ -1318,6 +1319,100 @@ impl EditSession {
     // （`brush_from_cell` 用 `layer.pick_family()` / `layer.img_of()`，五层都取得到内容）。
     // 保留更宽能力的理由：阻挡层"吸同一格内容"已是既有用例
     // （`吸管在阻挡层取同一格内容`、`阻挡层接受地图吸来的笔刷`），收紧会砍功能。
+
+    // ── 单元格元数据：光照 / 门索引 / 门偏移（R12-F1） ──
+
+    /// 本格式的格布局里**有没有门字节**（`door_index` / `door_offset` 能不能落盘）。
+    ///
+    /// 判据与原因在 [`crate::no_door_bytes_reason`]（单一实现）：Mir3 两档**没有**门字节
+    /// （`mir2-format/src/formats/mir3_wemade.rs:61` 记 C# 的「mir3 maps dont have doors」），
+    /// 其余 7 档 writer 逐字节写出。
+    #[must_use]
+    pub fn format_has_door_bytes(&self) -> bool {
+        no_door_bytes_reason(self.doc.format_id()).is_none()
+    }
+
+    /// **批量改三格属性**：光照 / 门索引 / 门偏移（R12-F1）。
+    ///
+    /// 口径 = 上游 `MapViewport.cs:579-597`（`ApplyMetadata`），逐条：
+    ///
+    /// | 规则 | 上游出处 | 本方法的做法 |
+    /// |---|---|---|
+    /// | 三个都没给 ⇒ 直接返回 | `:582` | **一格不动、连撤销步都不开**，返回 0 |
+    /// | 区域夹进图内 | `:585-586` | [`clamp_area`]（闭区间口径，夹空 ⇒ 0） |
+    /// | **逐格只写给了的字段** | `:590-592` | `Some(..)` 才覆盖，其余字段原样保留 |
+    /// | 值没变的格跳过 | `:593` `if (cell.SameContents(original)) continue;` | `after == before` ⇒ 跳过 |
+    /// | 整批 = 一步撤销 | `History.Begin/Commit` | [`UndoStack::commit`]（与填充/印章同一记账） |
+    ///
+    /// # 没有门字节的格式（Mir3 两档）
+    ///
+    /// `door` / `offset` 会被**丢掉**并写进 [`Self::note`]（[`crate::no_door_bytes_reason`] 的原文）：
+    /// 与其写一个"看着改了、保存时静默消失"的视图值（那会造出一个永远存不掉的脏状态），
+    /// 不如当场说清。只给了光照就只改光照；三个都被丢掉就返回 0。
+    ///
+    /// 返回**真正改动**的格数（= 那一步撤销里的格数）。
+    pub fn apply_metadata(
+        &mut self,
+        light: Option<u8>,
+        door: Option<u8>,
+        offset: Option<u8>,
+        area: Area,
+    ) -> usize {
+        // ① 门字段先过格式能力闸门（Mir3 两档没有门字节）
+        let (door, offset, 丢门原因) = match no_door_bytes_reason(self.doc.format_id()) {
+            Some(why) => (None, None, Some(why)),
+            None => (door, offset, None),
+        };
+        self.note = 丢门原因.map(str::to_string);
+        // ② 三个都没给 ⇒ 一格不动、不开撤销步（上游 `:582`）
+        if light.is_none() && door.is_none() && offset.is_none() {
+            return 0;
+        }
+        // ③ 夹紧区域（上游 `:585-586`）；夹空 ⇒ 0
+        let (w, h) = (self.doc.view().width, self.doc.view().height);
+        let Some((x0, y0, x1, y1)) = clamp_area(area, w, h) else {
+            return 0;
+        };
+        // ④ 逐格：只写给了的字段，值没变就跳过（上游 `:590-593`）
+        let mut changes: Vec<Change> = Vec::new();
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                let Some(before) = self.doc.view().cell(x, y).copied() else {
+                    continue;
+                };
+                let mut after = before;
+                if let Some(v) = light {
+                    after.light = v;
+                }
+                if let Some(v) = door {
+                    after.door_index = v;
+                }
+                if let Some(v) = offset {
+                    after.door_offset = v;
+                }
+                if after == before {
+                    continue;
+                }
+                changes.push(Change {
+                    x,
+                    y,
+                    before,
+                    after,
+                });
+            }
+        }
+        if changes.is_empty() {
+            return 0;
+        }
+        // ⑤ 写视图 + 整批一步撤销（上游 `History.Begin/Commit`）
+        let n = changes.len();
+        for c in &changes {
+            self.doc.write_view_cell(c.x, c.y, c.after);
+        }
+        self.undo.commit(changes);
+        self.sync_dirty();
+        n
+    }
 
     /// 吸管读**整格三族**（三个图号字段原样）；越界 = `None`。来源：`edit.rs:1218-1227`。
     ///

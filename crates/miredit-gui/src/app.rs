@@ -813,6 +813,45 @@ impl MireditApp {
     /// （见 [`CanvasView::ensure`] 与 [`Self::refresh_cell_lines`]），
     /// 于是"改了图就重渲一次"是自动的，而且**只在真改过的帧里发生**——
     /// 不会每帧重渲（重渲一次在 0.25× 下要出 12000 格，约 20~40 ms）。
+    /// **提交「单元格属性」模态的值**（R12-F1）：返回 `(状态栏回执, 是否警示色)`。
+    ///
+    /// 语义全在 `miredit_core::EditSession::apply_metadata`（三者全空 ⇒ 不动；
+    /// 区域夹紧；只写给了的字段；值没变跳过；整批 = 一步撤销）。
+    /// 本方法只做三件宿主的事：① 把 `DocState.map` 交给会话；② 改了图就 `touch_map()`
+    /// （画布缓存键 + 单元格信息都靠它）；③ 折一句回执（内核的 `note` 原样附在后面，
+    /// 例如 Mir3 上"门字段被忽略"那句）。
+    fn apply_cell_props(
+        &mut self,
+        light: Option<u8>,
+        door: Option<u8>,
+        offset: Option<u8>,
+    ) -> (String, bool) {
+        let Overlay::CellProps { area, .. } = self.overlay else {
+            // 只有模态开着才会走到这里；关着就是"没有目标"，直接说清而不是静默
+            return (tx::CELL_PROPS_NO_TARGET.to_owned(), true);
+        };
+        let Some(d) = self.doc.doc.as_mut() else {
+            return (tx::CELL_PROPS_NO_TARGET.to_owned(), true);
+        };
+        let n = self
+            .edit
+            .apply_metadata(&mut d.map, light, door, offset, area);
+        let mut text = if n == 0 {
+            tx::CELL_PROPS_NOOP.to_owned()
+        } else {
+            tx::fill(tx::CELL_PROPS_DONE_TMPL, &[("n", &n.to_string())])
+        };
+        if let Some(note) = self.edit.note() {
+            text.push_str("；另：");
+            text.push_str(note);
+        }
+        if n > 0 {
+            self.touch_map();
+            self.refresh_cell_lines();
+        }
+        (text, n == 0)
+    }
+
     fn touch_map(&mut self) {
         self.doc.map_gen = self.doc.map_gen.wrapping_add(1);
         self.lines_key = None;
@@ -1056,6 +1095,7 @@ impl MireditApp {
                 settings_path: &self.settings_path,
                 recent: &mut self.recent,
                 tool: self.selected_tool,
+                hover: self.hover,
             };
             menu::action::apply(action, &mut cx)
         };
@@ -1108,6 +1148,7 @@ impl MireditApp {
                 settings_path: &self.settings_path,
                 recent: &mut self.recent,
                 tool: self.selected_tool,
+                hover: self.hover,
             };
             menu::action::open_path(&mut cx, path)
         };
@@ -1171,6 +1212,7 @@ impl MireditApp {
                 settings_path: &self.settings_path,
                 recent: &mut self.recent,
                 tool: self.selected_tool,
+                hover: self.hover,
             };
             menu::action::open_recent_index(&mut cx, idx)
         };
@@ -1200,6 +1242,7 @@ impl MireditApp {
                 settings_path: &self.settings_path,
                 recent: &mut self.recent,
                 tool: self.selected_tool,
+                hover: self.hover,
             };
             menu::action::save_as_path(&mut cx, path)
         };
@@ -1228,6 +1271,7 @@ impl MireditApp {
                 settings_path: &self.settings_path,
                 recent: &mut self.recent,
                 tool: self.selected_tool,
+                hover: self.hover,
             };
             menu::action::export_selection_path(&mut cx, path)
         };
@@ -1260,6 +1304,7 @@ impl MireditApp {
                 settings_path: &self.settings_path,
                 recent: &mut self.recent,
                 tool: self.selected_tool,
+                hover: self.hover,
             };
             menu::action::export_minimap_path(&mut cx, path, size)
         };
@@ -1290,6 +1335,23 @@ impl MireditApp {
                 .map(|d| (u32::from(d.map.width), u32::from(d.map.height)))
                 .unwrap_or((0, 0));
             act = menu::dialog::interact_export_minimap(ui, l, &mut self.overlay, cells);
+        } else if matches!(self.overlay, Overlay::CellProps { .. }) {
+            // 单元格属性模态（R12-F1）：三个数字框；Esc/取消关窗，回车/应用提交。
+            // 提交**不在这里做**：先把动作记下来，下面统一 match 时再落到会话（与其它模态同一套）。
+            match menu::cellprops::interact(ui, l, &mut self.overlay) {
+                menu::cellprops::动作::None => {}
+                menu::cellprops::动作::Cancel => act = menu::dialog::DialogAction::Cancel,
+                menu::cellprops::动作::Apply {
+                    light,
+                    door,
+                    offset,
+                } => {
+                    (self.op, self.overlay) = (None, Overlay::None);
+                    let (text, warn) = self.apply_cell_props(light, door, offset);
+                    self.op = Some((text, warn));
+                    ui.ctx().request_repaint();
+                }
+            }
         } else if matches!(self.overlay, Overlay::Shortcuts | Overlay::About) {
             // 只读浮层（键盘快捷键 / 关于 Crystal Studio）：任意点击 / Esc 关闭。
             //
@@ -2415,6 +2477,29 @@ impl eframe::App for MireditApp {
                             .map(|d| (u32::from(d.map.width), u32::from(d.map.height)))
                             .unwrap_or((0, 0));
                         menu::dialog::draw_export_minimap(&p, &l, path, size, cells)
+                    }
+                    Overlay::CellProps {
+                        area,
+                        文本,
+                        focus,
+                        error,
+                        有门字节,
+                        ..
+                    } => {
+                        // 头行要地图尺寸来算"单元格 x,y / 选区 N 格"（与落笔同一份夹紧口径）
+                        let 头行 = match self.doc.doc.as_ref() {
+                            Some(d) => crate::cell_props::头行(&d.map, *area),
+                            None => String::new(),
+                        };
+                        menu::cellprops::draw(
+                            &p,
+                            &l,
+                            &头行,
+                            文本,
+                            *focus,
+                            error.as_deref(),
+                            *有门字节,
+                        )
                     }
                     Overlay::Shortcuts => menu::dialog::draw_shortcuts(&p, &l),
                     // 帮助 → 关于 Crystal Studio：只读模态（产品名/版本/上游/许可证/构建档位）
@@ -4214,5 +4299,119 @@ mod tests {
         assert!(!rows[0].1, "空态行灰显");
 
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    // ───────────────── R12-F1：单元格属性模态（open → 初值 → 提交 → 字节/撤销） ─────────────────
+
+    /// **「编辑 → 单元格属性…」的完整链路**：无目标拒绝 → 打开时初值 = 选区共同值
+    /// （有差异留空）→ 提交只写改过的字段 → 字节只动 `off6/off7/off11` → 整批一步撤销 →
+    /// 改图后 `map_gen` 前进。
+    ///
+    /// 夹具：`有图应用()` 是一张 4×4 的 **12 B/格** 合成图，格值全 0
+    /// （`light=0` / `door_index=0` / `door_offset=0`），所以"初值 = 0"与"混合值 = 空"
+    /// 这两种情形都能在这张图上造出来。
+    #[test]
+    fn 单元格属性模态初值与提交() {
+        let mut app = 有图应用();
+        let canvas = 画布();
+
+        // ① 既没选区也没悬停格 ⇒ **拒绝且不打开空模态**（上游 `Contains(x, y)` 早退的等价物）
+        app.hover = None;
+        app.edit.clear_selection();
+        app.dispatch_menu(menu::model::Action::CellProperties, canvas);
+        assert!(
+            matches!(app.overlay, Overlay::None),
+            "没有目标格时不该打开模态"
+        );
+        let (text, warn) = app.op.clone().expect("拒绝必须有回执");
+        assert!(warn, "拒绝要用警示色：{text}");
+        assert!(text.contains("先把鼠标"), "{text}");
+
+        // ② 悬停一格 ⇒ 打开模态，初值 = 该格真值，输入框已填好
+        app.hover = Some((1, 1));
+        app.dispatch_menu(menu::model::Action::CellProperties, canvas);
+        let Overlay::CellProps {
+            area,
+            初值,
+            文本,
+            focus: _,
+            有门字节,
+            ..
+        } = app.overlay.clone()
+        else {
+            panic!("应打开单元格属性模态：{:?}", app.overlay);
+        };
+        assert_eq!(area, (1, 1, 1, 1), "没有选区 ⇒ 悬停的那一格");
+        assert_eq!(
+            初值,
+            ["0".to_string(), "0".to_string(), "0".to_string()],
+            "夹具格值全 0 ⇒ 三个字段初值都是 \"0\""
+        );
+        assert_eq!(文本, 初值, "打开时输入框就是初值（没改 ⇒ 不写）");
+        assert!(有门字节, "Old12 有门字节 ⇒ 三个框都可编辑");
+
+        // ③ 只给 light ⇒ 只写 light；字节只动 off11；一步撤销；map_gen 前进
+        let 原 = app.doc.doc.as_ref().expect("有文档").map.to_bytes();
+        let gen = app.doc.map_gen;
+        let (text, warn) = app.apply_cell_props(Some(200), None, None);
+        assert!(!warn, "成功不该是警示色：{text}");
+        assert_eq!(text, "改属性 1 格");
+        let 新 = app.doc.doc.as_ref().expect("有文档").map.to_bytes();
+        let 基 = 52 + (4 + 1) * 12; // (1,1)：列优先 index = x*h + y = 1*4 + 1
+        let mut 变: Vec<usize> = (0..原.len()).filter(|i| 原[*i] != 新[*i]).collect();
+        变.sort_unstable();
+        assert_eq!(变, vec![基 + 11], "只给 light ⇒ 只许动 off11");
+        assert_eq!((新[基 + 6], 新[基 + 7], 新[基 + 11]), (0, 0, 200));
+        assert_eq!(app.edit.undo_len(), 1, "整批 = 一步撤销");
+        assert_eq!(
+            app.doc.map_gen,
+            gen.wrapping_add(1),
+            "改了图必须换代号（画布缓存键靠它重渲）"
+        );
+        app.edit.undo(&mut app.doc.doc.as_mut().expect("有文档").map);
+        assert_eq!(
+            app.doc.doc.as_ref().expect("有文档").map.to_bytes(),
+            原,
+            "撤销一步必须逐字节回原样"
+        );
+
+        // ④ 混合值：选区两格的 light 不同 ⇒ 初值留空；只改门索引 ⇒ 两格光照各自保留
+        {
+            let d = app.doc.doc.as_mut().expect("有文档");
+            // (1,0)：index = 1*4 + 0 = 4
+            d.map.cells[4].light = 7;
+            assert!(
+                app.edit
+                    .set_selection(&mut d.map, miredit_core::Selection::new(1, 0, 1, 1)),
+                "设置选区应成功"
+            );
+        }
+        app.dispatch_menu(menu::model::Action::CellProperties, canvas);
+        let Overlay::CellProps { 初值, .. } = app.overlay.clone() else {
+            panic!("应打开单元格属性模态");
+        };
+        assert_eq!(初值[0], "", "两格 light 不同 ⇒ 混合值留空（Watermark）");
+        assert_eq!(初值[1], "0", "门索引相同 ⇒ 显示共同值");
+        let (text, _) = app.apply_cell_props(None, Some(3), None);
+        assert_eq!(text, "改属性 2 格", "两格的门索引都从 0 变 3");
+        let map = &app.doc.doc.as_ref().expect("有文档").map;
+        assert_eq!(
+            map.cell(1, 0).unwrap().light,
+            7,
+            "没给 light ⇒ 混合值不许被抹平"
+        );
+        assert_eq!(map.cell(1, 1).unwrap().light, 0, "另一格也保持原值");
+        assert_eq!(map.cell(1, 0).unwrap().door_index, 3);
+        assert_eq!(map.cell(1, 1).unwrap().door_index, 3);
+        assert_eq!(map.cell(1, 0).unwrap().door_offset, 0, "门偏移没给 ⇒ 原值");
+
+        // ⑤ 三个都空（混合值也没填）⇒ 一格不改、不开撤销步
+        let undo_before = app.edit.undo_len();
+        let 原2 = app.doc.doc.as_ref().expect("有文档").map.to_bytes();
+        let (text, warn) = app.apply_cell_props(None, None, None);
+        assert_eq!(text, "值没有变化，一格未改");
+        assert!(warn, "没改动要按「没做事」提示");
+        assert_eq!(app.edit.undo_len(), undo_before, "不许开撤销步");
+        assert_eq!(app.doc.doc.as_ref().expect("有文档").map.to_bytes(), 原2);
     }
 }

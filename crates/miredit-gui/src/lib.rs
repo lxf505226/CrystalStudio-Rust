@@ -80,6 +80,7 @@ pub mod canvas_overlay;
 pub mod canvas_view;
 pub mod cell_hover;
 pub mod cellinfo;
+pub mod cell_props;
 pub mod cli;
 pub mod dock_left;
 pub mod dock_right;

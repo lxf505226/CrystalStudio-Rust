@@ -88,6 +88,11 @@ pub struct Ctx<'a> {
     pub recent: &'a mut Vec<String>,
     /// 当前选中的工具下标（换图后重建会话时要恢复它）。
     pub tool: usize,
+    /// **指针所在的世界格**（`None` = 指针不在画布上/不在图内）。
+    ///
+    /// 谁用：「单元格属性…」在没有选区时按上游 `ApplyMetadata` 的 `Selection ?? hover 1×1`
+    /// 取目标格（`MapViewport.cs:583`）；别的动作不读它。
+    pub hover: Option<(u16, u16)>,
 }
 
 /// 一次动作的宿主侧结果。
@@ -376,6 +381,48 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
                 // 只有"粘贴时鼠标不在图上"才会 `None`；填充不会走到
                 None => Outcome::refused(tx::SEL_ERR_NO_SELECTION.to_owned()),
             }
+        }
+        // ───────────── 编辑：单元格属性（R12-F1） ─────────────
+        //
+        // 上游是**视口右键菜单**入口（`MainWindow.axaml.cs:740` 的 `OpenCellProperties`）；
+        // 本仓没有右键菜单 ⇒ 落在编辑菜单（`edit.cell_properties`，可 `--menu-click`）。
+        //
+        // 目标区域 = 上游 `ApplyMetadata` 的 `Selection ?? hover 1×1`（`MapViewport.cs:583`）：
+        // 有选区就整片，没有就用指针那一格；两样都没有 ⇒ 一句"先把鼠标移到格上"。
+        //
+        // 初值 = 选区**共同值**（`CommonMetadata`，有差异 ⇒ 空串 = Mixed），
+        // 提交时才逐字比较决定写哪几个字段（见 `cell_props::决定写入`）。
+        Action::CellProperties => {
+            let Some(d) = cx.doc.doc.as_ref() else {
+                return Outcome::refused(need_map_receipt());
+            };
+            let Some(area) = cx
+                .edit
+                .selection()
+                .map(|s| (s.x0, s.y0, s.x1, s.y1))
+                .or(cx.hover.map(|(x, y)| (x, y, x, y)))
+            else {
+                return Outcome::refused(tx::CELL_PROPS_NO_TARGET.to_owned());
+            };
+            if crate::cell_props::格数(&d.map, area) == 0 {
+                // 区域全在图外（选区是别的地图留下的）⇒ 说清原因，不打开一个空模态
+                return Outcome::refused(tx::CELL_PROPS_NO_TARGET.to_owned());
+            }
+            let 初值 = [
+                crate::cell_props::初值(&d.map, area, crate::cell_props::字段::光照),
+                crate::cell_props::初值(&d.map, area, crate::cell_props::字段::门索引),
+                crate::cell_props::初值(&d.map, area, crate::cell_props::字段::门偏移),
+            ];
+            let 有门字节 = cx.edit.format_has_door_bytes();
+            *cx.overlay = crate::menu::Overlay::CellProps {
+                文本: 初值.clone(),
+                初值,
+                area,
+                focus: 0,
+                error: None,
+                有门字节,
+            };
+            Outcome::opened_overlay()
         }
         // ───────────── 视图：主题 ─────────────
         Action::DarkMode => {
@@ -906,6 +953,8 @@ mod tests {
                 settings_path: &self.settings,
                 recent: &mut self.recent,
                 tool: 0,
+                // 本文件的用例不测「单元格属性…」的目标格；给了 `None` 就代表"没悬停"
+                hover: None,
             }
         }
     }

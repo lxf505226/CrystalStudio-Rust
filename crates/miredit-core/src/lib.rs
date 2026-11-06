@@ -115,6 +115,7 @@ mod error;
 mod fill;
 mod layer;
 mod layer_counts;
+mod metadata;
 mod paint;
 mod save;
 mod selection;
@@ -152,6 +153,7 @@ pub use layer_counts::{
     cell_mask, cell_mask_ext, LayerCounts, MaskContext, MASK_FRONT, MASK_GROUND,
     MASK_HIGH_COLLISION, MASK_LOW_COLLISION, MASK_MIDDLE,
 };
+pub use metadata::{clamp_area, no_door_bytes_reason, Area};
 pub use paint::{
     paint, PaintOutcome, Tool, TOOL_BRUSH, TOOL_BRUSH_IDX, TOOL_BUCKET, TOOL_BUCKET_IDX,
     TOOL_ERASER, TOOL_ERASER_IDX, TOOL_PICKUP, TOOL_PICKUP_IDX, TOOL_UNWIRED,
