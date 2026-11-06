@@ -20,8 +20,11 @@ use mir2_map::Map;
 
 use crate::ui_text as tx;
 
-/// 缺省打开的地图（任务书 §三.1 指定的绝对路径，写死真实位置，不是猜的）。
-pub const DEFAULT_MAP_PATH: &str = r"E:\GodM2\GodotClient\maps\0.map";
+/// 缺省打开的地图：**恒为空串**（=「没有内建缺省地图」）。
+///
+/// 公开仓不内置任何开发机路径。没有 `--map` 时启动即「未指定地图」：画布画
+/// [`crate::ui_text::CANVAS_NO_MAP`]、状态栏如实说原因，**不 panic、不猜路径**。
+pub const DEFAULT_MAP_PATH: &str = "";
 
 /// 一张已打开的地图：**编辑视图**（`map`）+ **字节层真值**（`document`）+ 出处信息。
 ///
@@ -260,12 +263,18 @@ pub struct DocState {
 impl DocState {
     /// 装载「地图 + 图库」，并把结果（成功/失败）全部写进 `stderr`。
     ///
-    /// `map_path` 传 `None` 时用 [`DEFAULT_MAP_PATH`]。
+    /// `map_path` 传 `None` 时用 [`DEFAULT_MAP_PATH`]；那个常量为空（公开仓没有内建缺省图）
+    /// ⇒ **不打开任何图**，`map_error` 写「未指定地图」，界面如实显示，**不 panic**。
     pub fn load(map_path: Option<&Path>) -> Self {
-        let path = map_path
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| PathBuf::from(DEFAULT_MAP_PATH));
-        let (doc, map_error) = Self::load_map(&path);
+        let path = map_path.map(Path::to_path_buf).filter(|p| !p.as_os_str().is_empty());
+        let (doc, map_error) = match &path {
+            Some(p) => Self::load_map(p),
+            None => {
+                let msg = tx::fill(tx::DIAG_MAP_NONE, &[]);
+                eprintln!("{msg}");
+                (None, Some(msg))
+            }
+        };
         // 图库（与地图互不影响：图库挂了地图照样开）
         let assets = load_assets();
         Self {
@@ -397,9 +406,12 @@ fn core_err_text(e: miredit_core::CoreError) -> String {
 }
 
 /// 扫描并打开图库；任何一步失败都返回 [`Assets::Failed`]（原因原样带出）。
+///
+/// 根目录走 [`mir2_assets::discover_default`]（读 `MIREDIT_CLIENT_ROOT`）：
+/// 未设置 ⇒ [`AssetError::RootUnset`]，界面与 stderr 都如实说「未设置哪个环境变量」，
+/// **不内置任何开发机路径、不 panic**。
 fn load_assets() -> Assets {
-    let root = Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-    let paths = match LibPaths::discover(root) {
+    let paths = match mir2_assets::discover_default() {
         Ok(p) => p,
         Err(e) => return Assets::Failed(asset_err(&e)),
     };
@@ -438,10 +450,25 @@ fn asset_err(e: &AssetError) -> String {
 mod tests {
     use super::*;
 
-    /// 缺省路径就应该是任务书指定的那个（改路径必须改这里，防止悄悄换图）。
+    /// 缺省地图路径**必须是空的**：公开仓不内置任何开发机路径。
+    ///
+    /// 这条挡的是「有人图省事又把某台机器的绝对路径写回来」——那会让公开 clone 后
+    /// 一启动就去摸一个别人的盘符，且在没有磁盘 D/E 的机器上静默失败。
     #[test]
-    fn 缺省地图路径固定() {
-        assert_eq!(DEFAULT_MAP_PATH, r"E:\GodM2\GodotClient\maps\0.map");
+    fn 缺省地图路径为空() {
+        assert_eq!(DEFAULT_MAP_PATH, "", "DEFAULT_MAP_PATH 必须为空（未指定）");
+    }
+
+    /// 没给 `--map`（且 `DEFAULT_MAP_PATH` 为空）⇒ **不打开任何图**，但如实给出原因。
+    ///
+    /// 判据三条：① `doc` 为空；② `map_error` 是「未指定地图」那一条（不是空串）；
+    /// ③ 图库照旧被装载（地图与图库互不影响）。
+    #[test]
+    fn 没给地图时如实报未指定() {
+        let st = DocState::load(None);
+        assert!(st.doc.is_none(), "没有缺省图 ⇒ 不该打开任何地图");
+        assert_eq!(st.map_error.as_deref(), Some(tx::DIAG_MAP_NONE));
+        assert_eq!(st.file_name(), tx::VAL_UNKNOWN);
     }
 
     /// 打开一个**不存在**的路径：必须拿到 `None` + 具体原因，且原因里带路径。
@@ -506,14 +533,25 @@ mod tests {
     }
 
     /// 取不到文件名时退回整条路径（与内核 `Document::from_bytes` 同口径）。
+    ///
+    /// 用 `std::env::temp_dir() + 进程号` 造前缀（**不钉盘符**）：这条测的是
+    /// `Path::file_name()` 的取值口径，与"在哪个盘"无关 —— 钉死 `I:\` 之类的字面量
+    /// 会让非 Windows / 无该盘的机器上无意义地红。
     #[test]
     fn 取不到文件名时退回整条路径() {
-        assert_eq!(file_name_of(Path::new(r"I:\miredit-saveas\b.map")), "b.map");
-        assert_eq!(file_name_of(Path::new(r"I:\miredit-saveas")), "miredit-saveas");
-        // 以分隔符收尾：`Path` 会把它归一化掉，仍能取到最后一段（不是空串）
-        assert_eq!(file_name_of(Path::new(r"I:\miredit-saveas\")), "miredit-saveas");
-        // 真正的"没有文件名"：盘根 ⇒ 退回整条路径（不许变成空串）
-        assert_eq!(file_name_of(Path::new(r"I:\")), r"I:\");
+        let dir = std::env::temp_dir().join(format!("miredit_gui_fname_{}", std::process::id()));
+        let map = dir.join("b.map");
+        assert_eq!(file_name_of(&map), "b.map");
+        assert_eq!(
+            file_name_of(&dir),
+            dir.file_name().and_then(|s| s.to_str()).unwrap_or_default(),
+            "指到目录时要能取到最后一段"
+        );
+        assert!(!file_name_of(&dir).is_empty(), "目录也不许退化成空串");
+        // 真正的"没有文件名"：根 ⇒ 退回整条路径（不许变成空串）
+        let root = dir.ancestors().last().expect("至少有一段");
+        assert_eq!(file_name_of(root), root.display().to_string());
+        assert!(!file_name_of(root).is_empty());
     }
 
     /// 图库失败态的库数必须是 0（不是 117 也不是 1）。

@@ -2,18 +2,21 @@
 name = "mir2-assets"
 version = "0.1.0"
 edition = "2021"
-description = "传奇 M2 `.wil/.wix/.wz*` 图库解码层（地图编辑器渲染地基）"
+description = "传奇 M2 图库解码层：`.wil/.wix`、`.wzl/.wzx` 与原版 `.lib`（地图编辑器渲染地基）"
 license = "MIT"
 
 [dependencies]
-# 解码实现全部复用 `wil2atlas`，本 crate 不复制任何二进制解析代码。
-# 2026-11-06：项目已从 E:\GodM2\tools\miredit 迁到 I:\miredit，但 wil2atlas
-# **按用户裁定继续用原位置** E:\GodM2\tools\wil2atlas（7.4 GB，不复制、不搬家）。
-# ⇒ 用绝对路径，避免相对层级随项目位置变化而失效。
-# 迁移前的旧值 `../../../wil2atlas` 在新位置会解析到不存在的 I:\wil2atlas。
-wil2atlas = { path = "E:/GodM2/tools/wil2atlas" }
+# WIL/WZL 解码实现复用 **vendored** 的 `wil2atlas`（只含解码的源码子集，
+# WIL/WIX 解码器，本 crate 不复制任何二进制解析代码）。
+# 2026-11-06：为让公开仓库不依赖构建机上的绝对路径，该解码器已 vendor 进
+# `vendor/wil2atlas/`（decoder-only：不含 CLI 与图集打包），此处用仓库内相对路径。
+# 子集内容 / 来源提交 / 逐文件 SHA256 见 `vendor/wil2atlas/README.md` 与 `NOTICE`。
+wil2atlas = { path = "../../vendor/wil2atlas" }
 
-[dev-dependencies]
-# 仅测试用：读客户端已烘焙的图集 PNG，做逐像素比对（验收门 1）。
-# 与 wil2atlas 保持同一版本/同一组 feature，避免解析结果出现版本差异。
-image = { version = "0.25", default-features = false, features = ["png"] }
+# 以下是「原版 `.lib`」路径自带的解码依赖（见 src/crystal_lib.rs）：
+# - flate2：每帧数据是 gzip 压缩的 BGRA（`Assets.cs:105@901dbe2f`）；
+# - image：Sanxiu v6 的 `fileType == 1` 是「一整个图片文件」（`Assets.cs:157-158@901dbe2f`），
+#   只启 png/gif 两个解码器（原版经 WIC 的 `RasterImage.Load` 支持更多格式 ⇒ 待验证）。
+#   `png` 同时服务 `tests/acceptance.rs` 与 `tests/crystal_lib.rs` 的图集/样本读写。
+flate2 = "1"
+image = { version = "0.25", default-features = false, features = ["png", "gif"] }

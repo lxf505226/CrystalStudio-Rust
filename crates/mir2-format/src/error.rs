@@ -8,16 +8,40 @@
 use crate::model::FormatId;
 use std::fmt;
 
-/// 单张地图允许的最大格数（`w * h`）。
+/// 单张地图允许的最大格数（`w * h`）—— 它只是**三条件合取中的第三条**。
 ///
-/// 口径取自 CrystalStudio C# `LegacyMapReader.cs:50`
-/// （`ValidateDimensions` 内 `count > 16_000_000` ⇒ 抛 `Invalid or excessive map dimensions.`），
-/// 同一数值也出现在 `Document.cs:58`。
+/// 口径来源（真值）：C# `MapDimensions.cs:7`（`MaximumCells = 16_000_000`）与
+/// `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 第三条
+/// （同值另见 `LegacyMapReader.cs:50` 的 `count > 16_000_000`、`Document.cs:58`）。
+///
+/// ⚠ **本常量不是完整的合法性判据**：`40000×1` 只有 40000 格却存不下去（单边超
+/// [`MAX_DIMENSION`]）。判尺寸请用 [`crate::can_round_trip`]（布尔）/ 内部
+/// `validate_dims` / `validate_write_dims`（带原因），它们共用同一份三条件判据。
 ///
 /// 为什么必须放在**分配之前**判：本 crate 的 [`crate::Cell`] 带一个 `Vec<u8>` 尾区，
 /// 12 B/格的真实文件解析后内存约为文件的 3~5 倍；没有上限时，一个假头部声明
 /// 5000×5000 的坏文件会先去申请上百 MB 然后才报错（失败方式是 OOM 而不是明确错误）。
 pub const MAX_CELLS: u64 = 16_000_000;
+
+/// 单边维度上限（宽、高各自的最大值）= **32767** = `i16::MAX` = C# `short.MaxValue`。
+///
+/// 口径来源（真值）：C# `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 里
+/// 两条 `<= short.MaxValue`：
+///
+/// ```csharp
+/// public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
+///     height is > 0 and <= short.MaxValue && (long)width * height <= MaximumCells;
+/// ```
+///
+/// 为什么这是**往返缺陷**而不是「上限保守一点」：九种格式的头部宽高最终都落在
+/// 16 位**有符号**字段上（`tmap_dims` 用 `i16_at` 读；C# `Document.cs:90` 用
+/// `w.Write(checked((short)Width))` 写）。`32768..=65535` 这一段虽然塞得进 `u16`，
+/// 写盘后要么在 C# 侧 `checked` 抛溢出，要么回读成负数 ⇒ 存下去就再也读不回来。
+///
+/// ⚠ 读写**两侧**都用它：读侧在 [`crate::model`] 的 `validate_dims` 里（`as u16` 转换之前），
+/// 写侧在 `validate_write_dims` 里（由 `write_fixed` 与两个自定义 writer 调用）。
+/// 只挂读侧会留下「保存侧仍能写出 > 32767 的宽高」的漏洞。
+pub const MAX_DIMENSION: u16 = i16::MAX as u16;
 
 /// 九种格式共用的错误枚举。
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +65,32 @@ pub enum FormatError {
         width: i32,
         /// 头部里读到的高（已按该格式的变换还原）。
         height: i32,
+    },
+    /// 宽或高超过 **32767**（`i16::MAX` = C# `short.MaxValue`）⇒ 存下去就回读不回来。
+    ///
+    /// 真值：C# `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 里两条
+    /// `<= short.MaxValue`。本变体是这条判据在**读侧与写侧**共用的拒绝形态。
+    ///
+    /// 为什么必须显式拒绝而不是 `as u16` 一转了之：九种格式的头部宽高最终都是
+    /// 16 位**有符号**字段（`tmap_dims` 用 `i16_at`；C# `Document.cs:90` 写
+    /// `checked((short)Width)`）。`32768..=65535` 塞得进 `u16` 但回读不回来；
+    /// 静默 `as u16` 更是把原始值改成另一个数（写出去的是别的尺寸）—— 属于数据损坏。
+    ///
+    /// 与另两个尺寸变体的分工（顺序即官方短路顺序）：非正 ⇒
+    /// [`InvalidDimensions`](FormatError::InvalidDimensions)；单边 > 32767 ⇒ 本条；
+    /// 格数 > 16_000_000 ⇒ [`TooManyCells`](FormatError::TooManyCells)。
+    DimensionTooLarge {
+        /// 判定用的格式。
+        format: FormatId,
+        /// 还原后的宽（读侧来自头部，写侧来自 [`crate::RawMap::width`]）。
+        ///
+        /// 用 `i64` 是为了同时容纳读侧的 `i32`（可能是负值或缺省）与写侧的 `u16`，
+        /// 且不会在报错前就发生任何窄化转换。
+        width: i64,
+        /// 还原后的高。与 `width` 同口径。
+        height: i64,
+        /// 单边上限（[`MAX_DIMENSION`]，恒为 32767）。
+        limit: u16,
     },
     /// 格数超过 [`MAX_CELLS`]。
     TooManyCells {
@@ -144,6 +194,18 @@ impl fmt::Display for FormatError {
             } => write!(
                 f,
                 "{format:?}：地图尺寸非法（w={width} h={height}），宽高必须为正数"
+            ),
+            FormatError::DimensionTooLarge {
+                format,
+                width,
+                height,
+                limit,
+            } => write!(
+                f,
+                "{format:?}：地图尺寸超出可往返上限（w={width} h={height}，单边必须 ≤ {limit}\
+                 = i16::MAX = C# short.MaxValue = 32767，真值见 MapDimensions.cs:11-12 \
+                 @acfbbf8a 的 CanRoundTrip）；头部宽高是 16 位有符号字段，\
+                 超过 32767 写盘后读不回来，本库不静默截断"
             ),
             FormatError::TooManyCells {
                 format,

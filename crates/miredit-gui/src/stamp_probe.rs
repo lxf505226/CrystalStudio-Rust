@@ -31,7 +31,17 @@ use crate::ui_text as tx;
 /// `sweep` = 追加「全库逐枚渲染清点」（9,159 枚，release 十几秒）——
 /// 验收要问"**实际渲染了多少枚、失败多少**"，只有真跑一遍才答得上来。
 pub fn run(sweep: bool) -> i32 {
-    let path = palette_path();
+    let Some(path) = palette_path() else {
+        // 公开仓没有内建索引 ⇒ 如实说「未设置哪个环境变量」，不猜路径、不报假成功
+        eprintln!(
+            "{}",
+            tx::fill(
+                tx::STAMP_CATALOG_MISSING_TMPL,
+                &[("path", &format!("<未设置 {}>", crate::stamp_panel::PALETTE_ENV))]
+            )
+        );
+        return 1;
+    };
     println!("[印章探针] palette.json = {}", path.display());
 
     // ── ① 装载 ──
@@ -317,18 +327,20 @@ pub fn run(sweep: bool) -> i32 {
     }
 }
 
-/// `palette.json` 路径：环境变量 → [`crate::stamp_panel::DEFAULT_PALETTE`]。
-fn palette_path() -> std::path::PathBuf {
-    match std::env::var_os(crate::stamp_panel::PALETTE_ENV) {
-        Some(v) => std::path::PathBuf::from(v),
-        None => std::path::PathBuf::from(crate::stamp_panel::DEFAULT_PALETTE),
-    }
+/// `palette.json` 路径：环境变量 [`crate::stamp_panel::PALETTE_ENV`]；
+/// **未设置 ⇒ `None`**（[`crate::stamp_panel::DEFAULT_PALETTE`] 恒为空串 = 没有内建缺省路径）。
+fn palette_path() -> Option<std::path::PathBuf> {
+    std::env::var_os(crate::stamp_panel::PALETTE_ENV)
+        .map(std::path::PathBuf::from)
+        .filter(|p| !p.as_os_str().is_empty())
 }
 
-/// 打开图库（与 GUI 同一条 `discover_default` 路径）。
+/// 打开图库（与 GUI 同一条 [`mir2_assets::client_root`] 路径）。
+///
+/// 未设置 `MIREDIT_CLIENT_ROOT`（或它不是目录）⇒ `None`，调用方据此打印跳过原因。
 fn open_source() -> Option<WilSource> {
-    let root = std::path::Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-    let paths = LibPaths::discover(root).ok()?;
+    let root = mir2_assets::client_root()?;
+    let paths = LibPaths::discover(&root).ok()?;
     WilSource::open(&paths).ok()
 }
 

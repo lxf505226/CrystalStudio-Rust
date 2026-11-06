@@ -83,8 +83,12 @@ pub use thumbs::{fit_text, positioned_cells, render_thumb};
 /// 免得同一个仓库里出现两套"去哪儿找目录索引"的约定）。
 pub const PALETTE_ENV: &str = "MIR2_STAMP_PALETTE";
 
-/// 缺省 `palette.json` 路径（本机实测存在；不存在时面板如实报「加载失败」，**不静默空表**）。
-pub const DEFAULT_PALETTE: &str = r"I:\miredit\_upstream\catalogue\palette.json";
+/// 缺省 `palette.json` 路径：**恒为空串**（=「没有内建缺省路径」）。
+///
+/// 公开仓不内置任何开发机路径：真正的入口是环境变量 [`PALETTE_ENV`]。
+/// 空串不是路径 —— [`StampPanel::with_path`] 收到空路径时**不读盘**，
+/// 直接进「加载失败」态并如实显示「未设置环境变量」，界面不会静默空表。
+pub const DEFAULT_PALETTE: &str = "";
 
 /// 「分类」页签在 [`crate::ui_text::PALETTE_TABS`] 里的下标（0 = 资源库 / 1 = 收藏 / 2 = 最近使用 / 3 = 分类）。
 ///
@@ -258,7 +262,9 @@ impl Default for StampPanel {
 }
 
 impl StampPanel {
-    /// 用缺省路径（环境变量 → [`DEFAULT_PALETTE`]）**后台**装载，立刻返回。
+    /// 用缺省路径（环境变量 [`PALETTE_ENV`] → [`DEFAULT_PALETTE`]）**后台**装载，立刻返回。
+    ///
+    /// 两者都没给（= 空路径）时由 [`StampPanel::with_path`] 如实进失败态，**不猜**任何路径。
     pub fn new() -> Self {
         let path = match std::env::var_os(PALETTE_ENV) {
             Some(v) => PathBuf::from(v),
@@ -268,15 +274,23 @@ impl StampPanel {
     }
 
     /// 指定 `palette.json` 路径并**后台**装载（测试与 `--stamp-*` 用同一条路径）。
+    ///
+    /// **空路径 ⇒ 不读盘、不起线程**，直接进 [`Load::Failed`] 并写明「未设置哪个环境变量」：
+    /// 公开仓没有内建缺省索引，`StampCatalog::load("")` 只会给出一个语焉不详的 io 错误。
     pub fn with_path(path: PathBuf) -> Self {
-        let (txr, rx) = mpsc::channel();
-        let p = path.clone();
-        std::thread::spawn(move || {
-            let out = StampCatalog::load(&p).map_err(|e| e.to_string());
-            let _ = txr.send(out);
-        });
+        let load = if path.as_os_str().is_empty() {
+            Load::Failed(format!("<未设置 {}>", PALETTE_ENV))
+        } else {
+            let (txr, rx) = mpsc::channel();
+            let p = path.clone();
+            std::thread::spawn(move || {
+                let out = StampCatalog::load(&p).map_err(|e| e.to_string());
+                let _ = txr.send(out);
+            });
+            Load::Loading(rx)
+        };
         Self {
-            load: Load::Loading(rx),
+            load,
             load_started: Instant::now(),
             load_ms: None,
             path,

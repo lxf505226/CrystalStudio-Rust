@@ -43,9 +43,27 @@ fn 写图(dir: &Path, name: &str, w: u16) -> PathBuf {
     p
 }
 
-/// 本仓两处真实语料（与 `acceptance_tests::formats` 的 `语料A` / `语料B` 同一份）。
-const 语料A: &str = r"E:\GodM2\GodotClient\maps";
-const 语料B: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map";
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[跳过]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
+/// 本仓两处真实语料（与 `acceptance_tests::formats` 的 `语料_a` / `语料_b` 同一份）。
+fn 语料_a() -> Option<PathBuf> {
+    Some(资产根()?.join("GodotClient").join("maps"))
+}
+fn 语料_b() -> Option<PathBuf> {
+    Some(资产根()?.join("client").join("热血传奇23周年客户端").join("Map"))
+}
 
 /// 窗口矩形（1500×950，与截图口径一致）。
 fn 窗() -> Rect {
@@ -381,9 +399,13 @@ fn 面板几何() {
 fn 实测扫描耗时与只读元数据对照() {
     // ① 语料 A：61 张 / 35.8 MB
     // ② 语料 B：1,097 张 / 697.2 MB
-    for (tag, dir) in [("A", 语料A), ("B", 语料B)] {
-        if !Path::new(dir).is_dir() {
-            eprintln!("[跳过] 语料 {tag} 不存在：{dir}");
+    for (tag, dir) in [("A", 语料_a()), ("B", 语料_b())] {
+        let Some(dir) = dir else {
+            eprintln!("[跳过] 语料 {tag}：无资产根 MIREDIT_ASSET_ROOT");
+            continue;
+        };
+        if !dir.is_dir() {
+            eprintln!("[跳过] 语料 {tag} 不存在：{}", dir.display());
             continue;
         }
         // 三轮取中位数（第一轮含目录项缓存预热，后面几轮更快）
@@ -392,7 +414,7 @@ fn 实测扫描耗时与只读元数据对照() {
         let mut bytes = 0u64;
         for _ in 0..3 {
             let t0 = Instant::now();
-            let (entries, stats, errors) = maplist::scan_all(Path::new(dir)).expect("扫描");
+            let (entries, stats, errors) = maplist::scan_all(&dir).expect("扫描");
             let ms = t0.elapsed().as_secs_f64() * 1000.0;
             assert!(errors.is_empty(), "真实语料不该有读不了的文件：{errors:?}");
             n = stats.entries;
@@ -422,7 +444,7 @@ fn 实测扫描耗时与只读元数据对照() {
     }
 
     // ③ 对照：**读一张图的内容**要多久（同一台机、同一块盘）
-    let big = Path::new(语料A).join("0.map");
+    let big = 语料_a().map(|d| d.join("0.map")).unwrap_or_default();
     if big.is_file() {
         let len = std::fs::metadata(&big).map(|m| m.len()).unwrap_or(0);
         let t0 = Instant::now();

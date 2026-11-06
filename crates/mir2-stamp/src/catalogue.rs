@@ -2,8 +2,10 @@
 //! 产出「按分类 / 区域 / 名称查询 + 按 id 解析真实文件」的索引（GUI「印章」页签的数据底座）。
 //!
 //! 真值来源（**只读**，本模块不写 `CrystalStudio/` 任何文件）：
-//! - `E:\GodM2\CrystalStudio\catalogue\palette.json`（5,092,886 B / 9,159 条 `objects[]`）；
-//! - `E:\GodM2\CrystalStudio\Objects\**\*.X`（9,170 个，全部 v2）；
+//! - `<dataRoot>/catalogue/palette.json`（5,092,886 B / 9,159 条 `objects[]`）；
+//! - `<dataRoot>/Objects/**/*.X`（9,170 个，全部 v2）；
+//!   （`<dataRoot>` 是开发机上的 CrystalStudio 数据根，由 `MIR2_STAMP_PALETTE` / 挂载决定，
+//!   公开仓不内置该路径）
 //! - CrystalStudio 的读取口径：`CrystalStudio/StampCategories.cs`（`Read` 在 `:20-38`、
 //!   `Resolve` 在 `:40-46`、`Groups` 在 `:61-67`、`Matches` 在 `:69-72`）。
 //!
@@ -30,8 +32,8 @@
 //! 7. **路径口径照抄 CrystalStudio**：`dataRoot` = `palette.json` 的**父目录的父目录**
 //!    （`StampCategories.cs:25` 的 `Path.GetDirectoryName(Path.GetDirectoryName(...))`），
 //!    `objectRoot` / `previewRoot` 相对 `dataRoot` 解析（`:26`）。
-//!    ⇒ 真实布局：`dataRoot = E:\GodM2\CrystalStudio`，`objectRoot = …\Objects`，
-//!    `previewRoot = …\catalogue`，条目路径 = `objectRoot` + `file`（`file` 形如 `mir/mir_00000.X`）。
+//!    ⇒ 真实布局：`dataRoot = <CrystalStudio 数据根>`，`objectRoot = <dataRoot>/Objects`，
+//!    `previewRoot = <dataRoot>/catalogue`，条目路径 = `objectRoot` + `file`（`file` 形如 `mir/mir_00000.X`）。
 //! 8. **逃逸护栏比 C# 更严**：C# 的 `Resolve`（`:40-46`）用 `StartsWith` 判前缀，允许
 //!    `a/../b` 这种「绕一圈仍落在根内」的写法；本库**直接拒绝任何 `..` / 绝对路径 / 盘符**，
 //!    因为合法的 catalogue 里不该出现 `..`（宁可 `None` 也不给越界路径）。
@@ -74,7 +76,7 @@
 //! use std::path::Path;
 //! use mir2_stamp::catalogue::StampCatalog;
 //!
-//! let mut catalog = StampCatalog::load(Path::new(r"E:\GodM2\CrystalStudio\catalogue\palette.json"))?;
+//! let mut catalog = StampCatalog::load(Path::new(r"<dataRoot>/catalogue/palette.json"))?;
 //! println!("登记 {} 条，未登记文件 {} 个", catalog.len(), catalog.unlisted().len());
 //!
 //! for entry in catalog.by_kind("Building").iter().take(3) {

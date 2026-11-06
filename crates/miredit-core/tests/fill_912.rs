@@ -2,7 +2,7 @@
 //!
 //! 跑法：`cargo test -p miredit-core --test fill_912 -- --nocapture`
 //!
-//! 真值地图：`E:\GodM2\client\热血传奇23周年客户端\Map\0.map`
+//! 真值地图：`<client-root>/Map/0.map`（`MIREDIT_ASSET_ROOT` 相对路径来定位）
 //! （700×700 / `Old12` / 5,880,052 字节；`(358,0)` 的 `bk_img = 0x815F`）。
 //!
 //! ⚠ **只读**：本文件把字节读进内存后用 [`miredit_core::Document::from_bytes`] 构造文档，
@@ -16,22 +16,50 @@
 //! 5. 撤销一步 ⇒ `to_bytes()` 与磁盘原文件**逐字节相等**。
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
 use miredit_core::{
     apply, Command, EditLayer, EditSession, FillOutcome, LibRef, COLLISION_BIT, SPRITE_MAX,
 };
 
-/// 真值地图的绝对路径（写死真实位置，不是猜的）。
-const 真图: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map\0.map";
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
 
-/// 只读载入真图；读不到就 panic（**不许静默跳过**，禁假数据）。
-fn 读真图() -> Vec<u8> {
-    std::fs::read(真图)
-        .unwrap_or_else(|e| panic!("真值地图读不到，不许静默跳过：{真图} ⇒ {e}"))
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
 }
 
-fn 会话(bytes: Vec<u8>) -> EditSession {
-    let doc = miredit_core::Document::from_bytes(std::path::Path::new(真图), bytes)
+/// 真值地图的绝对路径（`client/热血传奇23周年客户端/Map/0.map`，挂在资产根下）；缺资产 ⇒ `None`。
+fn 真图路径() -> Option<PathBuf> {
+    let root = 资产根()?;
+    let p = root
+        .join("client")
+        .join("热血传奇23周年客户端")
+        .join("Map")
+        .join("0.map");
+    p.is_file().then_some(p)
+}
+
+/// 只读载入真图：返回 `(路径, 字节)`。
+///
+/// 缺资产根 / 缺文件 ⇒ `None`（**不 panic**：公开仓/PR 的机器上没有游戏素材，不算代码错）；
+/// 文件在但读不出来 ⇒ `panic`（那是真故障，不许静默跳过）。
+fn 读真图() -> Option<(PathBuf, Vec<u8>)> {
+    let p = 真图路径()?;
+    let bytes = std::fs::read(&p)
+        .unwrap_or_else(|e| panic!("真值地图读不到：{} ⇒ {e}", p.display()));
+    Some((p, bytes))
+}
+
+fn 会话(路径: &std::path::Path, bytes: Vec<u8>) -> EditSession {
+    let doc = miredit_core::Document::from_bytes(路径, bytes)
         .expect("真值地图应能解析（Old12 / 700×700）");
     assert_eq!(doc.format_name(), "Old12", "0.map 必须是 12 字节/格档");
     assert_eq!(doc.size(), (700, 700));
@@ -58,8 +86,11 @@ fn 备好地表笔刷(ed: &mut EditSession) {
 /// **门 3**：`0.map` 副本 `(358,0)` 填充 ⇒ 912 格、取值集合 `{0x8001}`、`bit15` 变化 0、`walkable` 变化 0。
 #[test]
 fn 门3_填充912格全部保留bit15() {
-    let bytes = 读真图();
-    let mut ed = 会话(bytes.clone());
+    let Some((真图, bytes)) = 读真图() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 Map/0.map）—— 本用例 skip（不 panic）");
+        return;
+    };
+    let mut ed = 会话(&真图, bytes.clone());
     备好地表笔刷(&mut ed);
 
     // 点击格的真值先钉住（不是猜的）
@@ -121,20 +152,24 @@ fn 门3_填充912格全部保留bit15() {
     );
 
     eprintln!(
-        "BIT15_FILL path={真图} clicked=(358,0) cells=912 before_set=[{}] after_set=[{}] bit15_changed={bit15变} walk_changed={可走变} 旧逻辑会得=0x0001",
+        "BIT15_FILL path={} clicked=(358,0) cells=912 before_set=[{}] after_set=[{}] bit15_changed={bit15变} walk_changed={可走变} 旧逻辑会得=0x0001",
+        真图.display(),
         改前hex.join(","),
         改后hex.join(","),
     );
 
     // 只读自证：磁盘原文件一个字节都没动
-    assert_eq!(读真图(), 改前, "本用例绝不许写磁盘");
+    assert_eq!(读真图(), Some((真图, 改前)), "本用例绝不许写磁盘");
 }
 
 /// **门 4**：填充后撤销 ⇒ `to_bytes()` 与磁盘原文件**逐字节相等**。
 #[test]
 fn 门4_填充撤销后逐字节相等() {
-    let bytes = 读真图();
-    let mut ed = 会话(bytes.clone());
+    let Some((真图, bytes)) = 读真图() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 Map/0.map）—— 本用例 skip（不 panic）");
+        return;
+    };
+    let mut ed = 会话(&真图, bytes.clone());
     备好地表笔刷(&mut ed);
 
     let 填充结果 = ed.fill(358, 0);
@@ -161,7 +196,8 @@ fn 门4_填充撤销后逐字节相等() {
     assert!(ed.dirty());
 
     eprintln!(
-        "FILL_UNDO_BYTES path={真图} 原={} 字节 填充后={} 字节 撤销后={} 字节 逐字节相等={} 重做后相等={}",
+        "FILL_UNDO_BYTES path={} 原={} 字节 填充后={} 字节 撤销后={} 字节 逐字节相等={} 重做后相等={}",
+        真图.display(),
         bytes.len(),
         填充后.len(),
         撤销后.len(),
@@ -169,5 +205,5 @@ fn 门4_填充撤销后逐字节相等() {
         ed.map().to_bytes() == 填充后,
     );
 
-    assert_eq!(读真图(), bytes, "本用例绝不许写磁盘");
+    assert_eq!(读真图(), Some((真图, bytes)), "本用例绝不许写磁盘");
 }

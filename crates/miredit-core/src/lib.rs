@@ -16,7 +16,8 @@
 //!
 //! ⚠ **`mir2_stamp` 是 2026-11-05 从 `[dev-dependencies]` 上移的**，代价要记账：
 //! 它带 `serde` + `serde_json`（只为读 `catalogue/palette.json`），上移后这两个 crate 进入
-//! **库本体**依赖树。它们本来就在本 workspace 的 `Cargo.lock` 里（`tools/wil2atlas` 引入）
+//! **库本体**依赖树。它们本来就在本 workspace 的 `Cargo.lock` 里（2026-11-06 起由
+//! `mir2-stamp` 与 `miredit-web` 引入；vendored 的 `wil2atlas` 子集已裁掉 serde）
 //! ⇒ 不新增锁文件版本、不新增传递依赖树；但「内核只依赖 std + mir2-map + mir2-format」
 //! 这条**原始白名单从此作废**，换来的是「印章 id → 格表」只有一个入口（[`stamp_convert`]）。
 //!
@@ -49,6 +50,7 @@
 //! | 9 | **印章放置**（新增）：锚点 + 相对偏移（可负）；出界**逐格跳过**并计数、全出界 ⇒ 拒绝；三族图号 + 库号字节；`bit15` 矩阵复用 [`paint`]；整次放置 = **一步撤销** | [`EditSession::place_stamp`] / [`stamp`] | `CrystalStudio/PlacedStamps.cs:80`、`:87-98`、`:114-121`；`mir2-stamp/src/stamp.rs:22-32` |
 //! | 10 | **矩形选区 + 剪贴板**（新增）：选区是**闭区间**（C# `Rect` 半开 + 构造时 `+1`，两者等价）；越界**入口裁剪一次**；复制**整块都抓**（含空格）；删除/剪切**三族按层清 + 库号字节写 0**（取 `CutSource` 口径）；粘贴**复用 `plan_stamp`**（逐格越界跳过 + Type5 闸门 + 保留目标 `bit15`）；**整次操作 = 一步撤销**；选区/剪贴板**不进撤销栈、不置脏** | [`EditSession::copy_selection`] / [`selection`] | `MapViewport.cs:102`、`:115`、`:390`、`:399-400`、`:540`、`:546`；`RegionCopy.cs:17`、`:21-27`、`:45-69`、`:70-91`、`:101-110` |
 //! | 11 | **`.X` → 格表**（新增）：三族图号一律 `& 0x7FFF`；三族库号超出 `0..=255` **报错不截断**（消息含「第 N 格 / 地表\|中层\|物体 / 值」）；`door`/`door_offset`/`light`/`ani_frame`/`ani_tick` 与 5 个「视图装不下」的动画字段**全部照搬真值** | [`cells_from_stamp`] / [`stamp_convert`] | `mir2-stamp/src/cell.rs`（v2 格体偏移表）；`CrystalStudio/README.md:205-207` |
+//! | 12 | **五层计数**（新增）：官方掩码 = C# **归一化内存表示**（legacy `bit15`→29/30、Mir3 `flag` bit0/1、u32 族磁盘 bit29/30）；单格 **O(1) 增量**、整块换视图后**必须** `rebuild_layer_counts()`；**照抄磁盘 bit29/30 会得到几乎全 0 的假计数**（40 张实测 39 张全 0） | [`layer_counts`] / [`Document::write_view_cell`] | `Document.LayerCounts.cs:5-25@acfbbf8a`；`LegacyMapReader.cs:149-150`、`:160-161`、`:438-439`、`:496-497`、`:545-546@acfbbf8a` |
 //!
 //! # 四、模块地图
 //!
@@ -57,6 +59,7 @@
 //! | [`document`] | `Document`：双表示（`raw` + `view`）+ 路径 + 脏标记 + `to_bytes` + 逐字节差异 | `mapdoc.rs:22-44`、`edit.rs:1326-1346`、`:1669-1720` |
 //! | [`convert`] | `raw ⇄ view` 的**字段映射表**、位宽处理、信息丢失清单、格式能力闸门 | 新增（接入 `mir2-format`） |
 //! | [`layer`] | `EditLayer`（五层）+ 字段映射 + **`bit15` 保留矩阵** | `edit.rs:127-360` |
+//! | [`layer_counts`] | **五层计数**：官方掩码的按格式归一化（legacy `bit15` / Mir3 `flag` / u32 `bit29/30`）+ 单格增量 + 整块重建 | `Document.LayerCounts.cs:5-25@acfbbf8a`（2026-11-06 新增） |
 //! | [`brush`] | `Brush`（族/图号/库号/来源）+ `PickedCell` + 笔刷尺寸规范化 | `edit.rs:459-552`、`metrics.rs:159-199` |
 //! | [`paint`] | `paint()`：单格落笔（按层分派；N×N 由会话展开） | `edit.rs:1360-1488` |
 //! | [`fill`] | 填充匹配键 + 四邻 BFS + `step=2` + 上限 + **先收块后动笔** | `edit.rs:1490-1610`、`:1036-1206` |
@@ -75,7 +78,7 @@
 //! use miredit_core::{apply, Command, EditSession};
 //!
 //! // ① 打开一张图（会话持有文档，见 session.rs 模块文档第一节）
-//! let mut ed = EditSession::load(std::path::Path::new(r"E:\GodM2\GodotClient\maps\0.map"))?;
+//! let mut ed = EditSession::load(std::path::Path::new("<maps>/0.map"))?;
 //! // ② 切层 → 吸管 → 落笔 → 撤销 → 保存，全部走可序列化命令
 //! apply(&mut ed, Command::SetLayer { layer: "ground".into() })?;
 //! apply(&mut ed, Command::Pick { x: 0, y: 0 })?;
@@ -111,6 +114,7 @@ mod document;
 mod error;
 mod fill;
 mod layer;
+mod layer_counts;
 mod paint;
 mod save;
 mod selection;
@@ -143,6 +147,10 @@ pub use fill::{
 pub use layer::{
     EditLayer, COLLISION_BIT, LAYER_IMG_FIELDS, LAYER_LIB_FIELDS, NAME_FRONT, NAME_GROUND,
     NAME_HIGH_COLLISION, NAME_LOW_COLLISION, NAME_MIDDLE, SPRITE_MAX,
+};
+pub use layer_counts::{
+    cell_mask, cell_mask_ext, LayerCounts, MaskContext, MASK_FRONT, MASK_GROUND,
+    MASK_HIGH_COLLISION, MASK_LOW_COLLISION, MASK_MIDDLE,
 };
 pub use paint::{
     paint, PaintOutcome, Tool, TOOL_BRUSH, TOOL_BRUSH_IDX, TOOL_BUCKET, TOOL_BUCKET_IDX,

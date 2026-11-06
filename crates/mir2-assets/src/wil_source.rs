@@ -2,7 +2,7 @@
 //!
 //! # 一、解码复用，不重写
 //!
-//! 真正的二进制解析在 `tools/wil2atlas`（`wil_decoder.rs` / `wzl_decoder.rs`）里，
+//! 真正的二进制解析在 vendored 的 `vendor/wil2atlas`（`wil_decoder.rs` / `wzl_decoder.rs`）里，
 //! 本模块只做三件事：**懒打开 + 小容量 LRU + 错误归集**。
 //! 因此本 crate 与 `wil2atlas` 走的是**同一份解码代码、同一份调色板表**，
 //! 这是「编辑器所见 = 客户端所见」的结构性保证（另一重保证见集成测试的逐像素比对）。
@@ -14,8 +14,8 @@
 //! | `.wzl`（WZL/WZX） | 无 | [`CLIENT_PALETTE`]（客户端硬编码表） |
 //! | `.wil`（WIL/WIX） | 有 | 文件内嵌调色板 |
 //!
-//! 与 `wil2atlas` 主程序的默认 `--palette file` 同一条路径（`main.rs:147-161`：
-//! 有内嵌用内嵌，无内嵌回退 client 表）。
+//! 与上游 `wil2atlas` 主程序（本仓只 vendor 其解码器，未含 `main.rs`）的默认 `--palette file`
+//! 同一条路径（上游 `main.rs:147-161`：有内嵌用内嵌，无内嵌回退 client 表）。
 //! 本机实测：`GodotClient/assets` 下 `Tiles/Tiles5/Objects/Objects21/Hum/Items/npc`
 //! 七个库的 meta 都是 `palette_mismatch: 0`，即两条路径逐项等价。
 //!
@@ -70,10 +70,11 @@ struct Inner {
 ///
 /// ```no_run
 /// use mir2_assets::{LibPaths, LibRef, SpriteSource, WilSource};
-/// use std::path::Path;
 ///
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let paths = LibPaths::discover(Path::new(r"E:\GodM2\client\热血传奇23周年客户端"))?;
+/// // 客户端根由环境变量给出：值形如 `<client-root>`（客户端 data/ 的上一级）
+/// let root = mir2_assets::client_root().expect("先设置 MIREDIT_CLIENT_ROOT");
+/// let paths = LibPaths::discover(&root)?;
 /// let src = WilSource::open(&paths)?;
 /// let tiles = LibRef::ground(0); // 地面 0 号 = Tiles
 /// if let Some(f) = src.frame(tiles, 0) {
@@ -166,7 +167,8 @@ impl WilSource {
     /// ```no_run
     /// use mir2_assets::{LibPaths, LibRef, WilSource};
     /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-    /// let paths = LibPaths::discover(std::path::Path::new(r"E:\GodM2\client\热血传奇23周年客户端"))?;
+    /// let root = mir2_assets::client_root().expect("先设置 MIREDIT_CLIENT_ROOT");
+    /// let paths = LibPaths::discover(&root)?;
     /// let src = WilSource::open(&paths)?;
     /// println!("Tiles 共 {:?} 帧", src.frame_count(LibRef::ground(0)));
     /// # Ok(())
@@ -412,7 +414,7 @@ mod tests {
     /// 从图集 meta 里抠出 `total_frames` 的值。
     ///
     /// 不引 `serde_json`（本 crate 的运行期依赖里没有它，为一条测试加依赖不值当）：
-    /// meta 是**我们自己的 `wil2atlas` 写出来的定格式文件**，`"total_frames": <整数>`
+    /// meta 是**上游图集烘焙工具 `wil2atlas` 写出来的定格式文件**，`"total_frames": <整数>`
     /// 出现在顶层，字面查找足够可靠；抠不到就返回 `None`，由调用方当"meta 不可用"处理。
     fn meta_total_frames(path: &std::path::Path) -> Option<u64> {
         let text = std::fs::read_to_string(path).ok()?;
@@ -430,14 +432,17 @@ mod tests {
     /// **帧数查询（任务书 §三 唯一允许的扩展）**：四个库的 `frame_count` 必须
     /// ① `> 0`；② 与客户端图集 meta 的 `total_frames` 逐值相等。
     ///
-    /// 为什么拿 meta 对账：`total_frames` 是 `wil2atlas` 用**同一个解码器**数出来的
+    /// 为什么拿 meta 对账：`total_frames` 是上游 `wil2atlas` 用**同一个解码器**数出来的
     /// （索引表长度），两条独立路径得到同一个数，才说明 `frame_count` 真的复用了
     /// 打开时解析好的 count、没有另数一遍。
     /// meta 缺失（换机器/未烘焙）时**跳过并打印**，不让本机资源差异变成红灯。
     #[test]
     fn 四库帧数与图集meta一致() {
-        let root = std::path::Path::new(crate::DEFAULT_CLIENT_ROOT);
-        let paths = match LibPaths::discover(root) {
+        let Some(root) = crate::client_root() else {
+            eprintln!("[跳过] 未设置 {}（图库扫描根）", crate::CLIENT_ROOT_ENV);
+            return;
+        };
+        let paths = match LibPaths::discover(&root) {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("[跳过] 本机没有图库根目录 {}：{e}", root.display());
@@ -459,7 +464,7 @@ mod tests {
             ("Objects", LibRef::surface(0)),
             ("Objects21", LibRef::surface(20)),
         ];
-        let atlas_root = std::path::Path::new(crate::DEFAULT_CLIENT_ATLAS_ROOT);
+        let atlas_root = crate::client_atlas_root();
 
         let mut checked = 0;
         for (stem, lib) in cases {
@@ -475,6 +480,13 @@ mod tests {
                 "{stem} 的定位键反查不一致（族/索引写错了）"
             );
 
+            let Some(atlas_root) = atlas_root.as_deref() else {
+                eprintln!(
+                    "[跳过] 未设置 {}（图集根），本库只验证 frame_count",
+                    crate::CLIENT_ATLAS_ROOT_ENV
+                );
+                continue;
+            };
             let meta = atlas_root.join(stem).join(format!("{stem}_atlas_meta.json"));
             match meta_total_frames(&meta) {
                 Some(total) => {
@@ -498,8 +510,11 @@ mod tests {
     /// 未登记的库（族/索引不存在）帧数必须是 `None`，**不许**回落到别的族或给出 0。
     #[test]
     fn 未登记库帧数为none() {
-        let root = std::path::Path::new(crate::DEFAULT_CLIENT_ROOT);
-        let paths = match LibPaths::discover(root) {
+        let Some(root) = crate::client_root() else {
+            eprintln!("[跳过] 未设置 {}（图库扫描根）", crate::CLIENT_ROOT_ENV);
+            return;
+        };
+        let paths = match LibPaths::discover(&root) {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("[跳过] 本机没有图库根目录 {}：{e}", root.display());
@@ -535,8 +550,11 @@ mod tests {
     /// （WZL 块头前多 4 字节，最容易错位），这条会当场红。
     #[test]
     fn 锚点快路径与取帧结果同值() {
-        let root = std::path::Path::new(crate::DEFAULT_CLIENT_ROOT);
-        let paths = match LibPaths::discover(root) {
+        let Some(root) = crate::client_root() else {
+            eprintln!("[跳过] 未设置 {}（图库扫描根）", crate::CLIENT_ROOT_ENV);
+            return;
+        };
+        let paths = match LibPaths::discover(&root) {
             Ok(p) => p,
             Err(e) => {
                 eprintln!("[跳过] 本机没有图库根目录 {}：{e}", root.display());

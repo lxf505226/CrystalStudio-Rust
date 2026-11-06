@@ -376,8 +376,13 @@ mod tests {
     /// 临时文件必须与目标同目录（跨卷的话 rename 不再是原子操作）。来源：`save.rs:344-357`。
     #[test]
     fn 临时文件与目标同目录() {
-        let p = Path::new(r"I:\miredit-core-target\edit-0.map");
-        let t = temp_path_for(p);
+        // 目标路径只用来算「临时文件放哪」，不落盘；但仍要**唯一且可移植**：
+        // 用 `%TEMP%` + 进程号，别写死某块盘上的固定路径（公开仓/PR 的机器上没有 `I:`）。
+        let 本进程 = std::process::id();
+        assert_ne!(本进程, 0, "进程号不可能是 0，但 std::process::id() 返回了 0");
+        let dir = std::env::temp_dir().join(format!("miredit_core_same_dir_{本进程}"));
+        let p = dir.join("edit-0.map");
+        let t = temp_path_for(&p);
         assert_eq!(t.parent(), p.parent());
         assert_eq!(
             t.file_name().unwrap().to_string_lossy(),
@@ -468,10 +473,15 @@ mod tests {
     /// 来源：`save.rs:393-399`。
     #[test]
     fn 目标目录不存在时如实报错() {
-        let p = Path::new(r"I:\__no_such_dir_miredit_core__\x.map");
-        let err = save_atomic(p, b"X").unwrap_err();
+        // 不写死盘符：`%TEMP%` 下的唯一名字（带上进程号）照样"不存在"，且可移植到公开仓/PR 的机器。
+        let 本进程 = std::process::id();
+        let 目录 = std::env::temp_dir().join(format!("__no_such_dir_miredit_core_{本进程}__"));
+        assert!(!目录.exists(), "前提：这个目录本来就不存在：{}", 目录.display());
+        let p = 目录.join("x.map");
+        let err = save_atomic(&p, b"X").unwrap_err();
         assert!(err.to_string().contains("x.map"), "报错里要有路径：{err}");
         assert!(!p.exists());
+        assert!(!目录.exists(), "失败后也不许顺手把目录建出来：{}", 目录.display());
     }
 
     /// **目录项 fsync 如实分类，且不影响保存成败**（审计 E7）。来源：`save.rs:497-526`。
@@ -506,11 +516,15 @@ mod tests {
     /// 来源：`save.rs:529-537`。
     #[test]
     fn 目录不存在时报打不开() {
-        let p = Path::new(r"I:\__no_such_dir_miredit_core_dirsync__\x.map");
-        let r = fsync_parent(p);
+        // 同上：`%TEMP%` 下的唯一名字，不写死盘符。
+        let 本进程 = std::process::id();
+        let 目录 = std::env::temp_dir().join(format!("__no_such_dir_miredit_core_dirsync_{本进程}__"));
+        assert!(!目录.exists(), "前提：这个目录本来就不存在：{}", 目录.display());
+        let p = 目录.join("x.map");
+        let r = fsync_parent(&p);
         eprintln!("[目录fsync] {r:?}");
         assert!(matches!(r, DirSync::OpenFailed { .. }), "{r:?}");
         assert!(!r.is_ok());
-        assert_eq!(r.dir(), Path::new(r"I:\__no_such_dir_miredit_core_dirsync__"));
+        assert_eq!(r.dir(), 目录.as_path());
     }
 }

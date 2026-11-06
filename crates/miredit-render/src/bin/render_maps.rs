@@ -1,10 +1,12 @@
 //! `render_maps` —— 抽样渲染三张真实地图并导出参考图（验收门 §五.3 + §五.5 的实跑入口）。
 //!
-//! 用法（在 `tools/miredit` 下）：
+//! 用法（在**仓库根**下）：
 //!
 //! ```text
 //! $env:CARGO_INCREMENTAL=0
-//! $env:CARGO_TARGET_DIR='I:\miredit-render-target'
+//! $env:CARGO_TARGET_DIR='<任意可写目录>'
+//! $env:MIREDIT_ASSET_ROOT='<地图语料根>'          # 语料根，三张图挂在它下面
+//! $env:MIREDIT_CLIENT_ROOT='<客户端根>'           # 图库根（.wzl/.wzx 等）
 //! cargo run -p miredit-render --release --bin render_maps
 //! cargo run -p miredit-render --release --bin render_maps -- --lighting=night
 //! cargo run -p miredit-render --release --bin render_maps -- --lighting=night --viewport=240,250,64,48
@@ -12,11 +14,11 @@
 //!
 //! - 每张图渲染 **一块 64×48 世界格**（不是整图；整图 700×700 会是 33600×22400 像素），
 //!   视口可用 `--viewport=x,y,w,h` 改；
-//! - 输出写到 `tools/miredit/layout/refs/render-<图名>.png`（本 crate 允许写的路径）；
+//! - 输出写到 `layout/refs/render-<图名>.png`（本 crate 允许写的路径）；
 //!   带 `--lighting` 且**不是**白天档、或改了视口时，文件名加后缀
 //!   （`render-<图名>-<档>.png` / `…-<档>_x240_y250.png`），
 //!   **默认调用的输出名与内容都不变**（逐字节）；
-//! - 地图/图库不存在 ⇒ `eprintln!` 跳过，**不 panic**（换机器也能跑）；
+//! - 语料根/图库根未设或不是目录、单张图缺失 ⇒ 打印 `[skip]` 后跳过，**不 panic、不造假图**；
 //! - 每张图都会渲染两次做**确定性自检**（字节相等才打印 OK）；
 //! - 计时口径：`冷` = 该图第一次渲染（含图库首次打开/解码），`热` = 同一进程内第二次。
 
@@ -30,15 +32,29 @@ use miredit_render::{
     Viewport, CELL_H, CELL_W,
 };
 
-/// 抽样地图（路径写死真实位置，不是猜的；不存在就跳过）。
+/// 抽样地图：**相对 `MIREDIT_ASSET_ROOT` 的路径**（不是猜的；不存在就跳过）。
+///
+/// 为什么不再写绝对路径：公开仓不内置任何开发机路径（2026-11-06）。三张图的来源目录不同 ——
+/// `0/41` 是客户端工程导出的 `GodotClient/maps`，`n0104` 是原版客户端的 `Map/` ——
+/// 所以各自带相对段，统一挂在同一个资产根下。
 const 抽样地图: [(&str, &str); 3] = [
-    ("0", r"E:\GodM2\GodotClient\maps\0.map"),
-    ("41", r"E:\GodM2\GodotClient\maps\41.map"),
-    (
-        "n0104",
-        r"E:\GodM2\client\热血传奇23周年客户端\Map\n0104.map",
-    ),
+    ("0", "GodotClient/maps/0.map"),
+    ("41", "GodotClient/maps/41.map"),
+    ("n0104", "client/热血传奇23周年客户端/Map/n0104.map"),
 ];
+
+/// 地图语料根的环境变量名（与各测试里的 `MIREDIT_ASSET_ROOT` 同一个名字）。
+const ASSET_ROOT_ENV: &str = "MIREDIT_ASSET_ROOT";
+
+/// 地图语料根：读 `MIREDIT_ASSET_ROOT`；**未设 / 不是目录 ⇒ `None`**（不猜、不回落）。
+fn 资产根() -> Option<PathBuf> {
+    let raw = std::env::var_os(ASSET_ROOT_ENV)?;
+    if raw.is_empty() {
+        return None;
+    }
+    let p = PathBuf::from(raw);
+    p.is_dir().then_some(p)
+}
 
 /// 抽样窗口：64×48 世界格，左上角 (0,0)。
 fn 视口() -> Viewport {
@@ -129,9 +145,23 @@ fn main() -> std::process::ExitCode {
         return std::process::ExitCode::FAILURE;
     }
 
-    let root = std::env::var("MIREDIT_CLIENT_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|_| PathBuf::from(mir2_assets::DEFAULT_CLIENT_ROOT));
+    // 地图语料根：**未设 / 不是目录 ⇒ 直接跳过**（不猜任何缺省目录，也不 panic）
+    let Some(assets_root) = 资产根() else {
+        eprintln!(
+            "[skip] 未设置 {ASSET_ROOT_ENV}（地图语料根）或它不是目录 ⇒ 无地图可出图，退出（不造假图）"
+        );
+        return std::process::ExitCode::FAILURE;
+    };
+    println!("[资产根] {}", assets_root.display());
+
+    // 图库根：未设 / 不是目录 ⇒ `None`（公开仓不内置缺省根，见 `mir2_assets::client_root`）
+    let Some(root) = mir2_assets::client_root() else {
+        eprintln!(
+            "[skip] 未设置 {}（图库扫描根）或它不是目录 ⇒ 跳过全部地图，不造假图",
+            mir2_assets::CLIENT_ROOT_ENV
+        );
+        return std::process::ExitCode::FAILURE;
+    };
     println!("[图库根] {}", root.display());
     let paths = match LibPaths::discover(&root) {
         Ok(p) => p,
@@ -162,16 +192,17 @@ fn main() -> std::process::ExitCode {
     );
 
     let mut 失败 = 0u32;
-    for (name, path) in 抽样地图 {
-        let p = Path::new(path);
+    for (name, rel) in 抽样地图 {
+        // 相对段挂在资产根下（不再有绝对路径）
+        let p = assets_root.join(rel);
         if !p.is_file() {
-            eprintln!("[跳过] {name}：地图不存在 {path}");
+            eprintln!("[skip] {name}：地图不存在 {}", p.display());
             continue;
         }
-        let bytes = match std::fs::read(p) {
+        let bytes = match std::fs::read(&p) {
             Ok(b) => b,
             Err(e) => {
-                eprintln!("[跳过] {name}：读文件失败 {path}：{e}");
+                eprintln!("[skip] {name}：读文件失败 {}：{e}", p.display());
                 失败 += 1;
                 continue;
             }
@@ -179,7 +210,7 @@ fn main() -> std::process::ExitCode {
         let map = match Map::parse(&bytes) {
             Ok(m) => m,
             Err(e) => {
-                eprintln!("[跳过] {name}：解析失败 {path}：{e}");
+                eprintln!("[skip] {name}：解析失败 {}：{e}", p.display());
                 失败 += 1;
                 continue;
             }
@@ -278,7 +309,7 @@ fn main() -> std::process::ExitCode {
     std::process::ExitCode::SUCCESS
 }
 
-/// `tools/miredit/layout/refs`（相对本 crate 清单目录）。
+/// `layout/refs`（相对本 crate 清单目录）。
 fn refs_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")

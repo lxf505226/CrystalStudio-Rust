@@ -982,7 +982,6 @@ mod tests {
     use super::*;
     use crate::fonts;
     use mir2_assets::LibPaths;
-    use std::path::Path;
 
     fn window() -> Rect {
         Rect::from_min_size(pos2(0.0, 0.0), vec2(m::WINDOW_W, m::WINDOW_H))
@@ -992,10 +991,16 @@ mod tests {
         Layout::compute(window())
     }
 
-    /// 本机图库（装不上就 `None`，让相关测试打印跳过 —— 换机器不该变红）。
+    /// 本机图库（未设 `MIREDIT_CLIENT_ROOT` 或装不上就 `None`，让相关测试打印跳过 —— 换机器不该变红）。
     fn 本机路径() -> Option<LibPaths> {
-        let root = Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-        match LibPaths::discover(root) {
+        let Some(root) = mir2_assets::client_root() else {
+            eprintln!(
+                "[跳过] 未设置 {}（图库扫描根）",
+                mir2_assets::CLIENT_ROOT_ENV
+            );
+            return None;
+        };
+        match LibPaths::discover(&root) {
             Ok(p) if !p.is_empty() => Some(p),
             _ => {
                 eprintln!("[跳过] 本机没有图库 {}", root.display());

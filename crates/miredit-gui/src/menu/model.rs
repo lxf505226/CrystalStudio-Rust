@@ -5,7 +5,7 @@
 //!
 //! 1. `CrystalStudio/MainWindow.axaml:5` 的 `<Menu>` 树 —— 每项 `Header` 是
 //!    `{local:Loc <Key>}`，`<Separator />` 的位置就是官方分组；
-//! 2. `tools/miredit/layout/crystalstudio-strings.json` 里同一批 key 的 `Chinese`。
+//! 2. `layout/crystalstudio-strings.json` 里同一批 key 的 `Chinese`。
 //!
 //! 运行时由代码追加的那几项（语言 / 7 个面板开关 / 锁定 / 重置）见
 //! `ui_text` 里「下拉菜单项」小节的说明与 [`crate::menu::panels`] 的模块文档。
@@ -24,7 +24,7 @@
 //! # 子菜单的账（2026-11-05 补：审查缺陷 1 / 2）
 //!
 //! 官方有 3 项是**可展开容器**，本仓 2026-11-05 之前把它们压成了叶子项
-//! （`deliverables/审查-菜单39项-2026-11-05.md` 缺陷 1、2）。现在按 [`Sub`] 展开：
+//! （内部审查报告《审查-菜单 39 项》缺陷 1、2；已移出公开仓）。现在按 [`Sub`] 展开：
 //!
 //! ```text
 //! 文件 → 最近打开      动态列表（官方 RecentMaps.cs:27-39）；行 = 设置文件里的 `recent` 列表

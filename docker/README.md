@@ -19,11 +19,11 @@
 ## 2. 起服务
 
 ```bash
-# ① 进 docker 目录（compose.yaml 在这里）
+# ① 在 docker 目录里操作（compose.yaml 在这里；下面的相对卷 ./data/... 也相对它解析）
 cd docker
 
 # ② 一条命令验证：构建 → 起 → 探活 → 五项断言 → 收工
-./docker/verify.sh
+./verify.sh            # Windows PowerShell：.\verify.ps1
 
 # ③ 长期起服务（验证通过后再做这步）
 docker compose up -d --build
@@ -37,7 +37,8 @@ docker compose up -d --build
 
 `verify.sh` 跑完会 `docker compose down`（除非加 `--keep`），所以第 ③ 步要单独执行。
 
-**首次起之前先把四个目录指过去**（compose 的缺省值指向迁移前的相对布局，独立仓库里必然失效）：
+**首次起之前先把四个目录指过去**（compose 的缺省值是 `docker/data/` 下的**空占位目录**，
+首次 `up` 时 Docker 会自动创建 ⇒ 不指也起得来，但数据端点会如实 404/503）：
 
 ```bash
 export MIREDIT_MAP_DIR=/path/to/maps
@@ -51,8 +52,8 @@ export MIREDIT_OBJECTS_DIR=/path/to/crystalstudio/Objects
 
 | 脚本 | 平台 | 用法 |
 |---|---|---|
-| `verify.sh` | Linux / macOS（bash） | `./docker/verify.sh` |
-| `verify.ps1` | Windows（PowerShell 5.1 / 7） | `.\docker\verify.ps1` |
+| `verify.sh` | Linux / macOS（bash） | 在 `docker/` 下 `./verify.sh`；在仓库根 `./docker/verify.sh`（两种都行：脚本按**自己所在目录**找 `compose.yaml`） |
+| `verify.ps1` | Windows（PowerShell 5.1 / 7） | 在 `docker/` 下 `.\verify.ps1`；在仓库根 `.\docker\verify.ps1` |
 
 两者做**完全相同的五项断言**，输出同一行判据 `DOCKER_VERIFY: PASS`：
 
@@ -82,10 +83,10 @@ export MIREDIT_OBJECTS_DIR=/path/to/crystalstudio/Objects
 |---|---|---|
 | 宿主端口 | `8080` | `MIREDIT_PORT=18080` 或 `verify.sh --port 18080` |
 | 容器端口 | `8080` | 固定（改映射即可，别改容器内端口） |
-| 地图目录 | 迁移前的相对布局 | `MIREDIT_MAP_DIR` |
-| 图库目录（客户端根） | 迁移前的相对布局 | `MIREDIT_CLIENT_DIR` |
-| 印章索引目录 | 迁移前的相对布局 | `MIREDIT_CATALOGUE_DIR` |
-| 印章 `.X` 目录 | 迁移前的相对布局 | `MIREDIT_OBJECTS_DIR` |
+| 地图目录 | `docker/data/maps`（空占位，`up` 时自动建） | `MIREDIT_MAP_DIR` |
+| 图库目录（客户端根） | `docker/data/client`（空占位） | `MIREDIT_CLIENT_DIR` |
+| 印章索引目录 | `docker/data/crystalstudio/catalogue`（空占位） | `MIREDIT_CATALOGUE_DIR` |
+| 印章 `.X` 目录 | `docker/data/crystalstudio/Objects`（空占位） | `MIREDIT_OBJECTS_DIR` |
 | 健康检查 | `GET /api/health` 每 30 s | 改 `compose.yaml` 的 `healthcheck` |
 
 容器内环境变量（`Dockerfile` 的 `ENV`，与后端 `crates/miredit-web/src/state.rs` 一一对应）：
@@ -150,8 +151,8 @@ docker compose --profile front up -d --build
 
 | 项 | 状态 | 说明 |
 |---|---|---|
-| `compose.yaml` 的构建上下文 | ⚠ **待改** | 仍是 `context: ../..`（仓库的上一级）+ `dockerfile: miredit/docker/Dockerfile`，依赖「仓库目录名叫 `miredit` 且与 `wil2atlas` 并列」这一迁移前布局；独立 clone 后需改成仓库根，并同步 `Dockerfile` 里的 `COPY` 路径 |
-| `mir2-assets` 的 `wil2atlas` 依赖 | ⚠ **待改** | `crates/mir2-assets/Cargo.toml` 里是**开发机绝对路径**的 path 依赖；公开构建需改成发布版依赖或指向你自己的副本 |
+| `compose.yaml` 的构建上下文 | ✅ **已解决（2026-11-06）** | 已改为 **仓库根** `context: ..` + `dockerfile: docker/Dockerfile`；`Dockerfile` 的 `COPY` 也改为仓库内相对路径（`Cargo.toml` / `Cargo.lock` / `crates/` / `vendor/` / `web/`）。独立 clone 后目录名叫 `CrystalStudio-Rust` 还是别的都不影响 |
+| `mir2-assets` 的 `wil2atlas` 依赖 | ✅ **已解决** | WIL/WZL 解码器已 vendored 到 `vendor/wil2atlas/`（decoder-only，MIT；来源与逐文件 SHA256 见 `vendor/wil2atlas/NOTICE`），`crates/mir2-assets/Cargo.toml` 已改用仓库内相对路径 `path = "../../vendor/wil2atlas"`，不再依赖开发机绝对路径 |
 | `docker build` 能成功 | ❌ 未验证 | 无 Docker 环境 |
 | Linux 二进制能跑（glibc / 依赖） | ❌ 未验证 | 只做过 Windows 二进制的运行时等价验证 |
 | `nginx -t` 能接受这份配置 | ❌ 未验证 | 只做了静态配平与指令拼写核对 |

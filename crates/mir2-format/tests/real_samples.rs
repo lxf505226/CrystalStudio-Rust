@@ -2,14 +2,15 @@
 //!
 //! # 一、样本口径
 //!
-//! | 目录 | 文件数 | 说明 |
+//! | 相对路径（挂在资产根下） | 文件数 | 说明 |
 //! |------|--------|------|
-//! | `E:\GodM2\GodotClient\maps\*.map` | 61 | 客户端现役图 |
-//! | `E:\GodM2\client\热血传奇23周年客户端\Map\*.map` | 1097 | 23 周年客户端全量 |
+//! | `GodotClient/maps/*.map` | 61 | 客户端现役图 |
+//! | `client/热血传奇23周年客户端/Map/*.map` | 1097 | 23 周年客户端全量 |
 //! | **合计** | **1158** | 2026-11-04 实测 |
 //!
-//! 目录可用环境变量 `MIR2_MAP_DIRS`（`;` 分隔）覆盖；目录不存在时**打印原因并跳过**
-//! （不静默通过）。
+//! 资产根由环境变量 `MIREDIT_ASSET_ROOT` 给出（缺省本机真实根，见 [`资产根`]）；
+//! 目录整个可用 `MIR2_MAP_DIRS`（`;` 分隔）覆盖。**根或文件不存在时打印 `[skip]` 并跳过**
+//! （不静默通过，也不 panic —— 公开仓/PR 的机器上没有游戏素材）。
 //!
 //! # 二、两遍跑法
 //!
@@ -30,11 +31,27 @@ use mir2_format::{read_any, read_any_tolerant, FormatId};
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-/// 默认样本目录（可用 `MIR2_MAP_DIRS` 覆盖）。
-const 默认目录: [&str; 2] = [
-    r"E:\GodM2\GodotClient\maps",
-    r"E:\GodM2\client\热血传奇23周年客户端\Map",
-];
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
+/// 默认样本目录（相对资产根；可用 `MIR2_MAP_DIRS` 覆盖）。
+fn 默认目录(root: &Path) -> [PathBuf; 2] {
+    [
+        root.join("GodotClient").join("maps"),
+        root.join("client").join("热血传奇23周年客户端").join("Map"),
+    ]
+}
 
 /// 一个格式的统计。
 #[derive(Debug, Default, Clone, Copy)]
@@ -54,7 +71,13 @@ fn 收集样本() -> Vec<PathBuf> {
             .filter(|s| !s.is_empty())
             .map(PathBuf::from)
             .collect(),
-        _ => 默认目录.iter().map(PathBuf::from).collect(),
+        _ => match 资产根() {
+            Some(root) => 默认目录(&root).to_vec(),
+            None => {
+                eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+                return Vec::new();
+            }
+        },
     };
     let mut out = Vec::new();
     for d in dirs {
@@ -150,7 +173,7 @@ fn 严格遍(文件: &[PathBuf]) -> (BTreeMap<FormatId, 统计>, Vec<(PathBuf, S
 fn 真实样本严格遍与宽松遍全量往返() {
     let 文件 = 收集样本();
     if 文件.is_empty() {
-        eprintln!("跳过：没有找到任何 .map 样本（用 MIR2_MAP_DIRS 指定目录）");
+        eprintln!("[skip] 没有找到任何 .map 样本（用 MIREDIT_ASSET_ROOT / MIR2_MAP_DIRS 指定）");
         return;
     }
     println!("待测 .map 文件数：{}", 文件.len());
@@ -216,13 +239,13 @@ fn 真实样本严格遍与宽松遍全量往返() {
 
 /// 断言一条格记录与 Python 独立解码结果逐字段相等。
 #[allow(clippy::too_many_arguments)]
-fn 断言_old12(p: &str, x: u16, y: u16, 期望: (u32, u16, u16, u8, u8, u8, u8, u8, u8)) {
-    let raw = std::fs::read(p).unwrap_or_else(|e| panic!("读 {p} 失败：{e}"));
-    let map = read_any(&raw).unwrap_or_else(|e| panic!("解析 {p} 失败：{e}"));
+fn 断言_old12(p: &Path, x: u16, y: u16, 期望: (u32, u16, u16, u8, u8, u8, u8, u8, u8)) {
+    let raw = std::fs::read(p).unwrap_or_else(|e| panic!("读 {} 失败：{e}", p.display()));
+    let map = read_any(&raw).unwrap_or_else(|e| panic!("解析 {} 失败：{e}", p.display()));
     assert_eq!(map.format, FormatId::Old12);
     let c = map
         .cell(x, y)
-        .unwrap_or_else(|| panic!("{p} ({x},{y}) 应在图内"));
+        .unwrap_or_else(|| panic!("{} ({x},{y}) 应在图内", p.display()));
     let 实测 = (
         c.bk_img,
         c.mid_img,
@@ -234,7 +257,12 @@ fn 断言_old12(p: &str, x: u16, y: u16, 期望: (u32, u16, u16, u8, u8, u8, u8,
         c.area,
         c.light,
     );
-    assert_eq!(实测, 期望, "{p} ({x},{y}) 的字段与 Python 解码不一致");
+    assert_eq!(
+        实测,
+        期望,
+        "{} ({x},{y}) 的字段与 Python 解码不一致",
+        p.display()
+    );
 }
 
 /// `Old12` 真实样本：`GodotClient/maps/0.map`（700×700，12 B/格）。
@@ -244,19 +272,23 @@ fn 断言_old12(p: &str, x: u16, y: u16, 期望: (u32, u16, u16, u8, u8, u8, u8,
 /// `(699,699) idx=489999 off=5880040 bk=32768`。
 #[test]
 fn 列优先与字段偏移对照_old12() {
-    let p = r"E:\GodM2\GodotClient\maps\0.map";
-    if !Path::new(p).exists() {
-        eprintln!("跳过：{p} 不存在（非本机环境）");
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let p = root.join("GodotClient").join("maps").join("0.map");
+    if !p.is_file() {
+        eprintln!("[skip] 缺文件 {}", p.display());
         return;
     }
-    let raw = std::fs::read(p).unwrap();
+    let raw = std::fs::read(&p).unwrap();
     let map = read_any(&raw).unwrap();
     assert_eq!((map.width, map.height), (700, 700));
     assert_eq!(map.cells.len(), 700 * 700);
 
-    断言_old12(p, 0, 0, (34620, 0, 0, 0, 0, 0, 0, 0, 0));
-    断言_old12(p, 100, 200, (1454, 0, 0, 0, 0, 0, 0, 0, 0));
-    断言_old12(p, 699, 699, (32768, 0, 0, 0, 0, 0, 0, 0, 0));
+    断言_old12(&p, 0, 0, (34620, 0, 0, 0, 0, 0, 0, 0, 0));
+    断言_old12(&p, 100, 200, (1454, 0, 0, 0, 0, 0, 0, 0, 0));
+    断言_old12(&p, 699, 699, (32768, 0, 0, 0, 0, 0, 0, 0, 0));
 
     // 列优先：idx 必须是 x*h + y（行优先会是 y*w + x）
     let h = 700usize;
@@ -279,12 +311,16 @@ fn 列优先与字段偏移对照_old12() {
 /// `(159,164) off=369638 bk=1953 fr=1`。
 #[test]
 fn 列优先与字段偏移对照_shanda14() {
-    let p = r"E:\GodM2\GodotClient\maps\11.map";
-    if !Path::new(p).exists() {
-        eprintln!("跳过：{p} 不存在（非本机环境）");
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let p = root.join("GodotClient").join("maps").join("11.map");
+    if !p.is_file() {
+        eprintln!("[skip] 缺文件 {}", p.display());
         return;
     }
-    let raw = std::fs::read(p).unwrap();
+    let raw = std::fs::read(&p).unwrap();
     let map = read_any(&raw).unwrap();
     assert_eq!(map.format, FormatId::Shanda14, "11.map 应判成 14 B/格");
     assert_eq!((map.width, map.height), (160, 165));
@@ -315,44 +351,54 @@ fn 列优先与字段偏移对照_shanda14() {
 /// `TileAnimationImage = i16@off+14`、`TileAnimationFrames = u8@off+21`、
 /// `TileAnimationOffset = i16@off+22`（对应 C# `LegacyMapReader.cs:300` / `:302` / `:303`）。
 fn 断言_type3尾区(
-    p: &str,
+    p: &Path,
     尺寸: (u16, u16),
     点: &[(u16, u16, u16, u8, u16)],
 ) {
     use mir2_format::formats::shanda2012::Shanda2012;
 
-    if !Path::new(p).exists() {
-        eprintln!("跳过：{p} 不存在（非本机环境）");
+    if !p.is_file() {
+        eprintln!("[skip] 缺文件 {}", p.display());
         return;
     }
     let raw = std::fs::read(p).unwrap();
     assert_eq!(
         raw.len() as u64,
         52 + 36 * u64::from(尺寸.0) * u64::from(尺寸.1),
-        "{p} 的长度应是 52 + 36*w*h"
+        "{} 的长度应是 52 + 36*w*h",
+        p.display()
     );
-    let map = read_any(&raw).unwrap_or_else(|e| panic!("{p} 应解析成功：{e}"));
-    assert_eq!(map.format, FormatId::Shanda2012, "{p} 应判成 Shanda2012");
-    assert_eq!((map.width, map.height), 尺寸, "{p} 的宽高不对");
+    let map =
+        read_any(&raw).unwrap_or_else(|e| panic!("{} 应解析成功：{e}", p.display()));
+    assert_eq!(
+        map.format,
+        FormatId::Shanda2012,
+        "{} 应判成 Shanda2012",
+        p.display()
+    );
+    assert_eq!((map.width, map.height), 尺寸, "{} 的宽高不对", p.display());
 
     for &(x, y, 图, 帧, 偏移) in 点 {
         let c = map
             .cell(x, y)
-            .unwrap_or_else(|| panic!("{p} ({x},{y}) 应在图内"));
+            .unwrap_or_else(|| panic!("{} ({x},{y}) 应在图内", p.display()));
         assert_eq!(
             Shanda2012::tile_anim_image(c),
             Some(图),
-            "{p} ({x},{y}) 的 TileAnimationImage（rel 14-15）与 Python 解码不一致"
+            "{} ({x},{y}) 的 TileAnimationImage（rel 14-15）与 Python 解码不一致",
+            p.display()
         );
         assert_eq!(
             Shanda2012::tile_anim_frames(c),
             Some(帧),
-            "{p} ({x},{y}) 的 TileAnimationFrames（rel 21）与 Python 解码不一致"
+            "{} ({x},{y}) 的 TileAnimationFrames（rel 21）与 Python 解码不一致",
+            p.display()
         );
         assert_eq!(
             Shanda2012::tile_anim_offset(c),
             Some(偏移),
-            "{p} ({x},{y}) 的 TileAnimationOffset（rel 22-23）与 Python 解码不一致"
+            "{} ({x},{y}) 的 TileAnimationOffset（rel 22-23）与 Python 解码不一致",
+            p.display()
         );
     }
 
@@ -360,7 +406,8 @@ fn 断言_type3尾区(
     assert_eq!(
         mir2_format::format_by_id(map.format).write(&map).unwrap(),
         raw,
-        "{p} 往返不是逐字节相等"
+        "{} 往返不是逐字节相等",
+        p.display()
     );
 }
 
@@ -372,16 +419,22 @@ fn 断言_type3尾区(
 /// 否则「访问器读错偏移」这种缺陷会被全零样本掩盖。
 #[test]
 fn type3尾区三字段与python独立解码一致() {
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let 语料 = root.join("client").join("热血传奇23周年客户端").join("Map");
+
     // n0104.map：20×20 = 14452 B，取样点尾区全 0（作「全零也一致」的对照）
     断言_type3尾区(
-        r"E:\GodM2\client\热血传奇23周年客户端\Map\n0104.map",
+        &语料.join("n0104.map"),
         (20, 20),
         &[(0, 0, 0, 0, 0), (19, 19, 0, 0, 0)],
     );
 
     // n0155.map：50×50 = 90052 B，尾区有真实非零数据（Python 实测只有 4 个格非零）
     断言_type3尾区(
-        r"E:\GodM2\client\热血传奇23周年客户端\Map\n0155.map",
+        &语料.join("n0155.map"),
         (50, 50),
         &[
             (5, 16, 8419, 49, 8451),
@@ -393,7 +446,7 @@ fn type3尾区三字段与python独立解码一致() {
 
     // nGA0.map：150×160 = 864052 B，尾区有 114 个非零格（图块动画密集）
     断言_type3尾区(
-        r"E:\GodM2\client\热血传奇23周年客户端\Map\nGA0.map",
+        &语料.join("nGA0.map"),
         (150, 160),
         &[(42, 69, 981, 20, 8257), (43, 68, 985, 20, 8257)],
     );
@@ -412,12 +465,20 @@ fn type3尾区三字段与python独立解码一致() {
 /// 即它们**不会**被静默当成正常文件读进来。
 #[test]
 fn 宽松入口暴露未解释字节数为8040() {
-    let p = r"E:\GodM2\client\热血传奇23周年客户端\Map\EM001.map";
-    if !Path::new(p).exists() {
-        eprintln!("跳过：{p} 不存在（非本机环境）");
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let p = root
+        .join("client")
+        .join("热血传奇23周年客户端")
+        .join("Map")
+        .join("EM001.map");
+    if !p.is_file() {
+        eprintln!("[skip] 缺文件 {}", p.display());
         return;
     }
-    let raw = std::fs::read(p).unwrap();
+    let raw = std::fs::read(&p).unwrap();
     assert_eq!(raw.len(), 20_692, "样本长度实测应为 20692");
 
     // 严格入口必须拒绝

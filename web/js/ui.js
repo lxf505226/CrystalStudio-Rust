@@ -55,8 +55,9 @@
 
     el.fileTab.textContent = map ? ME.util.baseName(map.path) : '未打开地图';
     el.fileDirty.hidden = !(map && map.dirty);
+    // 标签页名与 `<title>` **逐字一致**（index.html）：品牌固定 `Crystal Studio · 地图编辑器`
     document.title = (map && map.dirty ? '* ' : '') +
-      (map ? ME.util.baseName(map.path) + ' · ' : '') + 'GodM2 地图编辑器';
+      (map ? ME.util.baseName(map.path) + ' · ' : '') + 'Crystal Studio · 地图编辑器';
 
     // 撤销 / 重做：按后端回执的 can_undo / can_redo 禁用（未开图时也禁用）
     var ready = s.mode === 'api' && !!map;

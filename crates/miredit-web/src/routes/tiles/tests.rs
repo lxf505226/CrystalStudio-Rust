@@ -180,17 +180,46 @@ fn 二倍档在64x48必超限() {
 /* ================= 「开启门」（`doors`） + 「地图光照」（`lighting`） ================= */
 
 /// 本机真图（与 `routes/mod.rs` 同一条口径；不存在就跳过，换机器也能跑）。
-const 真地图: &str = r"E:\GodM2\GodotClient\maps\0.map";
+/// 路径**相对资产根** `MIREDIT_ASSET_ROOT`（缺省本机真实根）。
+const 真地图: &str = "GodotClient/maps/0.map";
+
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]；根不存在 ⇒ `None`。
+///
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<std::path::PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
+/// 真实地图的**绝对路径**（相对段挂在资产根下）；缺根 ⇒ `None`。
+fn 真地图路径() -> Option<std::path::PathBuf> {
+    Some(资产根()?.join(真地图))
+}
 
 /// 打开真图 + 真图库；环境缺资源时返回 `None`（调用方 `let Some(..) = .. else { return }` 跳过）。
 fn 真图与图源() -> Option<(mir2_map::Map, mir2_assets::WilSource)> {
-    let map_path = std::path::Path::new(真地图);
+    let Some(map_path_buf) = 真地图路径() else {
+        eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+        return None;
+    };
+    let map_path = map_path_buf.as_path();
     if !map_path.is_file() {
-        eprintln!("[跳过] 真实地图不存在：{真地图}");
+        eprintln!("[跳过] 真实地图不存在：{}", map_path.display());
         return None;
     }
-    let root = std::path::Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-    let Ok(paths) = mir2_assets::LibPaths::discover(root) else {
+    let Some(root) = mir2_assets::client_root() else {
+        eprintln!(
+            "[跳过] 未设置 {}（图库扫描根）",
+            mir2_assets::CLIENT_ROOT_ENV
+        );
+        return None;
+    };
+    let Ok(paths) = mir2_assets::LibPaths::discover(&root) else {
         eprintln!("[跳过] 图库根扫描失败：{}", root.display());
         return None;
     };
@@ -471,9 +500,13 @@ async fn 开启门http响应头与字节() {
         eprintln!("[跳过] 图库不可用（AppState::from_env 扫不到 .wil）");
         return;
     }
-    let map_path = std::path::Path::new(真地图);
+    let Some(map_path_buf) = 真地图路径() else {
+        eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+        return;
+    };
+    let map_path = map_path_buf.as_path();
     if !map_path.is_file() {
-        eprintln!("[跳过] 真实地图不存在：{真地图}");
+        eprintln!("[跳过] 真实地图不存在：{}", map_path.display());
         return;
     }
     // 直接把会话装进状态：不走 `/api/map/open`，免得依赖进程 cwd 的 `MIREDIT_MAP_ROOT`

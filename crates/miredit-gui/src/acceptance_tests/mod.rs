@@ -17,8 +17,8 @@
 //!
 //! | 依赖 | 缺失时 |
 //! |---|---|
-//! | `E:\GodM2\GodotClient\maps\0.map`（700×700 / 12 B 每格） | 打印 `[跳过]` 并返回（不算失败） |
-//! | `E:\GodM2\CrystalStudio\Objects\mir\mir_00000.X`（25 格） | 同上 |
+//! | `<资产根>/GodotClient/maps/0.map`（700×700 / 12 B 每格；资产根 = `MIREDIT_ASSET_ROOT`） | 打印 `[跳过]` 并返回（不算失败） |
+//! | `<取证根>/Objects/mir/mir_00000.X`（25 格；取证根 = `MIREDIT_UPSTREAM_ROOT`） | 同上 |
 //!
 //! 换机器时这两条不会变红，但**本机实跑时一定打印出真实数字**（汇报里的证据就是它）。
 //!

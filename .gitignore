@@ -12,6 +12,9 @@
 # 运行期生成的瓦片缓存（可由 /api/tiles 重新生成，非源码）
 /web/tiles/
 
+# compose 卷的缺省占位目录（首次 `docker compose up` 会在这里建空目录，不是源码）
+/docker/data/
+
 # 验收截图与渲染参考图（体积大，证据归档在 deliverables/ 与本地 layout/refs/）
 /layout/refs/
 

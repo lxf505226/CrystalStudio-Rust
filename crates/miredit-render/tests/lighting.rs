@@ -23,10 +23,25 @@ use miredit_render::{
 /// 引入光照通道**之前**的 `0.map` 64×48 1× 输出 FNV-1a64（见 `deliverables/审查-今夜新增代码-2026-11-05.md`）。
 const 改前基线FNV: u64 = 0xa924_aa9d_edc7_4183;
 
-const 真实地图: &str = r"E:\GodM2\GodotClient\maps\0.map";
+/// 抽样地图（**相对资产根** `MIREDIT_ASSET_ROOT`，不是猜的）。
+const 真实地图: &str = "GodotClient/maps/0.map";
 
 /// 取证报告 §5.3 点名的「最坏 561 px」地图（在客户端原目录，不在 `GodotClient/maps`）。
-const 最坏地图: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map\hf001.map";
+const 最坏地图: &str = "client/热血传奇23周年客户端/Map/hf001.map";
+
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[跳过]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
 
 // ---------------------------------------------------------------------------
 // 工具
@@ -57,24 +72,28 @@ fn 打开图源() -> Option<WilSource> {
     }
 }
 
-/// 读并解析一张地图；失败返回 `None`（打印原因）。
-fn 读地图(path: &str) -> Option<(Vec<u8>, Map)> {
-    let p = Path::new(path);
+/// 读并解析一张地图（`相对` = 相对资产根的路径段）；失败返回 `None`（打印原因）。
+fn 读地图(相对: &str) -> Option<(Vec<u8>, Map)> {
+    let Some(root) = 资产根() else {
+        eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+        return None;
+    };
+    let p = root.join(相对);
     if !p.is_file() {
-        eprintln!("[跳过] 地图不存在：{path}");
+        eprintln!("[跳过] 地图不存在：{}", p.display());
         return None;
     }
-    let bytes = match std::fs::read(p) {
+    let bytes = match std::fs::read(&p) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("[跳过] 读文件失败 {path}：{e}");
+            eprintln!("[跳过] 读文件失败 {}：{e}", p.display());
             return None;
         }
     };
     match Map::parse(&bytes) {
         Ok(m) => Some((bytes, m)),
         Err(e) => {
-            eprintln!("[跳过] 解析失败 {path}：{e}");
+            eprintln!("[跳过] 解析失败 {}：{e}", p.display());
             None
         }
     }

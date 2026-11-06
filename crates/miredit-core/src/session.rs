@@ -46,9 +46,10 @@ use crate::brush::{
     clamp_brush_size, lib_ref_of, palette_index_to_sprite, Brush, LibRef, PickedCell, BRUSH_DEFAULT,
     BRUSH_MAX, BRUSH_MIN,
 };
-use crate::document::{cell_at, cell_mut, Document};
+use crate::document::{cell_at, Document};
 use crate::fill::{align_start, collect_region, fill_key, FillOutcome, RegionOutcome};
 use crate::layer::EditLayer;
+use crate::layer_counts::LayerCounts;
 use crate::paint::{paint, PaintOutcome, Tool};
 use crate::selection::{clear_plan, Clipboard, Selection, SelectionState};
 use crate::stamp::{
@@ -167,8 +168,12 @@ impl EditSession {
 
     /// 可变文档 —— **仅供测试/工具直接改地图**。
     ///
-    /// ⚠ 走这条路改地图**不会**自动更新脏标记、也不会进撤销栈（它绕过了整个记账链路）。
-    /// 生产路径一律用 [`Self::touch`] / [`Self::fill`] / [`Self::undo`] 等方法。
+    /// ⚠ 走这条路改地图**不会**自动更新脏标记、**不会**进撤销栈、**也不会**更新五层计数
+    /// （它绕过了整个记账链路）。生产路径一律用 [`Self::touch`] / [`Self::fill`] /
+    /// [`Self::undo`] 等方法。
+    ///
+    /// ⚠ 若确实要整块换视图（GUI 的 `mem::swap(document.view_mut(), &mut map)`），
+    /// 换完**必须**调 [`Document::rebuild_layer_counts`]（`document.rs` 模块文档第六节）。
     pub fn document_mut(&mut self) -> &mut Document {
         &mut self.doc
     }
@@ -196,6 +201,17 @@ impl EditSession {
     /// 会被 writer 静默丢弃（`mir2-format/src/model.rs:430-440`）。
     pub fn ground_paint_supported(&self) -> bool {
         self.doc.ground_paint_supported()
+    }
+
+    /// **五层计数**（地表 / 中层 / 物体 / 低位阻挡 / 高位阻挡）的当前值。
+    ///
+    /// 口径见 [`crate::layer_counts`]：官方掩码按格式归一化（legacy 的 `bit15`、
+    /// Mir3 的 `flag`、u32 族的 bit29/30），**不是**直接读磁盘 bit29/30。
+    ///
+    /// 本会话的所有改格路径（落笔 / 填充 / 印章 / 粘贴 / 删除 / 撤销 / 重做）都会
+    /// **增量**维护它（O(1)/格），所以这里可以直接读缓存。
+    pub fn layer_counts(&self) -> LayerCounts {
+        self.doc.layer_counts()
     }
 
     /// 当前工具。来源：`edit.rs:662-664`。
@@ -458,8 +474,11 @@ impl EditSession {
         if !dropped_lib {
             self.note = None;
         }
-        if let Some(slot) = cell_mut(self.doc.view_mut(), x, y) {
-            *slot = after;
+        // 写视图 + 增量更新五层计数（**唯一**逐格写入口，见 `document.rs` 模块文档第六节）。
+        // 返回 `false` = 形状不变量被破坏（前面 `cell_at` 已确认在界内，理论上不可达）
+        // ⇒ 如实不记步，绝不写一个「计数说不清」的格。
+        if !self.doc.write_view_cell(x, y, after) {
+            return 0;
         }
         self.undo.push(Change {
             x,
@@ -691,9 +710,8 @@ impl EditSession {
         }
         let n = changes.len();
         for (cx, cy, after) in after_cells {
-            if let Some(slot) = cell_mut(self.doc.view_mut(), cx, cy) {
-                *slot = after;
-            }
+            // 写视图 + 增量更新计数（与 `touch()` 同一入口）
+            self.doc.write_view_cell(cx, cy, after);
         }
         // 复用拖动那套记账：一次填充 = 撤销栈里的**一步**（edit.rs:1195-1199）
         self.undo.commit(changes);
@@ -827,11 +845,9 @@ impl EditSession {
                 return PlaceOutcome::Refused { reason };
             }
         };
-        // 写视图（`changes` 已去重：同一格只有一条，`after` 是最终值）
+        // 写视图（`changes` 已去重：同一格只有一条，`after` 是最终值）+ 增量更新计数
         for c in &plan.changes {
-            if let Some(slot) = cell_mut(self.doc.view_mut(), c.x, c.y) {
-                *slot = c.after;
-            }
+            self.doc.write_view_cell(c.x, c.y, c.after);
         }
         let n = self.undo.commit(plan.changes);
         // 成功也要能说出"哪一层的库号字节被忽略"（那是当前事实，不许被清成 None）
@@ -1128,9 +1144,8 @@ impl EditSession {
             return Ok((0, plan.notes));
         }
         for c in &plan.changes {
-            if let Some(slot) = cell_mut(self.doc.view_mut(), c.x, c.y) {
-                *slot = c.after;
-            }
+            // 写视图 + 增量更新计数（与 `touch()` 同一入口）
+            self.doc.write_view_cell(c.x, c.y, c.after);
         }
         let n = self.undo.commit(plan.changes);
         self.sync_dirty();
@@ -1235,9 +1250,8 @@ impl EditSession {
         }
         let n = changes.len();
         for (cx, cy, after) in after_cells {
-            if let Some(slot) = cell_mut(self.doc.view_mut(), cx, cy) {
-                *slot = after;
-            }
+            // 写视图 + 增量更新计数（与 `touch()` 同一入口）
+            self.doc.write_view_cell(cx, cy, after);
         }
         // 复用拖动那套记账：一次选区填充 = 撤销栈里的**一步**
         self.undo.commit(changes);
@@ -1332,8 +1346,14 @@ impl EditSession {
     // ── 撤销 / 重做 ──
 
     /// 撤销一步；返回还原了几格（0 = 没有可撤销的步骤）。来源：`edit.rs:1289-1305`。
+    ///
+    /// 撤销会**同时**把五层计数改回去：拆出「视图 + 计数更新器」两笔不重叠的借用，
+    /// 由 [`UndoStack::undo_with`] 每写回一格回调一次（`document.rs` 模块文档第六节）。
     pub fn undo(&mut self) -> usize {
-        let n = self.undo.undo(self.doc.view_mut());
+        let (view, mut keeper) = self.doc.view_and_keeper();
+        let n = self
+            .undo
+            .undo_with(view, |x, y, before, after| keeper.record(x, y, &before, &after));
         // 撤销之后，"刚才填了 N 格"这句回执就不成立了（那批格已经退回去了）
         self.last_fill = None;
         self.sync_dirty();
@@ -1341,8 +1361,13 @@ impl EditSession {
     }
 
     /// 重做一步；返回重放了几格（0 = 没有可重做的步骤）。来源：`edit.rs:1308-1323`。
+    ///
+    /// 与 [`Self::undo`] 对称：每写回一格都把计数增量改回去。
     pub fn redo(&mut self) -> usize {
-        let n = self.undo.redo(self.doc.view_mut());
+        let (view, mut keeper) = self.doc.view_and_keeper();
+        let n = self
+            .undo
+            .redo_with(view, |x, y, before, after| keeper.record(x, y, &before, &after));
         // 重做回到的是"某一笔"，不一定是那次填充 ⇒ 回执同样作废（宁可不说，不说错）
         self.last_fill = None;
         self.sync_dirty();

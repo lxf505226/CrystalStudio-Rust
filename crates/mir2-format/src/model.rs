@@ -73,8 +73,25 @@
 //! 这 8,040 字节 = **670 格（占 39%）**；若真实尺寸是 `40×43` 而不是头部的 `30×35`，
 //! 列优先的 `h` 用错会让**整图错位**（不只是缺尾）。判据与方法见
 //! [`RawMap::trailer_len`] / [`RawMap::has_unexplained_trailer`]。
+//!
+//! # 五、尺寸护栏：**三条件合取，读写两侧同一判据**（2026-11-06 补）
+//!
+//! 真值：C# `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` ——
+//! `w>0 && h>0` **且** `w<=32767 && h<=32767`（[`crate::MAX_DIMENSION`]）**且**
+//! `w*h<=16_000_000`（[`crate::MAX_CELLS`]）。
+//!
+//! | 判据实现 | 可见性 | 调用点 |
+//! |----------|--------|--------|
+//! | `dims_verdict` | 模块内私有 | **唯一真源**，下面三个都走它 |
+//! | [`can_round_trip`] | `pub` | 上层判断「这个尺寸能不能存」 |
+//! | `validate_dims` | `pub(crate)` | 九个 `read` |
+//! | `validate_write_dims` | `pub(crate)` | `write_fixed`（七种定长格式）+ `CrystalCs` / `Mir3Wemade` 两个自定义 `write` |
+//!
+//! ⚠ 「只看 16M 格」是**不完整**口径：`40000×1` 只有 40000 格，但头部宽高是 16 位有符号
+//! 字段（C# `Document.cs:90` 的 `checked((short)Width)`），超 32767 写盘后读不回来。
+//! ⚠ 读写**两侧**都要挂：只改读入口会留下「保存侧仍能写出 > 32767」的漏洞。
 
-use crate::error::{FormatError, MAX_CELLS};
+use crate::error::{FormatError, MAX_CELLS, MAX_DIMENSION};
 
 // ───────────────────────────── 小端读取/写入工具 ─────────────────────────────
 
@@ -392,7 +409,8 @@ impl RawMap {
 
 /// 一种格式的能力声明（供上层决定能不能编辑/能不能保存/怎么解释碰撞位）。
 ///
-/// 三个档位口径**必须分开陈述**（依据 `deliverables/规格-地图格式全量9种-2026-11-04.md` §11.3）：
+/// 三个档位口径**必须分开陈述**（依据内部取证文档《规格-地图格式全量 9 种》§11.3；
+/// 该文档已移出公开仓，不随本仓分发）：
 ///
 /// - **A 档（9/9）**：全部字节都能被「已知字段 + [`Cell::tail`] + [`RawMap::trailer`]」覆盖
 ///   ⇒ **不改格的往返 9/9 都能逐字节相等**（本 crate 的硬门，见 `tests/synthetic.rs`）；
@@ -410,12 +428,12 @@ impl RawMap {
 /// 856 张真实样本往返 0 字节差异 ⇒ **它根本没有"未解区"**。
 /// 把它标成 `false` 的直接后果是 `miredit-core` 给 1,051/1,158 张真实图（90.8%）挂常驻黄条，
 /// 而文案「未解区语义未知」对 `Old12` 是**事实错误**，且把真正的「尾块 8,040 字节可能整图错位」
-/// 警告淹没（`deliverables/审查-今夜新增代码-2026-11-05.md` P1-9）。
+/// 警告淹没（内部取证文档《审查-今夜新增代码》P1-9，已移出公开仓）。
 /// ⇒ 现按 [`FormatCaps::editable`] 文档里的两条判据逐格式重推。
 ///
 /// # 为什么 `CrystalCs` 从「可编辑」降为「不可编辑」（2026-11-05 订正）
 ///
-/// 依据 `deliverables/审查-mir2-format九格式-2026-11-05.md` §五「最高风险一句话」。
+/// 依据内部取证文档《审查-mir2-format 九格式》§五「最高风险一句话」（已移出公开仓）。
 /// `CrystalCs` 是**九种里唯一「布局理解错了、连字节级往返都照样通过」**的格式，三条叠加：
 ///
 /// 1. **格长变长**（26/38/35/33+，由 `(ver, fr_count)` 决定）：任何字段顺序错位都会被
@@ -578,33 +596,163 @@ pub trait MapFormat: Send + Sync {
     fn expected_len(&self, width: u16, height: u16) -> Option<u64>;
 }
 
-// ────────────────────────────── 共用骨架：定长格格式 ──────────────────────────────
+// ────────────────────────────── 尺寸判据（读写共用） ──────────────────────────────
 
-/// 校验宽高（对齐 C# `LegacyMapReader.cs:47-54` 的 `ValidateDimensions`）。
+/// 该宽高能不能**往返**（写盘后再读回，宽高与字节都不变）。
+///
+/// 与 C# `MapDimensions.CanRoundTrip` 逐字对应（`MapDimensions.cs:11-12@acfbbf8a`）：
+///
+/// ```csharp
+/// public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
+///     height is > 0 and <= short.MaxValue && (long)width * height <= MaximumCells;
+/// ```
+///
+/// 三条件**合取**，短路顺序同官方：
+/// ①`width > 0` 且 `height > 0`；②`width <= `[`MAX_DIMENSION`]` (= 32767)` 且 `height` 同理；
+/// ③`width * height <= `[`MAX_CELLS`]` (= 16_000_000)`。
+///
+/// ⚠ 「只看 16M 格」是**不完整**的口径：`40000×1` 只有 40000 格，却因为单边超 32767
+/// 而写盘后读不回来（头部宽高是 16 位有符号字段）。本次已把②补上。
+///
+/// 本函数与 [`crate::model`] 内部的 `validate_dims`（读侧）/ `validate_write_dims`（写侧）
+/// **共用同一个判定核心**（私有 `dims_verdict`），因此「布尔判据」与「带原因的错误」
+/// 不会各写一套后漂移 —— 由 `尺寸判据读写两侧同源` 用例穷举钉住。
+///
+/// ```
+/// use mir2_format::{can_round_trip, MAX_DIMENSION};
+///
+/// assert_eq!(MAX_DIMENSION, 32767);
+/// assert!(can_round_trip(32767, 1));
+/// assert!(!can_round_trip(32768, 1));   // 单边超 32767 ⇒ 存下去读不回来
+/// assert!(!can_round_trip(0, 10));
+/// assert!(can_round_trip(4000, 4000));  // 恰好 16_000_000 格
+/// assert!(!can_round_trip(4001, 4000)); // 16_004_000 格
+/// ```
+pub fn can_round_trip(width: u16, height: u16) -> bool {
+    dims_verdict(i64::from(width), i64::from(height)).is_none()
+}
+
+/// 尺寸判定不合法的**类别**（内部形态，只用于在两个校验入口里挑错误变体）。
+///
+/// 刻意不公开：对外只有 [`can_round_trip`]（布尔）与 `FormatError` 变体（带原因），
+/// 免得再出现第三套尺寸语义。
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DimsReject {
+    /// 宽或高 `<= 0`（官方第一条 `width is > 0`）。
+    NonPositive,
+    /// 单边 `> 32767`（官方两条 `<= short.MaxValue`）。
+    TooLarge,
+    /// 格数 `> 16_000_000`（官方第三条 `(long)width * height <= MaximumCells`）。
+    TooMany(u64),
+}
+
+/// **尺寸判定的唯一真源**：返回「第一个不满足的条件」，`None` ⇒ 合法。
+///
+/// 顺序严格照 C# `CanRoundTrip`（`MapDimensions.cs:11-12@acfbbf8a`）的短路顺序：
+/// 非正 → 单边 > 32767 → 格数 > 16M。
+///
+/// ②在③之前不只是「照抄官方」：`40000×40000` 两条都命中，报「单边超 32767」才是根因
+/// （先降到 32767 以内，才谈得上讨论格数上限）。注意 `30000×30000` 只命中③
+/// （30000 ≤ 32767），它报的是格数超上限。
+///
+/// 用 `i64` 收参数：读侧的宽高来自 `i32`（`i16` 读取或 XOR 还原，可能是负值），
+/// 写侧来自 `u16`，两者都能无损装进 `i64`，且**任何窄化转换都发生在本函数判定通过之后**。
+fn dims_verdict(width: i64, height: i64) -> Option<DimsReject> {
+    if width <= 0 || height <= 0 {
+        return Some(DimsReject::NonPositive);
+    }
+    if width > i64::from(MAX_DIMENSION) || height > i64::from(MAX_DIMENSION) {
+        return Some(DimsReject::TooLarge);
+    }
+    // 到这里 width/height ∈ 1..=32767 ⇒ 乘积最大约 1.07e9，u64 不会溢出
+    let cells = width as u64 * height as u64;
+    if cells > MAX_CELLS {
+        return Some(DimsReject::TooMany(cells));
+    }
+    None
+}
+
+/// 校验宽高（**读路径**；对齐 C# `LegacyMapReader.cs:47-54` 的 `ValidateDimensions`
+/// 与 `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip`）。
+///
+/// 判定与 [`can_round_trip`] 同源（都走 `dims_verdict`）：
+/// 非正 ⇒ [`FormatError::InvalidDimensions`]；单边 > 32767 ⇒
+/// [`FormatError::DimensionTooLarge`]；格数 > 16M ⇒ [`FormatError::TooManyCells`]。
+///
+/// 返回值里的 `as u16` 是**已证明无损**的：`dims_verdict` 通过就意味着
+/// `width`/`height` ∈ `1..=32767`。这就是为什么 `> 32767` 的检查必须卡在转换**之前**。
 pub(crate) fn validate_dims(
     format: FormatId,
     width: i32,
     height: i32,
 ) -> Result<(u16, u16), FormatError> {
-    if width <= 0 || height <= 0 {
-        return Err(FormatError::InvalidDimensions {
+    match dims_verdict(i64::from(width), i64::from(height)) {
+        // 已证明在 1..=32767，转换无损
+        None => Ok((width as u16, height as u16)),
+        Some(DimsReject::NonPositive) => Err(FormatError::InvalidDimensions {
             format,
             width,
             height,
-        });
-    }
-    let cells = width as u64 * height as u64;
-    if cells > MAX_CELLS {
-        return Err(FormatError::TooManyCells {
+        }),
+        Some(DimsReject::TooLarge) => Err(FormatError::DimensionTooLarge {
             format,
+            width: i64::from(width),
+            height: i64::from(height),
+            limit: MAX_DIMENSION,
+        }),
+        Some(DimsReject::TooMany(cells)) => Err(FormatError::TooManyCells {
+            format,
+            // 已证明在 1..=32767，转换无损
             width: width as u16,
             height: height as u16,
             cells,
             limit: MAX_CELLS,
-        });
+        }),
     }
-    Ok((width as u16, height as u16))
 }
+
+/// 校验宽高（**写路径**；[`MapFormat::write`] 的统一前置门）。
+///
+/// 与读路径 [`validate_dims`] **同一判据**（都走 `dims_verdict`）。只挂读侧会留下
+/// 「保存侧仍能写出 > 32767 的宽高」的漏洞：`RawMap.width` 是 `u16`，上层完全可以
+/// 构造出 65535，而九种格式的头部宽高都是 16 位**有符号**字段 ⇒ 存下去就回读不回来
+/// （甚至被读成负数）。
+///
+/// 调用点（三处，覆盖九种格式）：
+/// - [`write_fixed`] 顶部 —— 覆盖 `Old12` / `Shanda14` / `Shanda2012` / `Wemade2010` /
+///   `AntiHack` / `Mir3Shanda` / `Heroes34` 七种；
+/// - `formats::crystal_cs` 与 `formats::mir3_wemade` 的自定义 `write` 顶部 —— 覆盖剩下两种。
+///
+/// ⚠ 必须在任何 `as u16` / `as i16` 转换**之前**调用；违者就是静默截断。
+pub(crate) fn validate_write_dims(
+    format: FormatId,
+    width: u16,
+    height: u16,
+) -> Result<(), FormatError> {
+    match dims_verdict(i64::from(width), i64::from(height)) {
+        None => Ok(()),
+        Some(DimsReject::NonPositive) => Err(FormatError::InvalidDimensions {
+            format,
+            width: i32::from(width),
+            height: i32::from(height),
+        }),
+        Some(DimsReject::TooLarge) => Err(FormatError::DimensionTooLarge {
+            format,
+            width: i64::from(width),
+            height: i64::from(height),
+            limit: MAX_DIMENSION,
+        }),
+        Some(DimsReject::TooMany(cells)) => Err(FormatError::TooManyCells {
+            format,
+            width,
+            height,
+            cells,
+            limit: MAX_CELLS,
+        }),
+    }
+}
+
+// ────────────────────────────── 共用骨架：定长格格式 ──────────────────────────────
 
 /// 定长格格式的读骨架：校验长度 → 抄头部 → 逐格解码（**列优先** `idx = x*h + y`）→ 收尾区。
 ///
@@ -647,7 +795,20 @@ where
     Ok(map)
 }
 
-/// 定长格格式的写骨架：校验自洽 → 抄头部 → 逐格编码 → 追加尾区。
+/// 定长格格式的写骨架：**尺寸校验** → 校验自洽 → 抄头部 → 逐格编码 → 追加尾区。
+///
+/// # 尺寸校验放在最前面（本次补的缺口）
+///
+/// 本函数原先只查「格式 / 头长 / `cells.len()`」三样，**从不查尺寸** —— 于是一个
+/// `RawMap { width: 32768, height: 1, .. }` 能一路写出去，落地成一张「C# 侧
+/// `checked((short)Width)` 会抛溢出、本仓按 `i16` 读回会变成负数」的文件：
+/// 写的时候不报错，读的时候读不回来。九种格式里七个走本函数
+/// （`Old12` / `Shanda14` / `Shanda2012` / `Wemade2010` / `AntiHack` / `Mir3Shanda` /
+/// `Heroes34`），所以门设在**这里**，而不是在七个 `write` 里各抄一遍。
+///
+/// ⚠ 新增的定长格式 writer 必须走本函数，否则会绕过尺寸门。
+/// 变长格式（`CrystalCs` / `Mir3Wemade`）在自己的 `write` 顶部调
+/// [`validate_write_dims`]，别漏。
 pub(crate) fn write_fixed<F>(
     format: FormatId,
     map: &RawMap,
@@ -658,6 +819,8 @@ pub(crate) fn write_fixed<F>(
 where
     F: FnMut(&Cell, &mut Vec<u8>) -> Result<(), FormatError>,
 {
+    // ① 尺寸门：必须在任何 `as u16` 之前（见 `validate_write_dims` 文档）。
+    validate_write_dims(format, map.width, map.height)?;
     if map.format != format {
         return Err(FormatError::inconsistent(format!(
             "目标格式是 {format:?}，而 RawMap.format 是 {:?}",
@@ -722,5 +885,256 @@ pub(crate) fn tmap_dims(bytes: &[u8]) -> Option<(u16, u16)> {
         Some((w as u16, h as u16))
     } else {
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::registry::{format_by_id, registry};
+
+    // ─────────────────── 尺寸判据（C# `MapDimensions.CanRoundTrip`） ───────────────────
+
+    /// 单边 32767 接受、32768 / 65535 拒绝；0 一律拒绝。
+    #[test]
+    fn 单边上限32767的边界() {
+        assert_eq!(MAX_DIMENSION, 32767, "单边上限必须是 i16::MAX");
+        assert_eq!(MAX_DIMENSION, i16::MAX as u16);
+
+        assert!(can_round_trip(32767, 1));
+        assert!(can_round_trip(1, 32767));
+        assert!(!can_round_trip(32768, 1), "32768×1 必须拒绝（超 short.MaxValue）");
+        assert!(!can_round_trip(1, 32768));
+        assert!(!can_round_trip(65535, 1), "65535×1 塞得进 u16，塞不进 i16");
+        assert!(!can_round_trip(65535, 65535));
+
+        assert!(!can_round_trip(0, 0));
+        assert!(!can_round_trip(0, 10));
+        assert!(!can_round_trip(10, 0));
+    }
+
+    /// 三条件是**合取**：`40000×1` 格数远小于 16M，但单边超 32767 ⇒ 必须拒绝。
+    #[test]
+    fn 三条合取_格数合格不代表尺寸合格() {
+        let 格数: u64 = u64::from(40000u16);
+        assert!(格数 < MAX_CELLS, "40000 格远小于 16M；单看格数会放过它");
+        assert!(!can_round_trip(40000, 1), "40000×1 单边超 32767，必须拒绝");
+        assert!(matches!(
+            validate_write_dims(FormatId::Old12, 40000, 1),
+            Err(FormatError::DimensionTooLarge {
+                width: 40000,
+                height: 1,
+                limit: 32767,
+                ..
+            })
+        ));
+        // 40000×40000：两条都超 ⇒ 按官方短路顺序报「尺寸」；30000×30000 只超格数 ⇒ 报「格数」
+        assert!(matches!(
+            validate_write_dims(FormatId::Old12, 40000, 40000),
+            Err(FormatError::DimensionTooLarge { .. })
+        ));
+        assert!(matches!(
+            validate_write_dims(FormatId::Old12, 30000, 30000),
+            Err(FormatError::TooManyCells { .. })
+        ));
+    }
+
+    /// 格数上限：`16_000_000` 恰好通过，且**对每个宽度**「再多一格」必被拒。
+    ///
+    /// ⚠ `16_000_001` **不可表示**为 `u16×u16`：最小非平凡因子 109，余因子 146789 > 65535
+    /// （另两组 229×69869、641×24961 同样越界）。所以用逐宽度穷举证明临界点精确落在
+    /// `16_000_000 / 16_000_001` 之间，而不是被写成 `>=` 或别的偏移。
+    #[test]
+    fn 格数上限边界逐宽度穷举() {
+        assert_eq!(4000u64 * 4000, MAX_CELLS);
+        assert!(can_round_trip(4000, 4000), "恰好 16_000_000 格应通过");
+        assert!(validate_write_dims(FormatId::Old12, 4000, 4000).is_ok());
+
+        // 4001×4000 = 16_004_000：只超 4000 格 ⇒ 报格数，不许报尺寸
+        match validate_write_dims(FormatId::Old12, 4001, 4000) {
+            Err(FormatError::TooManyCells {
+                cells: 16_004_000,
+                limit: 16_000_000,
+                ..
+            }) => {}
+            other => panic!("4001×4000 应报 TooManyCells(16004000 > 16000000)，实际 {other:?}"),
+        }
+
+        // w 从 489 起 h0 才会 ≤ 32767（16_000_000 / 32767 ≈ 488.3）
+        for w in 489u16..=MAX_DIMENSION {
+            let h0 = (MAX_CELLS / u64::from(w)) as u16;
+            assert!(
+                (1..=MAX_DIMENSION).contains(&h0),
+                "w={w} 时 h0={h0} 越界"
+            );
+            assert!(
+                u64::from(w) * u64::from(h0) <= MAX_CELLS,
+                "w={w} h0={h0} 应在上限内"
+            );
+            assert!(can_round_trip(w, h0), "w={w} h0={h0} 应接受");
+            assert!(
+                !can_round_trip(w, h0 + 1),
+                "w={w} h={} 已超 16M，必须拒绝",
+                h0 + 1
+            );
+            assert!(
+                matches!(
+                    validate_write_dims(FormatId::Old12, w, h0 + 1),
+                    Err(FormatError::TooManyCells { .. })
+                ),
+                "w={w} h={} 应报 TooManyCells",
+                h0 + 1
+            );
+        }
+    }
+
+    /// 读侧 `validate_dims` 与写侧 `validate_write_dims`、以及 [`can_round_trip`]
+    /// **必须永远同源**（三者都走 `dims_verdict`）。
+    #[test]
+    fn 尺寸判据读写两侧同源() {
+        let 样本: [(u16, u16); 14] = [
+            (0, 0),
+            (0, 5),
+            (5, 0),
+            (1, 1),
+            (32767, 1),
+            (1, 32767),
+            (32768, 1),
+            (1, 32768),
+            (65535, 1),
+            (65535, 65535),
+            (4000, 4000),
+            (4000, 4001),
+            (30000, 30000),
+            (1000, 600),
+        ];
+        for (w, h) in 样本 {
+            let 读 = validate_dims(FormatId::Old12, i32::from(w), i32::from(h)).is_ok();
+            let 写 = validate_write_dims(FormatId::Old12, w, h).is_ok();
+            let 判 = can_round_trip(w, h);
+            assert_eq!(读, 判, "{w}×{h}：读侧与布尔判据不一致");
+            assert_eq!(写, 判, "{w}×{h}：写侧与布尔判据不一致");
+        }
+    }
+
+    /// 读侧超限的变体与取值：`> 32767` 必须在 `as u16` **之前**被拒。
+    ///
+    /// 反证：若检查缺失，`validate_dims(_, 40000, 1)` 会返回 `Ok((40000, 1))` ——
+    /// 宽高被当成合法读进来，写回时再溢出。`70000` 更能证明「不是截断成 4464」。
+    #[test]
+    fn 读侧超限报尺寸且不截断() {
+        assert!(matches!(
+            validate_dims(FormatId::Shanda14, 32768, 1),
+            Err(FormatError::DimensionTooLarge {
+                width: 32768,
+                height: 1,
+                limit: 32767,
+                ..
+            })
+        ));
+        // 70000 若是 `as u16` 会变成 4464（看起来「合法」），必须报错且原值进错误
+        match validate_dims(FormatId::Shanda14, 70000, 1) {
+            Err(FormatError::DimensionTooLarge { width, .. }) => {
+                assert_eq!(width, 70000, "错误里必须是原值，不是截断后的 4464")
+            }
+            other => panic!("70000 应报 DimensionTooLarge，实际 {other:?}"),
+        }
+        // 错误信息必须点名 32767 与官方判据名
+        let msg = validate_dims(FormatId::Shanda14, 70000, 1)
+            .err()
+            .map(|e| e.to_string())
+            .unwrap_or_default();
+        for 片段 in ["32767", "CanRoundTrip", "i16::MAX", "short.MaxValue"] {
+            assert!(msg.contains(片段), "信息缺「{片段}」：{msg}");
+        }
+        // 合法值仍然正常返回
+        assert_eq!(validate_dims(FormatId::Old12, 32767, 1), Ok((32767, 1)));
+    }
+
+    /// **九个 writer 全部**拒绝超限尺寸，且报的是「尺寸超 32767」而不是别的错。
+    ///
+    /// 构造的图故意**只满足格式/头长以外的字段**（`cells` 为空、头全 0）：
+    /// 若尺寸门不在 `write` 最顶部，这里拿到的一定是 `Inconsistent`（头长/cells 对不上）
+    /// 或 `UnsupportedVersion`（`CrystalCs` 版本号 0）⇒ 本用例同时钉住「门在最前面」。
+    #[test]
+    fn 九个writer都拒绝超限尺寸() {
+        let 格式们 = registry();
+        assert_eq!(格式们.len(), 9, "注册表应有九种格式");
+        for f in 格式们 {
+            let id = f.id();
+            let 超限图 = RawMap {
+                format: id,
+                width: 32768,
+                height: 1,
+                header_raw: vec![0u8; f.header_len()],
+                cells: Vec::new(),
+                trailer: Vec::new(),
+            };
+            let err = f
+                .write(&超限图)
+                .err()
+                .unwrap_or_else(|| panic!("{id:?} 的 write 必须拒绝 32768×1"));
+            match err {
+                FormatError::DimensionTooLarge {
+                    format,
+                    width,
+                    height,
+                    limit,
+                } => {
+                    assert_eq!(format, id, "{id:?} 的报错格式自相矛盾");
+                    assert_eq!((width, height), (32768, 1), "{id:?} 报的宽高不对");
+                    assert_eq!(limit, 32767, "{id:?} 的单边上限必须是 short.MaxValue");
+                }
+                other => panic!("{id:?} 应报 DimensionTooLarge，实际 {other:?}"),
+            }
+
+            // 65535（u16 上界）同样必须拒
+            let mut 更超 = 超限图.clone();
+            更超.width = 65535;
+            assert!(
+                matches!(
+                    f.write(&更超),
+                    Err(FormatError::DimensionTooLarge { width: 65535, .. })
+                ),
+                "{id:?} 的 write 必须拒绝 65535×1"
+            );
+        }
+    }
+
+    /// 写侧**不误伤**：`32767×1` 是合法尺寸，`Old12` 必须能写出来（约 384 KiB）。
+    ///
+    /// 与上一条配对，防止「为了拦超限把边界也拦掉」。
+    #[test]
+    fn 单边32767可写出且能读回() {
+        let w = 32767u16;
+        let h = 1u16;
+        let mut header = vec![0u8; 52];
+        header[0..2].copy_from_slice(&w.to_le_bytes());
+        header[2..4].copy_from_slice(&h.to_le_bytes());
+        let map = RawMap {
+            format: FormatId::Old12,
+            width: w,
+            height: h,
+            header_raw: header,
+            cells: vec![Cell::zeroed(0); usize::from(w) * usize::from(h)],
+            trailer: Vec::new(),
+        };
+
+        let out = format_by_id(FormatId::Old12)
+            .write(&map)
+            .expect("32767×1 是合法尺寸，必须写得出来");
+        assert_eq!(out.len(), 52 + 32767 * 12);
+        assert_eq!(out.len(), 393_256);
+
+        let back = format_by_id(FormatId::Old12)
+            .read(&out)
+            .expect("写出的 32767×1 必须能读回");
+        assert_eq!((back.width, back.height), (w, h));
+        assert_eq!(back.cells.len(), 32767);
+        assert_eq!(
+            format_by_id(FormatId::Old12).write(&back).expect("重写"),
+            out,
+            "32767×1 的写→读→写必须逐字节相等"
+        );
     }
 }

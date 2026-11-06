@@ -16,20 +16,34 @@ use crate::catalogue::{CatalogError, StampCatalog};
 use crate::stamp::{Stamp, StampCell};
 use crate::StampCellData;
 
-/// 默认 palette.json（可用环境变量 `MIR2_STAMP_PALETTE` 覆盖）。
-const 默认目录文件: &str = r"I:\miredit\_upstream\catalogue\palette.json";
+/// 取证根缺省值：`.X` / `palette.json` 的取证来源（**本文件里只出现这一处**）。
+/// 换机器用 `MIREDIT_UPSTREAM_ROOT`。
+const 缺省取证根: &str = r"I:\miredit\_upstream";
 
-/// 真实 palette.json 路径（环境变量优先）。
-fn 目录文件() -> PathBuf {
+/// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`。
+///
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 取证根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省取证根));
+    root.is_dir().then_some(root)
+}
+
+/// 默认 palette.json（相对取证根；可用环境变量 `MIR2_STAMP_PALETTE` 覆盖）。
+fn 目录文件() -> Option<PathBuf> {
     match std::env::var_os("MIR2_STAMP_PALETTE") {
-        Some(v) => PathBuf::from(v),
-        None => PathBuf::from(默认目录文件),
+        Some(v) => Some(PathBuf::from(v)),
+        None => Some(取证根()?.join("catalogue").join("palette.json")),
     }
 }
 
-/// 读真实目录；文件不存在 / 加载失败 ⇒ 打印并返回 `None`（调用方 skip）。
+/// 读真实目录；缺取证根 / 文件不存在 / 加载失败 ⇒ 打印并返回 `None`（调用方 skip）。
 fn 读真实目录(用例: &str) -> Option<StampCatalog> {
-    let path = 目录文件();
+    let Some(path) = 目录文件() else {
+        eprintln!("[跳过] {用例}：无取证根 MIREDIT_UPSTREAM_ROOT —— 本用例 skip（不 panic）");
+        return None;
+    };
     if !path.is_file() {
         eprintln!(
             "[跳过] {用例}：palette.json 不存在（{}）—— 本用例 skip（不 panic）",

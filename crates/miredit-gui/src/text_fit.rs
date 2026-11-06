@@ -686,4 +686,60 @@ mod tests {
             );
         }
     }
+
+    /// **品牌字与窗口标题在两种窗口尺寸下都完整可见**（2026-11-06：软件名固定 `Crystal Studio`）。
+    ///
+    /// `Crystal Studio` 比旧的「地图编辑器」长 5 个字符，而标题栏标题是「左对齐 + 裁剪盒」、
+    /// 菜单栏品牌字是「右对齐 + 裁剪盒」—— 窗口一窄就可能被切。这条用例把
+    /// 1500×950（默认窗）与 1100×720（`crystalstudio-ui.json` 的最小窗）两档都钉住：
+    /// ① 品牌字排版宽度 ≤ 裁剪盒宽；② 典型标题（真文件名 + 700×700 格）不得被截断。
+    /// 报出的 `w` / `cap` 就是实测像素（见回执）。
+    #[test]
+    fn 品牌字与标题在两种窗口下都不被裁剪() {
+        let p = measure_painter();
+        let mut rows = Vec::new();
+        for (w, h, 名字) in [
+            (m::WINDOW_W, m::WINDOW_H, "1500×950"),
+            (m::WINDOW_MIN_W, m::WINDOW_MIN_H, "1100×720"),
+        ] {
+            let l = Layout::compute(Rect::from_min_size(Pos2::ZERO, egui::vec2(w, h)));
+
+            // ① 菜单栏右端品牌字：文案必须是新品牌名，且放得进裁剪盒
+            let brand = crate::menubar::labels(&p, &l)
+                .into_iter()
+                .find(|x| x.name == "menu.brand")
+                .expect("菜单栏必须有 menu.brand");
+            assert_eq!(brand.text, tx::BRAND, "{名字}：品牌字取错");
+            let bw = text_width(&p, brand.text, brand.font);
+            rows.push(format!(
+                "{名字}  menu.brand w={bw:.1} cap={:.1} 左端 x={:.1}",
+                brand.clip.width(),
+                brand.clip.left()
+            ));
+            assert!(
+                bw <= brand.clip.width() + 0.5,
+                "{名字}：品牌字 {:?} 宽 {bw:.1} > 裁剪盒 {:.1}，会被切",
+                brand.text,
+                brand.clip.width()
+            );
+
+            // ② 标题栏：典型标题（真文件名 + 真格数）不得被截断
+            let d = 典型文案();
+            for lab in crate::titlebar::dyn_labels(&l, &d) {
+                let lw = text_width(&p, &lab.text, lab.font);
+                rows.push(format!(
+                    "{名字}  {} w={lw:.1} cap={:.1}",
+                    lab.name,
+                    lab.clip.width()
+                ));
+                assert!(
+                    !lab.truncated,
+                    "{名字}：标题被截断成 {:?}（裁剪盒 {:.1}）",
+                    lab.text,
+                    lab.clip.width()
+                );
+            }
+        }
+        eprintln!("品牌/标题实测：\n{}", rows.join("\n"));
+    }
 }

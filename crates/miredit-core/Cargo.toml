@@ -27,7 +27,8 @@ mir2-format = { path = "../mir2-format" }
 #
 # ⚠ 代价必须记账：`mir2-stamp` 带 `serde` + `serde_json`（只为读 `catalogue/palette.json`），
 # 上移后这两个 crate 进入**库本体**依赖树。它们本来就在本 workspace 的 `Cargo.lock` 里
-# （`tools/wil2atlas` 引入），因此**不新增锁文件版本、不新增传递依赖树**；
+# （2026-11-06 起由 `mir2-stamp` 与 `miredit-web` 引入；vendored 的 `wil2atlas` 子集已裁掉 serde），
+# 因此**不新增锁文件版本、不新增传递依赖树**；
 # 但「编辑内核只依赖 std + mir2-map + mir2-format」这条白名单**从此作废**（见 `lib.rs` §一）。
 mir2-stamp = { path = "../mir2-stamp" }
 

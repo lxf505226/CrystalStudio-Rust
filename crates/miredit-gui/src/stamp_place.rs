@@ -256,9 +256,28 @@ mod tests {
     use super::*;
     use egui::{pos2, vec2};
     use miredit_core::EditLayer;
+    use std::path::PathBuf;
+
+    /// 取证根缺省值：`.X` 的取证来源（**整个测试模块里只出现这一处**）。
+    /// 换机器用 `MIREDIT_UPSTREAM_ROOT`。
+    const 缺省取证根: &str = r"I:\miredit\_upstream";
+
+    /// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`。
+    ///
+    /// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+    fn 取证根() -> Option<PathBuf> {
+        let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(缺省取证根));
+        root.is_dir().then_some(root)
+    }
 
     /// 本机真实印章（CrystalStudio 自带范例；core 的验收门 2 用的也是它）。
-    const 印章: &str = r"I:\miredit\_upstream\Objects\mir\mir_00000.X";
+    /// 缺取证根/缺文件 ⇒ `None`（公开仓/PR 的机器上没有 `.X` 素材，不算代码错）。
+    fn 印章路径() -> Option<PathBuf> {
+        let p = 取证根()?.join("Objects").join("mir").join("mir_00000.X");
+        p.is_file().then_some(p)
+    }
 
     /// 合成 8×8 `New14` 图：每格地表图号 = 序号 + 1（可区分）。
     fn 造图(w: u16, h: u16) -> Map {
@@ -330,8 +349,14 @@ mod tests {
     /// 这条同时钉住"适配口径没漂"：格数/包围盒变了就说明字段搬运改了。
     #[test]
     fn 真实印章格数与包围盒() {
-        let p = Path::new(印章);
-        let Ok(f) = read(p) else {
+        let p = match 印章路径() {
+            Some(p) => p,
+            None => {
+                eprintln!("[跳过] 无取证根 MIREDIT_UPSTREAM_ROOT（或缺 Objects/mir/mir_00000.X）");
+                return;
+            }
+        };
+        let Ok(f) = read(&p) else {
             eprintln!("[跳过] 本机没有印章样本 {}", p.display());
             return;
         };
@@ -347,11 +372,13 @@ mod tests {
     /// **`place()` 全链路**（读盘 → 注册 → 落位）在真实印章上跑通，回执含名称与格数。
     #[test]
     fn 全链路放置真实印章() {
-        let p = Path::new(印章);
-        if !p.is_file() {
-            eprintln!("[跳过] 本机没有印章样本 {}", p.display());
-            return;
-        }
+        let p = match 印章路径() {
+            Some(p) => p,
+            None => {
+                eprintln!("[跳过] 无取证根 MIREDIT_UPSTREAM_ROOT（或缺 Objects/mir/mir_00000.X）");
+                return;
+            }
+        };
         let mut map = 造图(16, 16);
         let mut ed = EditSession::default();
         let armed = Armed {
@@ -360,7 +387,7 @@ mod tests {
             bounds: Some((-1, -2, 4, 3)),
         };
         // 锚点 (5,5) + 包围盒 (-1,-2,4,3) ⇒ x 4..=9 / y 3..=8，全在 16×16 内
-        let out = place(&mut ed, &mut map, &armed, p, 5, 5).expect("应能放置");
+        let out = place(&mut ed, &mut map, &armed, &p, 5, 5).expect("应能放置");
         assert_eq!(out.skipped, 0, "锚点在图内，不该有越界格");
         assert!(out.cells > 0, "必须真的改了格");
         assert_eq!(ed.undo_len(), 1);
@@ -374,16 +401,18 @@ mod tests {
     /// **全越界 ⇒ 拒绝**，且地图逐字节不变（门 2 的反面）。
     #[test]
     fn 全越界拒绝且不动地图() {
-        let p = Path::new(印章);
-        if !p.is_file() {
-            eprintln!("[跳过] 本机没有印章样本 {}", p.display());
-            return;
-        }
+        let p = match 印章路径() {
+            Some(p) => p,
+            None => {
+                eprintln!("[跳过] 无取证根 MIREDIT_UPSTREAM_ROOT（或缺 Objects/mir/mir_00000.X）");
+                return;
+            }
+        };
         let mut map = 造图(4, 4);
         let before = map.to_bytes();
         let mut ed = EditSession::default();
         let armed = Armed { id: "mir/mir_00000".into(), name: "mir_00000".into(), bounds: None };
-        let err = place(&mut ed, &mut map, &armed, p, 200, 200).expect_err("必须拒绝");
+        let err = place(&mut ed, &mut map, &armed, &p, 200, 200).expect_err("必须拒绝");
         assert!(err.contains("地图外"), "{err}");
         assert_eq!(map.to_bytes(), before, "拒绝时地图必须逐字节不变");
         assert!(!ed.dirty(), "拒绝不该置脏");

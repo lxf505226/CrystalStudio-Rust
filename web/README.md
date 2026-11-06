@@ -49,16 +49,16 @@ export MIREDIT_WEB_ROOT=/path/to/repo/web
 cargo run -p miredit-web --release
 ```
 
-| 变量 | 缺省 | 说明 |
+| 变量 | 缺省 | 未设置时 |
 |---|---|---|
-| `MIREDIT_BIND` | `0.0.0.0:8080` | 监听地址 |
-| `MIREDIT_MAP_ROOT` | 迁移前的相对布局 | 开图白名单根（相对路径按进程 cwd 绝对化）——换机器请显式设置 |
-| `MIREDIT_CLIENT_ROOT` | `mir2_assets::DEFAULT_CLIENT_ROOT`（开发机路径） | 图库（`.wil/.wix`、`.wzl/.wzx`、Crystal `.lib`）扫描根 |
-| `MIREDIT_PALETTE_JSON` | 迁移前的相对布局 | 印章目录索引（须落在 `<dataRoot>/catalogue/palette.json`，`<dataRoot>` 下并列 `Objects/`） |
-| `MIREDIT_WEB_ROOT` | 迁移前的相对布局 | 静态前端目录（本仓的 `web/`） |
+| `MIREDIT_BIND` | `0.0.0.0:8080` | 用缺省值 |
+| `MIREDIT_MAP_ROOT` | **无（必须显式设置）** | 开图/列表端点 503 `assets_unavailable`，文案点名该变量 |
+| `MIREDIT_CLIENT_ROOT` | **无（必须显式设置）** | 图库为空 ⇒ 出图 / 素材端点 503「图库未就绪」 |
+| `MIREDIT_PALETTE_JSON` | **无（必须显式设置）** | `/api/stamps` 503（**不猜** `catalogue/palette.json`） |
+| `MIREDIT_WEB_ROOT` | 本仓 `<仓库根>/web`（中立回退） | 目录不存在 ⇒ `GET /` 404（**不伪造页面**） |
 
-> ⚠ 后四个变量的缺省值都指向**迁移前的目录布局**，独立仓库里必定失效 ⇒ 请全部显式设置；
-> `MIREDIT_WEB_ROOT` 未设或目录不存在 ⇒ `GET /` 返回 404（不伪造页面）。
+> ⚠ 四个路径变量都**没有**内置缺省值（2026-11-06 起）：公开仓不绑任何开发机路径。
+> 不设就是「如实不可用」——503/404 + 启动横幅点名缺哪个变量，**不会**去猜迁移前的目录布局。
 
 浏览器打开 `http://127.0.0.1:18080/` 即可（前端与 API 同源，无 CORS 问题）。
 

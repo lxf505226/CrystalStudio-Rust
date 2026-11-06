@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    GodM2 地图编辑器 —— Docker 部署「一条命令」验证（Windows / PowerShell 版）
+    Crystal Studio —— Docker 部署「一条命令」验证（Windows / PowerShell 版）
 
 .DESCRIPTION
     构建 → 起 → 轮询 /api/health → 四项端点断言 → 收工。
@@ -127,7 +127,7 @@ function Read-Text {
 }
 
 Write-Say '=============================================================='
-Write-Say ' GodM2 地图编辑器 · Docker 部署验证（PowerShell）'
+Write-Say ' Crystal Studio · Docker 部署验证（PowerShell）'
 Write-Say " 项目目录 : $Dir"
 Write-Say " compose  : $File（服务 $Service）"
 Write-Say " 访问地址 : $Base"

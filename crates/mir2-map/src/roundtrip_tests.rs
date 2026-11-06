@@ -15,14 +15,34 @@ use crate::cell::{Cell, CellFormat, HEADER_LEN, TAIL_LEN, TAIL_OFFSET};
 use crate::error::MapError;
 use crate::map::Map;
 
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
 /// 36 档地图目录：官方 23 周年客户端（实测 1097 个 `.map`，其中 Ext36 = 194 个）。
-const 目录_36档: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map";
+fn 目录_36档(root: &Path) -> PathBuf {
+    root.join("client").join("热血传奇23周年客户端").join("Map")
+}
 
 /// 12/14 档地图目录：Godot 客户端自带（实测 60 个 12/14 档 `.map`）。
-const 目录_12_14档: &str = r"E:\GodM2\GodotClient\maps";
+fn 目录_12_14档(root: &Path) -> PathBuf {
+    root.join("GodotClient").join("maps")
+}
 
 /// 尾区重点样本（实测 700×700、1660 格尾区非零）。
-const 文件N0: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map\n0.map";
+fn 文件_n0(root: &Path) -> PathBuf {
+    目录_36档(root).join("n0.map")
+}
 
 /// 往返统计。
 #[derive(Default)]
@@ -90,16 +110,16 @@ impl Stats {
 /// 列出目录下所有 `.map`（大小写不敏感），按路径排序保证输出稳定。
 ///
 /// 目录不存在 / 不可读 / 无 `.map` ⇒ 打印警告并返回 `None`（调用方 skip，不 panic）。
-fn 列出地图(dir: &str) -> Option<Vec<PathBuf>> {
-    let p = Path::new(dir);
+fn 列出地图(dir: &Path) -> Option<Vec<PathBuf>> {
+    let p = dir;
     if !p.exists() {
-        eprintln!("[跳过] 目录不存在：{dir} —— 本用例 skip（不 panic）");
+        eprintln!("[跳过] 目录不存在：{} —— 本用例 skip（不 panic）", dir.display());
         return None;
     }
     let rd = match fs::read_dir(p) {
         Ok(rd) => rd,
         Err(e) => {
-            eprintln!("[跳过] 目录无法读取：{dir}（{e}） —— 本用例 skip");
+            eprintln!("[跳过] 目录无法读取：{}（{e}） —— 本用例 skip", dir.display());
             return None;
         }
     };
@@ -130,11 +150,14 @@ fn 列出地图(dir: &str) -> Option<Vec<PathBuf>> {
     }
     out.sort();
     if out.is_empty() {
-        eprintln!("[跳过] 目录里没有 .map 文件：{dir} —— 本用例 skip");
+        eprintln!("[跳过] 目录里没有 .map 文件：{} —— 本用例 skip", dir.display());
         return None;
     }
     if 读失败 > 0 {
-        eprintln!("[警告] 目录 {dir} 有 {读失败} 个目录项读取失败，已计入警告但未参与统计");
+        eprintln!(
+            "[警告] 目录 {} 有 {读失败} 个目录项读取失败，已计入警告但未参与统计",
+            dir.display()
+        );
     }
     Some(out)
 }
@@ -181,7 +204,12 @@ fn 往返检查(bytes: &[u8]) -> Result<Map, String> {
 /// 用例 1：36 档全量往返（目录内所有 `.map`，按长度筛出 Ext36）。
 #[test]
 fn ext36_全量往返() {
-    let Some(files) = 列出地图(目录_36档) else {
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let 目录 = 目录_36档(&root);
+    let Some(files) = 列出地图(&目录) else {
         return;
     };
 
@@ -236,7 +264,7 @@ fn ext36_全量往返() {
 
     let ext36_共 = *档位分布.get("Ext36").unwrap_or(&0);
     println!("========== 用例 1：Ext36 全量往返 ==========");
-    println!("[EXT36 用例] 目录：{目录_36档}");
+    println!("[EXT36 用例] 目录：{}", 目录.display());
     println!(
         "[EXT36 用例] 扫描 .map {} 个：Old12={} New14={} Ext36={} 长度不符三档={}",
         st.scanned,
@@ -266,7 +294,12 @@ fn ext36_全量往返() {
 /// 一律按「非本用例档位」计入跳过并打印原因，不静默吞掉。
 #[test]
 fn old12_new14_全量往返() {
-    let Some(files) = 列出地图(目录_12_14档) else {
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let 目录 = 目录_12_14档(&root);
+    let Some(files) = 列出地图(&目录) else {
         return;
     };
 
@@ -320,7 +353,7 @@ fn old12_new14_全量往返() {
     let new14 = *档位分布.get("New14").unwrap_or(&0);
     let 共 = old12 + new14;
     println!("========== 用例 2：Old12 + New14 全量往返 ==========");
-    println!("[12/14 用例] 目录：{目录_12_14档}");
+    println!("[12/14 用例] 目录：{}", 目录.display());
     println!(
         "[12/14 用例] 扫描 .map {} 个：Old12={old12} New14={new14} Ext36={} 长度不符三档={}",
         st.scanned,
@@ -345,13 +378,19 @@ fn old12_new14_全量往返() {
 /// 同时断言该区间确实存在非零尾区格（否则断言会空转）。
 #[test]
 fn n0_尾区定向断言() {
-    let path = Path::new(文件N0);
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let path = 文件_n0(&root);
     if !path.exists() {
-        eprintln!("[跳过] 文件不存在：{文件N0} —— 本用例 skip（不 panic）");
+        eprintln!("[跳过] 文件不存在：{} —— 本用例 skip（不 panic）", path.display());
         return;
     }
-    let bytes = fs::read(path).unwrap_or_else(|e| panic!("读取 {文件N0} 失败：{e}"));
-    let map = Map::parse(&bytes).unwrap_or_else(|e| panic!("{文件N0} 解析失败：{e}"));
+    let bytes = fs::read(&path)
+        .unwrap_or_else(|e| panic!("读取 {} 失败：{e}", path.display()));
+    let map = Map::parse(&bytes)
+        .unwrap_or_else(|e| panic!("{} 解析失败：{e}", path.display()));
 
     assert_eq!(map.format, CellFormat::Ext36, "n0.map 应为 36 档");
     assert_eq!((map.width, map.height), (700, 700), "n0.map 应为 700×700");
@@ -486,7 +525,12 @@ fn 负向_长度不匹配必须报错() {
 #[test]
 fn 反向_14b补零升档与36b截断() {
     println!("========== 用例 5：反向（补零升档 / 截断） ==========");
-    let Some(files) = 列出地图(目录_12_14档) else {
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let 目录 = 目录_12_14档(&root);
+    let Some(files) = 列出地图(&目录) else {
         return;
     };
 
@@ -520,7 +564,10 @@ fn 反向_14b补零升档与36b截断() {
     }
 
     let Some((样本路径, raw14, map14)) = 样本 else {
-        eprintln!("[跳过] {目录_12_14档} 里找不到「第 2 格非空」的 New14 样本 —— 本用例 skip");
+        eprintln!(
+            "[跳过] {} 里找不到「第 2 格非空」的 New14 样本 —— 本用例 skip",
+            目录.display()
+        );
         return;
     };
     let w = map14.width as usize;

@@ -11,18 +11,60 @@
 //! ⚠ 只读真图：本用例绝不写磁盘（末尾再读一次比对）。
 
 use miredit_core::{apply, Command, EditSession, LibRef, COLLISION_BIT};
+use std::path::PathBuf;
 
-const 真图: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map\0.map";
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
 
-fn 读真图() -> Vec<u8> {
-    std::fs::read(真图).unwrap_or_else(|e| panic!("真值地图读不到，不许静默跳过：{真图} ⇒ {e}"))
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
+/// 真值地图 `0.map`（23 周年客户端 / Old12 / 700×700）。
+///
+/// **缺资产根或文件 ⇒ `None`**（公开仓/PR 的机器上没有游戏素材），调用方打印 `[skip]` 并返回。
+fn 真图路径() -> Option<PathBuf> {
+    let root = 资产根()?;
+    let p = 语料_b(&root).join("0.map");
+    p.is_file().then_some(p)
+}
+
+/// `<资产根>/GodotClient/maps`（12/14 档现役语料）。
+fn 语料_a(root: &std::path::Path) -> PathBuf {
+    root.join("GodotClient").join("maps")
+}
+
+/// `<资产根>/client/热血传奇23周年客户端/Map`（23 周年全量语料）。
+fn 语料_b(root: &std::path::Path) -> PathBuf {
+    root.join("client").join("热血传奇23周年客户端").join("Map")
+}
+
+/// 只读载入真图：返回 `(路径, 字节)`；缺资产 ⇒ `None`（**不再 panic**：没有素材不算代码错）。
+fn 读真图() -> Option<(PathBuf, Vec<u8>)> {
+    let p = 真图路径()?;
+    match std::fs::read(&p) {
+        Ok(b) => Some((p, b)),
+        Err(e) => {
+            eprintln!("[skip] 真值地图读不到：{} ⇒ {e}", p.display());
+            None
+        }
+    }
 }
 
 #[test]
 fn 门6_单格落笔改4格差异5字节() {
-    let bytes = 读真图();
-    let doc = miredit_core::Document::from_bytes(std::path::Path::new(真图), bytes.clone())
-        .expect("真值地图应能解析");
+    let Some((真图, bytes)) = 读真图() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 Map/0.map）—— 本用例 skip（不 panic）");
+        return;
+    };
+    let doc = miredit_core::Document::from_bytes(&真图, bytes.clone()).expect("真值地图应能解析");
     let h = doc.view().height;
     let size = doc.view().format.cell_size();
     let mut ed = EditSession::new(doc);
@@ -104,7 +146,8 @@ fn 门6_单格落笔改4格差异5字节() {
     assert_eq!(now.len(), bytes.len());
 
     eprintln!(
-        "PAINT_3X3 path={真图} 落笔=(0,0) 尺寸=3 改格={} 差异字节={} 差异格={} 差异偏移={:?} (0,0): 0x{:04X}→0x{:04X} bit15=1→{} walkable={}→{}",
+        "PAINT_3X3 path={} 落笔=(0,0) 尺寸=3 改格={} 差异字节={} 差异格={} 差异偏移={:?} (0,0): 0x{:04X}→0x{:04X} bit15=1→{} walkable={}→{}",
+        真图.display(),
         out.changed,
         d.bytes,
         d.cells,
@@ -117,15 +160,17 @@ fn 门6_单格落笔改4格差异5字节() {
     );
 
     // 只读自证
-    assert_eq!(读真图(), bytes, "本用例绝不许写磁盘");
+    assert_eq!(读真图(), Some((真图, bytes)), "本用例绝不许写磁盘");
 }
 
 /// 同一笔的撤销：逐字节回到原文件（顺带证明"整格快照"能还原 `Old12` 档）。
 #[test]
 fn 门6补充_单笔撤销逐字节还原() {
-    let bytes = 读真图();
-    let doc = miredit_core::Document::from_bytes(std::path::Path::new(真图), bytes.clone())
-        .expect("真值地图应能解析");
+    let Some((真图, bytes)) = 读真图() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 Map/0.map）—— 本用例 skip（不 panic）");
+        return;
+    };
+    let doc = miredit_core::Document::from_bytes(&真图, bytes.clone()).expect("真值地图应能解析");
     let mut ed = EditSession::new(doc);
     miredit_core::set_brush_from_palette(&mut ed, LibRef::ground(0), 9);
     assert_eq!(apply(&mut ed, Command::Paint { x: 0, y: 0 }).unwrap().changed, 4);
@@ -142,18 +187,24 @@ fn 门6补充_单笔撤销逐字节还原() {
 /// `0.map` = `Old12`、`41.map` = `New14`、`n0104.map` = `Ext36`。
 #[test]
 fn 三档真图写图号都保留bit15() {
-    for (tag, path, want_fmt) in [
-        ("Old12", 真图, "Old12"),
-        ("New14", r"E:\GodM2\GodotClient\maps\41.map", "New14"),
-        (
-            "Ext36",
-            r"E:\GodM2\client\热血传奇23周年客户端\Map\n0104.map",
-            "Ext36",
-        ),
-    ] {
-        let bytes = std::fs::read(path)
-            .unwrap_or_else(|e| panic!("真值地图读不到，不许静默跳过：{tag} {path} ⇒ {e}"));
-        let doc = miredit_core::Document::from_bytes(std::path::Path::new(path), bytes.clone())
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    // 三档：`0.map` = `Old12`、`41.map` = `New14`、`n0104.map` = `Ext36`（路径都相对资产根）
+    let 三档: [(&str, PathBuf, &str); 3] = [
+        ("Old12", 语料_b(&root).join("0.map"), "Old12"),
+        ("New14", 语料_a(&root).join("41.map"), "New14"),
+        ("Ext36", 语料_b(&root).join("n0104.map"), "Ext36"),
+    ];
+    for (tag, path, want_fmt) in 三档 {
+        if !path.is_file() {
+            eprintln!("[skip] 缺文件 {}", path.display());
+            continue;
+        }
+        let bytes = std::fs::read(&path)
+            .unwrap_or_else(|e| panic!("真值地图读不到：{tag} {} ⇒ {e}", path.display()));
+        let doc = miredit_core::Document::from_bytes(&path, bytes.clone())
             .expect("真值地图应能解析");
         assert_eq!(doc.format_name(), want_fmt, "{tag} 档位与口径不符");
         let h = doc.view().height as usize;

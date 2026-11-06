@@ -25,25 +25,40 @@ use miredit_render::{
     Viewport,
 };
 
-/// 0.map（客户端版地图，700×700 / 12 B 格）。
-const MAP_0: &str = r"E:\GodM2\GodotClient\maps\0.map";
+/// 0.map（客户端版地图，700×700 / 12 B 格）。路径**相对资产根** `MIREDIT_ASSET_ROOT`。
+const MAP_0: &str = "GodotClient/maps/0.map";
 
 /// 真实语料：两张「`door_offset` 高位已置位」的图 + 一个「库号 0（`Objects`）且
 /// `fr_img != 0`、`door_index` 低 7 位非 0」的格（本次全量复扫定位，坐标见下）。
+/// 路径**相对资产根**。
 const 语料: [(&str, &str, u16, u16); 2] = [
     (
         "63.map",
-        r"E:\GodM2\client\热血传奇23周年客户端\Map\63.map",
+        "client/热血传奇23周年客户端/Map/63.map",
         0,
         6,
     ),
     (
         "11.map",
-        r"E:\GodM2\client\热血传奇23周年客户端\Map\11.map",
+        "client/热血传奇23周年客户端/Map/11.map",
         0,
         13,
     ),
 ];
+
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[跳过]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
 
 // =============================================================================
 // 小工具
@@ -152,30 +167,34 @@ fn 打开图源() -> Option<WilSource> {
     }
 }
 
-/// 读并解析一张地图；不可用时打印原因并返回 `None`。
-fn 读地图(path: &str) -> Option<Map> {
-    let p = Path::new(path);
+/// 读并解析一张地图（`相对` = 相对资产根的路径段）；不可用时打印原因并返回 `None`。
+fn 读地图(相对: &str) -> Option<Map> {
+    let Some(root) = 资产根() else {
+        eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+        return None;
+    };
+    let p = root.join(相对);
     if !p.is_file() {
-        eprintln!("[跳过] 地图不存在：{path}");
+        eprintln!("[跳过] 地图不存在：{}", p.display());
         return None;
     }
-    let bytes = match std::fs::read(p) {
+    let bytes = match std::fs::read(&p) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("[跳过] 读文件失败 {path}：{e}");
+            eprintln!("[跳过] 读文件失败 {}：{e}", p.display());
             return None;
         }
     };
     match Map::parse(&bytes) {
         Ok(m) => Some(m),
         Err(e) => {
-            eprintln!("[跳过] 解析失败 {path}：{e}");
+            eprintln!("[跳过] 解析失败 {}：{e}", p.display());
             None
         }
     }
 }
 
-/// `tools/miredit/layout/refs`（相对本 crate 清单目录）。
+/// `layout/refs`（相对本 crate 清单目录）。
 fn refs_目录() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")

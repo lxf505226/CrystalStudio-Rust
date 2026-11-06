@@ -9,7 +9,7 @@
 //!    读本机 `CrystalStudio/catalogue/palette.json` 与 `Objects/`；文件不在 ⇒
 //!    打印原因并 `return`（**不 panic、也不静默变成"绿"**）。
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use egui::{Color32, ColorImage, TextureOptions};
 
@@ -215,10 +215,18 @@ fn 分页行文字放得下() {
 
 // ───────────────────────── 真实数据 ─────────────────────────
 
-/// `palette.json` 路径（与面板、探针同一个环境变量）。
+/// `palette.json` 路径：`MIR2_STAMP_PALETTE` → `<MIREDIT_UPSTREAM_ROOT>/catalogue/palette.json`
+/// → **生产缺省常量** [`sp::DEFAULT_PALETTE`]（缺省根的唯一出处，本测试不再自带一份）。
+///
+/// ⚠ **显式给了 `MIREDIT_UPSTREAM_ROOT` 就只认它**（即使那个根不存在，也不回落到生产缺省常量）：
+/// 否则「缺资产模式」会悄悄读到本机真素材，跳过判据当场失效。文件不存在时
+/// `ready_panel` 会打印 `[跳过]` 并返回（公开仓/PR 的机器上没有素材也不会红）。
 fn palette_json() -> PathBuf {
-    match std::env::var_os(sp::PALETTE_ENV) {
-        Some(v) => PathBuf::from(v),
+    if let Some(v) = std::env::var_os(sp::PALETTE_ENV) {
+        return PathBuf::from(v);
+    }
+    match std::env::var_os("MIREDIT_UPSTREAM_ROOT") {
+        Some(v) => PathBuf::from(v).join("catalogue").join("palette.json"),
         None => PathBuf::from(sp::DEFAULT_PALETTE),
     }
 }
@@ -443,10 +451,12 @@ fn 缩略图与直接渲染逐字节一致() {
     }
 }
 
-/// 打开图库（与 GUI 同一条路径）。
+/// 打开图库（与 GUI 同一条 [`mir2_assets::client_root`] 路径）。
+///
+/// 未设置 `MIREDIT_CLIENT_ROOT`（或它不是目录）⇒ `None`，调用方打印跳过原因。
 fn open_source() -> Option<mir2_assets::WilSource> {
-    let root = Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-    let paths = mir2_assets::LibPaths::discover(root).ok()?;
+    let root = mir2_assets::client_root()?;
+    let paths = mir2_assets::LibPaths::discover(&root).ok()?;
     mir2_assets::WilSource::open(&paths).ok()
 }
 

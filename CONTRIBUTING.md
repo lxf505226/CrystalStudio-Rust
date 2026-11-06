@@ -5,8 +5,7 @@
 ## 一、环境要求
 
 - Rust stable（`edition = "2021"`，workspace 8 个 crate）。
-- `crates/mir2-assets` 通过 **path 依赖**引用 `wil2atlas`（WIL/WZL 解码，本仓不做二进制解析复制）。
-  当前清单里写的是开发机绝对路径，克隆后请先把它指向你自己的 `wil2atlas` 副本（或用发布版依赖替换）。
+- `crates/mir2-assets` 复用 **vendored** 的 WIL/WZL 解码器：`vendor/wil2atlas/`（decoder-only，MIT；来源与逐文件 SHA256 见 `vendor/wil2atlas/NOTICE`），以仓库内相对路径 `path = "../../vendor/wil2atlas"` 引用 —— **无需外部 path 依赖**。
 - 游戏素材（`.map`、`.wil/.wix`、`.wzl/.wzx`、`.lib`、`Objects/*.X`）**不入库**，见第四节。
 
 ## 二、构建与门禁
@@ -19,6 +18,7 @@ cargo clippy --all-targets -- -D warnings
 
 提交前至少跑一次 `cargo clippy --all-targets -- -D warnings`（要求 0 warning），并在 PR 里贴实际输出。
 全量测试耗时较长时可先跑受影响的 crate（`cargo test -p <crate>`），但合入前要跑一次全量。
+CI（`.github/workflows/ci.yml`）在同一套命令下跑，**不设任何素材环境变量** ⇒ 素材相关用例全部 `[skip]`。
 
 ## 三、代码风格
 
@@ -31,9 +31,27 @@ cargo clippy --all-targets -- -D warnings
 ## 四、素材与本地测试
 
 - **不要提交任何游戏素材**：地图、图库、印章、客户端资源、截图与渲染产物都不进仓库。
-- 网页版相关根目录用环境变量指定：`MIREDIT_MAP_ROOT`、`MIREDIT_CLIENT_ROOT`、`MIREDIT_PALETTE_JSON`、`MIREDIT_WEB_ROOT`（见 [README.md](README.md) 第四节）。
-- 依赖素材的测试在目录缺失时**多数**会 `eprintln!("跳过：…")` 后直接返回（例：`crates/mir2-assets/tests/acceptance.rs`），
-  因此没有客户端素材也能跑通大部分套件。但**不保证全部**测试都这么处理：缺素材导致的失败请按 README 配好根目录，
+- **本仓没有任何内置素材路径**（2026-11-06 起）。素材根全部由环境变量给：
+
+  | 变量 | 给谁用 | 缺省 |
+  |---|---|---|
+  | `MIREDIT_CLIENT_ROOT` | PC 版 + 网页版：客户端根（`.wzl/.wzx`、`.wil/.wix`、`.lib`） | **无**（未设 ⇒ 图库未就绪，如实报错） |
+  | `MIREDIT_MAP_ROOT` | 网页版：`/api/map/open` 白名单根 | **无**（未设 ⇒ 地图端点 503） |
+  | `MIREDIT_PALETTE_JSON` | 网页版：印章目录索引 | **无**（未设 ⇒ `/api/stamps` 503） |
+  | `MIR2_STAMP_PALETTE` | PC 版：印章目录索引 | **无**（未设 ⇒ 面板报加载失败） |
+  | `MIREDIT_WEB_ROOT` | 网页版：静态前端目录 | 本仓 `web/`（中立回退） |
+
+- **测试专用**（验收/逐字节比对才需要，运行时不读）：
+
+  | 变量 | 含义 |
+  |---|---|
+  | `MIREDIT_ASSET_ROOT` | 地图语料根（用例内相对路径挂在它下面，如 `GodotClient/maps/0.map`） |
+  | `MIREDIT_CLIENT_ATLAS_ROOT` | 客户端烘焙图集根（`<库>/<库>_atlas_NN.png` + `_meta.json`） |
+  | `MIREDIT_CLIENT_WIL_ROOT` | 旧版 `.wil/.wix` 容器目录 |
+  | `MIREDIT_UPSTREAM_ROOT` | 取证根（`Objects/**/*.X`、`catalogue/palette.json`） |
+
+- 依赖素材的用例在根目录缺失时打印 `[skip]` / `[跳过]` 后返回，因此**没有素材也能 `cargo test --workspace` 全绿**
+  （CI 就是这个模式，见 `.github/workflows/ci.yml`）。缺素材导致的失败请按上表配好根目录，
   **不要**为了变绿去放宽断言或删除测试。
 
 ## 五、提交与 PR

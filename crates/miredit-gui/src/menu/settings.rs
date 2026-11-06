@@ -2,7 +2,7 @@
 //!
 //! # 为什么写在 `%LOCALAPPDATA%\miredit\settings.json`
 //!
-//! 本仓**没有** `settings.json`（`tools/miredit/` 下全仓 `grep` 过，只有 `Cargo.toml` /
+//! 本仓**没有** `settings.json`（仓库根下全仓 `grep` 过，只有 `Cargo.toml` /
 //! `layout/` 等），所以不能"复用已有的设置文件"。官方 CrystalStudio 用的是
 //! `EditorPaths.ProfileDirectory` 下的 `appearance.json`（`ThemeService.Avalonia.cs:11`），
 //! 那是**它的**用户配置目录；本仓是独立程序，按 Windows 惯例落到
@@ -460,14 +460,14 @@ mod tests {
             },
             Settings {
                 dark: true,
-                recent: vec![r"E:\GodM2\GodotClient\maps\41.map".to_owned()],
+                recent: vec![r"maps\41.map".to_owned()],
             },
             Settings {
                 dark: false,
                 recent: vec![
-                    r"E:\GodM2\GodotClient\maps\41.map".to_owned(),
-                    r"E:\GodM2\GodotClient\maps\10.map".to_owned(),
-                    r"I:\临时 目录\带空格\3.map".to_owned(),
+                    r"maps\41.map".to_owned(),
+                    r"maps\10.map".to_owned(),
+                    r"临时 目录\带空格\3.map".to_owned(),
                 ],
             },
         ];

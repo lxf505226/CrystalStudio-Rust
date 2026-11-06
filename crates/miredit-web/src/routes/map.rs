@@ -224,6 +224,30 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+    /// 资产根缺省值：本机真实根（**整个测试模块里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+    const 缺省资产根: &str = r"E:\GodM2";
+
+    /// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+    ///
+    /// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[跳过]` 并返回。
+    /// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+    fn 资产根() -> Option<std::path::PathBuf> {
+        let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(缺省资产根));
+        root.is_dir().then_some(root)
+    }
+
+    /// 23 周年客户端地图目录（`client/热血传奇23周年客户端/Map`，挂在资产根下）。
+    fn 语料_b(root: &Path) -> std::path::PathBuf {
+        root.join("client").join("热血传奇23周年客户端").join("Map")
+    }
+
+    /// Godot 客户端自带地图目录（`GodotClient/maps`，挂在资产根下）。
+    fn 语料_a(root: &Path) -> std::path::PathBuf {
+        root.join("GodotClient").join("maps")
+    }
+
     /// `/api/map` 的**字段全集**（少一个就是断链：前端按名字取值，缺了就是 `undefined`）。
     const 地图字段: [&str; 11] = [
         "path",
@@ -262,7 +286,12 @@ mod tests {
     /// 环境缺资源不算代码错 —— 与 `routes/mod.rs` 的 `出图与render_maps逐字节相同` 同一口径。
     #[test]
     fn 真图字段来自内核() {
-        let path = Path::new(r"E:\GodM2\GodotClient\maps\41.map");
+        let Some(root) = 资产根() else {
+            eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+            return;
+        };
+        let path = 语料_a(&root).join("41.map");
+        let path = path.as_path();
         if !path.is_file() {
             eprintln!("[跳过] 真实地图不存在：{}", path.display());
             return;
@@ -293,7 +322,12 @@ mod tests {
     /// ⇒ 本测试改为钉**新语义**：`editable == true`；告警里**有**尾块那句；**没有**格式段。
     #[test]
     fn 带尾块的真图必给告警() {
-        let path = Path::new(r"E:\GodM2\client\热血传奇23周年客户端\Map\EM001.map");
+        let Some(root) = 资产根() else {
+            eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+            return;
+        };
+        let path = 语料_b(&root).join("EM001.map");
+        let path = path.as_path();
         if !path.is_file() {
             eprintln!("[跳过] 真实地图不存在：{}", path.display());
             return;
@@ -350,18 +384,22 @@ mod tests {
     /// | `…/Map/EM001.map` | Old12 | `true` | 8,040 | 只有尾块那句 |
     #[test]
     fn editable与告警互为反相() {
-        // (路径, 期望 editable, 告警必含片段, 告警必不含片段)
+        let Some(root) = 资产根() else {
+            eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+            return;
+        };
+        // (相对资产根的路径, 期望 editable, 告警必含片段, 告警必不含片段)
         let 用例: [(&str, bool, &[&str], &[&str]); 4] = [
-            (r"E:\GodM2\GodotClient\maps\0.map", true, &[], &["本格式"]),
-            (r"E:\GodM2\GodotClient\maps\41.map", true, &[], &["本格式"]),
+            ("GodotClient/maps/0.map", true, &[], &["本格式"]),
+            ("GodotClient/maps/41.map", true, &[], &["本格式"]),
             (
-                r"E:\GodM2\client\热血传奇23周年客户端\Map\alx.map",
+                "client/热血传奇23周年客户端/Map/alx.map",
                 false,
                 &["22 字节", "rel 14-35"],
                 &["尾块"],
             ),
             (
-                r"E:\GodM2\client\热血传奇23周年客户端\Map\EM001.map",
+                "client/热血传奇23周年客户端/Map/EM001.map",
                 true,
                 &["8040"],
                 &["本格式", "Old12"],
@@ -371,7 +409,8 @@ mod tests {
         let mut 测到不可编辑 = 0usize;
         let mut 有不可编辑样本 = false;
         for (p, 期望可编辑, 必含, 必不含) in 用例 {
-            let path = Path::new(p);
+            let path_buf = root.join(p);
+            let path = path_buf.as_path();
             if !path.is_file() {
                 eprintln!("[跳过] 真实地图不存在：{}", path.display());
                 continue;

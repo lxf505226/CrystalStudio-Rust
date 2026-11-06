@@ -17,6 +17,20 @@ use mir2_format::{
     registry, Cell, FormatError, FormatId, MapFormat, RawMap,
 };
 
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<std::path::PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
 // ────────────────────────────── 合成样本构造器 ──────────────────────────────
 
 /// 造一块「头 `header_len` 字节全零 + 其后按确定模式填充」的缓冲区。
@@ -562,19 +576,23 @@ fn rawmap_越界取格返回none() {
 
 /// **回归 1**：真实 14 B/格 但 `Bytes[4] != 0x0F` 的图必须判成 `Shanda14`，不许判成 `Old12`。
 ///
-/// 样本：`E:\GodM2\GodotClient\maps\10.map` —— 110×118、181772 字节
+/// 样本：`GodotClient/maps/10.map`（挂在资产根下）—— 110×118、181772 字节
 /// （`52 + 14*110*118 = 181772` 精确成立），标题首字节实测 **`0x07`** 而不是 `0x0F`。
 /// C# 只看标题 ⇒ 落到兜底 `LoadMapType0` 按 12 B/格读 ⇒ 读成花图。
 /// 同批还有 14 个（`14.map` `B[4]=0x0D`、`20.map` `0xFF`、`33.map`/`4.map` `0x03`、
-/// `42.map`/`58.map`/`64.map` `0x0B`、其余 `0x07`），`E:\GodM2\需要的资料` 下另有同名 15 个。
+/// `42.map`/`58.map`/`64.map` `0x0B`、其余 `0x07`），`需要的资料` 下另有同名 15 个。
 #[test]
 fn 回归一_真实十四字节格但标题不是零f() {
-    let p = r"E:\GodM2\GodotClient\maps\10.map";
-    if !std::path::Path::new(p).exists() {
-        eprintln!("跳过：{p} 不存在（非本机环境）");
+    let Some(root) = 资产根() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+        return;
+    };
+    let p = root.join("GodotClient").join("maps").join("10.map");
+    if !p.is_file() {
+        eprintln!("[skip] 缺文件 {}", p.display());
         return;
     }
-    let raw = std::fs::read(p).expect("应能读该真实样本");
+    let raw = std::fs::read(&p).expect("应能读该真实样本");
     assert_eq!(raw.len(), 181_772, "样本长度应实测 181772");
     assert_eq!(
         raw[4], 0x07,

@@ -37,7 +37,7 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use crate::acceptance_tests::common::临时目录;
+use crate::acceptance_tests::common::{资产根, 临时目录};
 use crate::app::ground_block_reason;
 use crate::edit::EditSession;
 use crate::mapdoc::DocState;
@@ -45,21 +45,30 @@ use crate::screen_text;
 
 // ───────────────────────── 全仓语料 ─────────────────────────
 
-/// 语料目录一：客户端工程自带的 61 张（12 / 14 / 36 三档）。
-pub(super) const 语料A: &str = r"E:\GodM2\GodotClient\maps";
+/// 语料目录一：客户端工程自带的 61 张（12 / 14 / 36 三档）：`<资产根>/GodotClient/maps`。
+pub(super) fn 语料_a() -> Option<PathBuf> {
+    Some(资产根()?.join("GodotClient").join("maps"))
+}
+
 /// 语料目录二：23 周年客户端的 1,097 张（含 36B 高清图与 67 张带尾块的图）。
-pub(super) const 语料B: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map";
+pub(super) fn 语料_b() -> Option<PathBuf> {
+    Some(资产根()?.join("client").join("热血传奇23周年客户端").join("Map"))
+}
+
 /// 带未解尾块的真实样本（头部声明 30×35 ⇒ `52 + 12×1050 = 12,652`，实际 20,692）。
-pub(super) const 尾块样本: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map\EM001.map";
+pub(super) fn 尾块样本() -> Option<PathBuf> {
+    let p = 语料_b()?.join("EM001.map");
+    p.is_file().then_some(p)
+}
 /// 该样本的未解尾块字节数（`20,692 − 12,652`）。
 pub(super) const 尾块字节数: usize = 8040;
 
 /// 把两个语料目录里的 `.map` 全收进来（按路径排序，保证两次跑的顺序一致）。
 fn 全部语料() -> Vec<PathBuf> {
     let mut out = Vec::new();
-    for dir in [语料A, 语料B] {
-        let Ok(rd) = std::fs::read_dir(dir) else {
-            eprintln!("[跳过] 语料目录不存在：{dir}");
+    for dir in [语料_a(), 语料_b()].into_iter().flatten() {
+        let Ok(rd) = std::fs::read_dir(&dir) else {
+            eprintln!("[跳过] 语料目录不存在：{}", dir.display());
             continue;
         };
         for e in rd.flatten() {
@@ -146,7 +155,11 @@ fn 门2门3_全仓一千一百五十八张_开图零失败_未改即存零差异
     }
 
     eprintln!("═══ 门 2 / 门 3 全仓统计 ═══");
-    eprintln!("语料目录：{语料A} + {语料B}");
+    eprintln!(
+        "语料目录：{} + {}",
+        语料_a().map(|p| p.display().to_string()).unwrap_or_else(|| "<无资产根>".to_string()),
+        语料_b().map(|p| p.display().to_string()).unwrap_or_else(|| "<无资产根>".to_string())
+    );
     eprintln!("文件总数：{}（开图失败 {}）", files.len(), 开图失败.len());
     eprintln!("文件字节合计：{总字节}");
     eprintln!("带未解尾块：{带尾块} 张，尾块字节合计 {尾块字节合计}");
@@ -581,12 +594,16 @@ fn 造_crystal_cs(ver: i16, w: u16, h: u16, with_front: bool) -> Vec<u8> {
 /// 而 `banner::dyn_labels` 又真的会为它产生一条文字（`banner` 模块自测已覆盖）。
 #[test]
 fn 门5_带尾块样本_8040字节_黄条出现() {
-    let p = Path::new(尾块样本);
-    if !p.is_file() {
-        eprintln!("[跳过] 本机没有带尾块样本 {}", p.display());
-        return;
-    }
-    let st = 只有地图(p).expect("EM001.map 必须能打开（宽松判别）");
+    let p = match 尾块样本() {
+        Some(p) => p,
+        None => {
+            eprintln!(
+                "[跳过] 无资产根 MIREDIT_ASSET_ROOT（或缺 client/热血传奇23周年客户端/Map/EM001.map）"
+            );
+            return;
+        }
+    };
+    let st = 只有地图(&p).expect("EM001.map 必须能打开（宽松判别）");
     let d = st.doc.as_ref().expect("文档");
 
     println!(

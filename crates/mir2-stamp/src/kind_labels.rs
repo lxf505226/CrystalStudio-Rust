@@ -9,7 +9,7 @@
 //!
 //! # 二、数据来源与实测口径（2026-11-04 21:5x，本机真实文件）
 //!
-//! - 来源：`E:\GodM2\CrystalStudio\catalogue\palette.json`（5,092,886 B）的 `objects[]`；
+//! - 来源：`<dataRoot>/catalogue/palette.json`（5,092,886 B）的 `objects[]`；
 //! - 实测 **9,159** 条记录，`type` 字段 distinct 取值 **20** 个：
 //!   Terrain 1,695 / Cliff 1,434 / Wall 1,152 / Rock 943 / Debris 759 / Furniture 534 /
 //!   Decoration 518 / Water 469 / Plant 448 / Tree 323 / Building 271 / Fence 261 /
@@ -140,17 +140,28 @@ mod tests {
 
     use super::{kind_label_zh, kind_label_zh_or, KIND_LABELS_ZH};
 
-    /// 默认 `palette.json`（与 `catalogue_tests` 同一环境变量口径，换机时用 `MIR2_STAMP_PALETTE` 覆盖）。
-    const 默认目录文件: &str = r"I:\miredit\_upstream\catalogue\palette.json";
+    /// 取证根缺省值：`palette.json` 的取证来源（**本模块里只出现这一处**）。
+    /// 换机器用 `MIREDIT_UPSTREAM_ROOT`。
+    const 缺省取证根: &str = r"I:\miredit\_upstream";
 
     /// 实测基线：distinct kind 数（19 个英文 + 空串/null）。
     const DISTINCT_KIND_BASELINE: usize = 20;
 
-    /// 真实 `palette.json` 路径（环境变量优先）。
-    fn 目录文件() -> PathBuf {
+    /// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`。
+    ///
+    /// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+    fn 取证根() -> Option<PathBuf> {
+        let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(缺省取证根));
+        root.is_dir().then_some(root)
+    }
+
+    /// 真实 `palette.json` 路径（相对取证根；环境变量 `MIR2_STAMP_PALETTE` 优先）。
+    fn 目录文件() -> Option<PathBuf> {
         match std::env::var_os("MIR2_STAMP_PALETTE") {
-            Some(v) => PathBuf::from(v),
-            None => PathBuf::from(默认目录文件),
+            Some(v) => Some(PathBuf::from(v)),
+            None => Some(取证根()?.join("catalogue").join("palette.json")),
         }
     }
 
@@ -216,7 +227,10 @@ mod tests {
 
     #[test]
     fn 真实数据_全部kind都有中文标签_漏译即为红() {
-        let path = 目录文件();
+        let Some(path) = 目录文件() else {
+            eprintln!("[跳过] 真实数据覆盖：无取证根 MIREDIT_UPSTREAM_ROOT —— 本用例 skip（不 panic）");
+            return;
+        };
         if !path.is_file() {
             eprintln!(
                 "[跳过] 真实数据覆盖：palette.json 不存在（{}）—— 本用例 skip（不 panic）",

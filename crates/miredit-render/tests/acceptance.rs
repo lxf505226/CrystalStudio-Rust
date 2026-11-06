@@ -3,7 +3,7 @@
 //! 1. **确定性**：同一输入两次渲染 ⇒ 字节完全相同；
 //! 2. **尺寸**：`64×48` 格 ⇒ `3072×1536` px；
 //! 3. **真实地图抽样**：0.map / 41.map / n0104.map 各渲染 64×48 格、导出 PNG 到
-//!    `tools/miredit/layout/refs/render-<图名>.png`、打印 `stats`；**路径不存在就跳过**；
+//!    `layout/refs/render-<图名>.png`、打印 `stats`；**路径不存在就跳过**；
 //! 4. **与客户端截图分块比对**（结构级）：需要先用 Godot 客户端出图，见文件末尾说明；
 //! 5. **性能**：见 `cargo run --release --bin render_maps` 的输出（debug 下计时无意义，
 //!    这里只做一个宽松的冒烟断言并打印）。
@@ -22,17 +22,28 @@ use miredit_render::{
     RenderStats, Rendered, Viewport, CELL_H, CELL_W,
 };
 
-/// 抽样地图（真实路径，不是猜的）。
+/// 抽样地图（**相对资产根** `MIREDIT_ASSET_ROOT`，不是猜的）。
 const 抽样地图: [(&str, &str); 3] = [
-    ("0", r"E:\GodM2\GodotClient\maps\0.map"),
-    ("41", r"E:\GodM2\GodotClient\maps\41.map"),
-    (
-        "n0104",
-        r"E:\GodM2\client\热血传奇23周年客户端\Map\n0104.map",
-    ),
+    ("0", "GodotClient/maps/0.map"),
+    ("41", "GodotClient/maps/41.map"),
+    ("n0104", "client/热血传奇23周年客户端/Map/n0104.map"),
 ];
 
-/// `tools/miredit/layout/refs`（相对本 crate 清单目录）。
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[跳过]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
+/// `layout/refs`（相对本 crate 清单目录）。
 fn refs_目录() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -75,24 +86,28 @@ fn 打开图源() -> Option<WilSource> {
     }
 }
 
-/// 读并解析一张地图；失败返回 `None`（打印原因）。
-fn 读地图(path: &str) -> Option<(Map, usize)> {
-    let p = Path::new(path);
+/// 读并解析一张地图（`相对` = 相对资产根的路径段）；失败返回 `None`（打印原因）。
+fn 读地图(相对: &str) -> Option<(Map, usize)> {
+    let Some(root) = 资产根() else {
+        eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+        return None;
+    };
+    let p = root.join(相对);
     if !p.is_file() {
-        eprintln!("[跳过] 地图不存在：{path}");
+        eprintln!("[跳过] 地图不存在：{}", p.display());
         return None;
     }
-    let bytes = match std::fs::read(p) {
+    let bytes = match std::fs::read(&p) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("[跳过] 读文件失败 {path}：{e}");
+            eprintln!("[跳过] 读文件失败 {}：{e}", p.display());
             return None;
         }
     };
     match Map::parse(&bytes) {
         Ok(m) => Some((m, bytes.len())),
         Err(e) => {
-            eprintln!("[跳过] 解析失败 {path}：{e}");
+            eprintln!("[跳过] 解析失败 {}：{e}", p.display());
             None
         }
     }
@@ -436,11 +451,11 @@ fn 验收门9_阻挡可视化出图_0map() {
 //
 //   需要外部先出图（本测试不自己拉 Godot，保持「纯逻辑测试」的边界）：
 //
-//     & 'I:\godot\Godot_v4.7.2-stable_win64_console.exe' --path 'E:\GodM2\GodotClient' `
-//         res://tools/map_preview.tscn -- res://maps/0.map --at=380,310 --shot=I:\...\client_0map_380_310.png
+//     & '<Godot 可执行文件>' --path '<GodotClient 工程根>' `
+//         res://tools/map_preview.tscn -- res://maps/0.map --at=380,310 --shot=<输出 PNG>
 //
 //   然后：
-//     $env:MIREDIT_CLIENT_SHOT='I:\...\client_0map_380_310.png'
+//     $env:MIREDIT_CLIENT_SHOT='<上面输出的 PNG>'
 //     $env:MIREDIT_CLIENT_AT='380,310'
 //     cargo test -p miredit-render -- --nocapture
 //

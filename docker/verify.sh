@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================================
-# GodM2 地图编辑器 —— Docker 部署「一条命令」验证
+# Crystal Studio —— Docker 部署「一条命令」验证
 #
 #   ./verify.sh                # 构建 → 起 → 验 → 收工
 #   ./verify.sh --keep         # 验完不停容器（排查用）
@@ -109,7 +109,7 @@ command -v curl   >/dev/null 2>&1 || die "找不到 curl（本脚本用 curl 打
 cd "$DIR"
 
 say "=============================================================="
-say " GodM2 地图编辑器 · Docker 部署验证"
+say " Crystal Studio · Docker 部署验证"
 say " 项目目录 : $DIR"
 say " compose  : $FILE（服务 $SERVICE）"
 say " 访问地址 : $BASE"

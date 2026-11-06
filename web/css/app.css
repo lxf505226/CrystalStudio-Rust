@@ -1,5 +1,5 @@
 /* =============================================================================
-   GodM2 网页版地图编辑器 —— 样式表
+   Crystal Studio 网页版地图编辑器 —— 样式表
    · 无第三方 CSS，无 CDN，字体走系统栈
    · 视觉基准：tools/miredit/layout/refs/crystalstudio-new-zh.png（浅色金主题）
    · 响应式两档：PC ≥1024px 三栏；手机 <768px 单栏 + 底部抽屉 + 全屏浮层
@@ -82,7 +82,7 @@ code { font-family: var(--mono); font-size: .92em; color: var(--gold-dark); }
   background: linear-gradient(135deg, var(--gold) 0%, var(--gold-dark) 100%);
   align-self: center;
 }
-.brand__name { font-weight: 700; letter-spacing: .02em; }
+.brand__name { font-weight: 700; letter-spacing: .02em; white-space: nowrap; }
 .brand__sub { font-size: 12px; color: var(--ink-3); }
 .filetab {
   display: flex; align-items: center; gap: 6px;

@@ -2768,6 +2768,20 @@ fn apply_stamp_cli(stamps: &mut StampPanel, pal: &mut PaletteState, p: &PendingS
 mod tests {
     use super::*;
 
+    /// 资产根缺省值：本机真实根（**整个测试模块里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+    const 缺省资产根: &str = r"E:\GodM2";
+
+    /// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+    ///
+    /// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+    /// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+    fn 资产根() -> Option<PathBuf> {
+        let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(缺省资产根));
+        root.is_dir().then_some(root)
+    }
+
     /// 用例专用的设置文件路径（**绝不许碰真实用户设置**）。
     ///
     /// # 为什么必须隔离（2026-11-05 实测踩到）
@@ -3034,7 +3048,7 @@ mod tests {
         // ① 缺省**开**：官方 `MainWindow.axaml:5` 的 `GridToggle` 是
         //    `ToggleType="CheckBox" IsChecked="True"`。
         //    ⚠ 2026-11-05 订正：旧版这里断言"默认必须是关"（当时的理由写在
-        //    `grid` 模块文档 §五），审查（`deliverables/审查-菜单39项-2026-11-05.md`
+        //    `grid` 模块文档 §五），审查（内部报告《审查-菜单 39 项》，已移出公开仓
         //    缺陷 4）判定那是**形态偏离官方** ⇒ 改成默认开，**不是放宽断言**。
         let mut app = 有图应用();
         assert!(app.grid, "官方 IsChecked=True ⇒ 默认必须开");
@@ -3307,7 +3321,7 @@ mod tests {
             map: Some(p()),
             menu_open: Some(0),
             menu_hover: Some(2),
-            shot: Some(PathBuf::from(r"I:\miredit-shot-probe.png")),
+            shot: Some(std::env::temp_dir().join("miredit-shot-probe.png")),
             ..Default::default()
         });
         assert_eq!(with_shot.menu.active(), Some(2));
@@ -3395,16 +3409,24 @@ mod tests {
         assert!(text.contains("打开失败"), "{text}");
         assert_eq!(app.doc.map_gen, gen, "失败不该换图");
         // 成功：真读一张磁盘上的图（10.map 只有 177 KB，够小）
-        let p = r"E:\GodM2\GodotClient\maps\10.map";
-        if std::path::Path::new(p).exists() {
-            app.open_map_path(p, canvas);
-            let d = app.doc.doc.as_ref().expect("应已换图");
-            assert_eq!(d.file_name, "10.map");
-            assert!(app.doc.map_gen > gen, "换图要 +1（画布缓存靠它失效）");
-            assert_eq!(app.edit.undo_len(), 0, "换图必须清撤销栈（旧增量不能作用到新图）");
-            let (text, warn) = app.op.clone().expect("回执");
-            assert!(!warn, "成功不该用警示色");
-            assert!(text.contains("已打开地图：10.map"), "{text}");
+        // 路径相对资产根（`MIREDIT_ASSET_ROOT`，缺省本机真实根）；缺文件就只验失败分支。
+        match 资产根() {
+            Some(root) => {
+                let p = root.join("GodotClient").join("maps").join("10.map");
+                if !p.is_file() {
+                    eprintln!("[skip] 缺文件 {}", p.display());
+                } else {
+                    app.open_map_path(&p.display().to_string(), canvas);
+                    let d = app.doc.doc.as_ref().expect("应已换图");
+                    assert_eq!(d.file_name, "10.map");
+                    assert!(app.doc.map_gen > gen, "换图要 +1（画布缓存靠它失效）");
+                    assert_eq!(app.edit.undo_len(), 0, "换图必须清撤销栈（旧增量不能作用到新图）");
+                    let (text, warn) = app.op.clone().expect("回执");
+                    assert!(!warn, "成功不该用警示色");
+                    assert!(text.contains("已打开地图：10.map"), "{text}");
+                }
+            }
+            None => eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT"),
         }
     }
 
@@ -3616,8 +3638,15 @@ mod tests {
     /// 本用例要"删一个文件再点它"，绝不许动到真文件（删了就是事故）。
     #[test]
     fn 最近打开端到端记入提升与移除() {
-        let src10 = PathBuf::from(r"E:\GodM2\GodotClient\maps\10.map");
-        let src41 = PathBuf::from(r"E:\GodM2\GodotClient\maps\41.map");
+        // 路径相对资产根（`MIREDIT_ASSET_ROOT`，缺省本机真实根）——
+        // 公开仓/PR 的机器上没有游戏素材 ⇒ 打印 `[skip]` 并返回（不 panic）。
+        let Some(root) = 资产根() else {
+            eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+            return;
+        };
+        let 语料 = root.join("GodotClient").join("maps");
+        let src10 = 语料.join("10.map");
+        let src41 = 语料.join("41.map");
         if !src10.is_file() || !src41.is_file() {
             // 样本不在 ⇒ 如实跳过（不编假路径，也不假装验过）
             eprintln!(

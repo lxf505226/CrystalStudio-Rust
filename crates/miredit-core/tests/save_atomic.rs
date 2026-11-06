@@ -16,12 +16,44 @@ use miredit_core::{
     SaveOutcome, SaveStage,
 };
 
-const 真图: &str = r"E:\GodM2\client\热血传奇23周年客户端\Map\0.map";
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
 
-fn 读真图() -> Vec<u8> {
-    std::fs::read(真图).unwrap_or_else(|e| panic!("真值地图读不到，不许静默跳过：{真图} ⇒ {e}"))
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
 }
 
+/// 真值地图 `0.map`（23 周年客户端 / Old12 / 700×700）。
+///
+/// **缺资产根或文件 ⇒ `None`**（公开仓/PR 的机器上没有游戏素材），调用方打印 `[skip]` 并返回。
+fn 真图路径() -> Option<PathBuf> {
+    let root = 资产根()?;
+    let p = root
+        .join("client")
+        .join("热血传奇23周年客户端")
+        .join("Map")
+        .join("0.map");
+    p.is_file().then_some(p)
+}
+
+/// 读真图字节；缺资产 ⇒ `None`（**不再 panic**：没有素材不算代码错）。
+fn 读真图() -> Option<Vec<u8>> {
+    let p = 真图路径()?;
+    match std::fs::read(&p) {
+        Ok(b) => Some(b),
+        Err(e) => {
+            eprintln!("[skip] 真值地图读不到：{} ⇒ {e}", p.display());
+            None
+        }
+    }
+}
 /// 取文件 `mtime`；**取不到就失败**，绝不允许静默跳过（审查报告 `2026-11-05` 第 7 轮 · 缺陷 7）。
 ///
 /// # 为什么必须 `panic!` 而不是 `if let (Some, Some)`
@@ -90,7 +122,10 @@ fn 临时目录(tag: &str) -> PathBuf {
 /// **门 5 之一：正常保存** —— 写→刷→读回核对→rename 全过，磁盘内容与内存字节逐字节相等。
 #[test]
 fn 门5之一_正常保存读回核对通过() {
-    let 原 = 读真图();
+    let Some(原) = 读真图() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 Map/0.map）—— 本用例 skip（不 panic）");
+        return;
+    };
     let d = 临时目录("save_ok");
     let p = d.join("0.map");
     std::fs::write(&p, &原).expect("先把真图拷一份到临时目录");
@@ -144,7 +179,7 @@ fn 门5之一_正常保存读回核对通过() {
     assert!(!直写.dir_sync.note().is_empty(), "目录 fsync 必须有话说");
 
     // 真图一个字节都没动
-    assert_eq!(读真图(), 原, "真图只许读，不许写");
+    assert_eq!(读真图(), Some(原.clone()), "真图只许读，不许写");
     let _ = std::fs::remove_dir_all(&d);
 }
 

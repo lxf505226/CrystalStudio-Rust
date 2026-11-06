@@ -8,12 +8,12 @@
 //! use miredit_render::{render_region, Viewport};
 //! use mir2_map::Map;
 //! use mir2_assets::{LibPaths, SpriteSource, WilSource};
-//! use std::path::Path;
 //!
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! let bytes = std::fs::read(r"E:\GodM2\GodotClient\maps\0.map")?;
+//! let bytes = std::fs::read("<maps>/0.map")?;
 //! let map = Map::parse(&bytes)?;
-//! let paths = LibPaths::discover(Path::new(mir2_assets::DEFAULT_CLIENT_ROOT))?;
+//! let root = mir2_assets::client_root().expect("先设置 MIREDIT_CLIENT_ROOT");
+//! let paths = LibPaths::discover(&root)?;
 //! let src = WilSource::open(&paths)?;
 //! let vp = Viewport::new(300, 250, 64, 48);
 //! let out = render_region(&map, &src, &vp);

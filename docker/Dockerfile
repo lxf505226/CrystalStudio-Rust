@@ -1,17 +1,16 @@
 # syntax=docker/dockerfile:1
 # =============================================================================
-# GodM2 地图编辑器（网页版）—— 镜像定义
+# Crystal Studio（网页版）—— 镜像定义
 #
-# ⚠ 构建上下文必须是 `tools/`，**不是** `tools/miredit/`。
+# ⚠ 构建上下文必须是**仓库根**，不是 `docker/` 子目录。
 #   原因：`crates/mir2-assets/Cargo.toml` 里写着
-#       wil2atlas = { path = "../../../wil2atlas" }
-#   从 `crates/mir2-assets/` 往上三层就是 `tools/wil2atlas`。
-#   若上下文是 `tools/miredit/`，cargo 解析依赖时会直接报
-#   「failed to load manifest for dependency `wil2atlas`」。
+#       wil2atlas = { path = "../../vendor/wil2atlas" }
+#   这是**仓库内相对路径**（vendored 解码器），所以上下文只要含 `crates/` + `vendor/`
+#   就能解析，不再依赖"上一级目录里还并列着一个 wil2atlas/"那种迁移前布局。
 #
-#   所以：compose 里写 `context: ../..`；手工构建在 `tools/` 下执行：
-#       cd E:\GodM2\tools
-#       docker build -f miredit/docker/Dockerfile -t godm2/miredit:dev .
+#   所以：compose 里写 `context: ..` + `dockerfile: docker/Dockerfile`；
+#   手工构建在**仓库根**执行：
+#       docker build -f docker/Dockerfile -t crystalstudio/miredit:dev .
 #
 # -----------------------------------------------------------------------------
 # 三个阶段（**顺序是刻意的**：Docker 默认构建最后一个阶段）
@@ -33,15 +32,16 @@ FROM rust:slim-bookworm AS build
 
 WORKDIR /src
 
-# 只拷两个目录：`miredit/`（workspace 根）+ `wil2atlas/`（它的 path 依赖）。
-# `Dockerfile.dockerignore`（BuildKit 会读 <Dockerfile>.dockerignore）把
-# wil2atlas 的 atlas_out/target/verify_out（共 7.5 GB）和 miredit/layout（33 MB）
-# 排除掉，实际送进构建上下文只有 ~20 MB。
-COPY miredit/ ./miredit/
-COPY wil2atlas/ ./wil2atlas/
+# 只拷构建真正需要的四样：workspace 清单 + 锁文件 + 七个 crate + vendored 解码器。
+# （`docker/`、`web/` 只有后面两个阶段用，不往编译阶段搬。）
+# `docker/Dockerfile.dockerignore`（BuildKit 会读 `<Dockerfile>.dockerignore`）把
+# `target/`、`_upstream/`、`evidence/`、`layout/` 等挡在上下文外。
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ ./crates/
+COPY vendor/ ./vendor/
 
 # `CARGO_INCREMENTAL=0` 是本仓硬规矩（增量编译会 panic encode_metadata）。
-# **不设** `CARGO_TARGET_DIR`：容器里没有 I 盘，让 cargo 用默认的 /src/miredit/target。
+# **不设** `CARGO_TARGET_DIR`：容器里没有别的盘，让 cargo 用默认的 /src/target。
 ENV CARGO_INCREMENTAL=0 \
     CARGO_TERM_COLOR=never
 
@@ -49,9 +49,13 @@ ENV CARGO_INCREMENTAL=0 \
 # （这样镜像里不会拉进 miredit-gui 的 egui/wgpu 那一大坨）。
 # `--locked` 保证用仓库里那份 Cargo.lock；上游改了清单就**明确失败**，不悄悄升版本。
 #
-# 依赖里没有需要 C 编译器的 crate（已核对：依赖树 116 个 crate，无 cc/ring/openssl-sys/
-# bindgen；flate2 走 miniz_oxide 纯 Rust 后端），所以 rust:slim-bookworm 不带 gcc 也够。
-RUN cd miredit && cargo build -p miredit-web --release --locked
+# 依赖里没有需要 C 编译器的 crate（已核对：无 cc/ring/openssl-sys/bindgen；
+# flate2 走 miniz_oxide 纯 Rust 后端），所以 rust:slim-bookworm 不带 gcc 也够。
+RUN cargo build -p miredit-web --release --locked
+
+# 只把「真的有二进制」这件事在构建期钉死：产物缺失就让构建失败，
+# 而不是等到 runtime 阶段的 COPY 才报一句难懂的错。
+RUN test -x /src/target/release/miredit-web
 
 
 # =============================================================================
@@ -62,24 +66,24 @@ RUN cd miredit && cargo build -p miredit-web --release --locked
 # =============================================================================
 FROM nginx:1.27-alpine AS web
 
-LABEL org.opencontainers.image.title="GodM2 地图编辑器（前端前置层）" \
+LABEL org.opencontainers.image.title="Crystal Studio（前端前置层）" \
       org.opencontainers.image.description="nginx 静态页 + /api/ 反代到 miredit-web 后端"
 
 # 运行期只需要根证书（healthcheck 用 busybox 自带的 wget，无需额外安装）
 RUN apk add --no-cache ca-certificates
 
 # 静态页面（含 tiles/ 真实瓦片夹具）
-COPY miredit/web/ /usr/share/nginx/html/
+COPY web/ /usr/share/nginx/html/
 # 站点配置：监听 8080；/api/ 的落点由 api-location.inc 决定（默认 503 桩）
-COPY miredit/docker/nginx-default.conf    /etc/nginx/conf.d/default.conf
-COPY miredit/docker/api-location.stub.inc /etc/nginx/conf.d/api-location.inc
-COPY miredit/docker/api-location.stub.inc /etc/nginx/api-location.stub.inc
-COPY miredit/docker/entrypoint.sh         /usr/local/bin/miredit-entrypoint.sh
+COPY docker/nginx-default.conf    /etc/nginx/conf.d/default.conf
+COPY docker/api-location.stub.inc /etc/nginx/conf.d/api-location.inc
+COPY docker/api-location.stub.inc /etc/nginx/api-location.stub.inc
+COPY docker/entrypoint.sh         /usr/local/bin/crystalstudio-entrypoint.sh
 
 # 清掉只对开发有用的生成脚本（镜像里不需要 Python）；并把目录交给 nginx 用户，
 # 因为下面要以非 root 运行（nginx 无法写 root 拥有的目录会直接起不来）。
 RUN rm -f /usr/share/nginx/html/tiles/gen_tiles.py \
- && chmod +x /usr/local/bin/miredit-entrypoint.sh \
+ && chmod +x /usr/local/bin/crystalstudio-entrypoint.sh \
  && chown -R nginx:nginx /usr/share/nginx/html /etc/nginx/conf.d \
  && chown -R nginx:nginx /var/cache/nginx \
  && touch /var/run/nginx.pid && chown nginx:nginx /var/run/nginx.pid
@@ -92,7 +96,7 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget -qO- http://127.0.0.1:8080/ >/dev/null 2>&1 || exit 1
 
-ENTRYPOINT ["/usr/local/bin/miredit-entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/crystalstudio-entrypoint.sh"]
 
 
 # =============================================================================
@@ -107,7 +111,7 @@ ENTRYPOINT ["/usr/local/bin/miredit-entrypoint.sh"]
 # =============================================================================
 FROM debian:bookworm-slim AS runtime
 
-LABEL org.opencontainers.image.title="GodM2 地图编辑器（后端+前端）" \
+LABEL org.opencontainers.image.title="Crystal Studio（后端+前端）" \
       org.opencontainers.image.description="miredit-web（axum HTTP+WS）+ 静态前端；地图/图库/印章目录挂卷"
 
 # ca-certificates：将来若加 https 上游要用；curl：只给 HEALTHCHECK 与容器内排障用。
@@ -125,11 +129,11 @@ RUN groupadd --system --gid 10001 miredit \
  && mkdir -p /app/web /data/maps /data/client /data/crystalstudio/catalogue /data/crystalstudio/Objects \
  && chown -R miredit:miredit /app /data
 
-COPY --from=build /src/miredit/target/release/miredit-web /usr/local/bin/miredit-web
+COPY --from=build /src/target/release/miredit-web /usr/local/bin/miredit-web
 
 # 静态前端打进镜像：这样**一个容器**就能同时答 `/` 与 `/api/*`，
 # 不依赖 nginx 前置层（前置层是可选的，见阶段 2）。
-COPY miredit/web/ /app/web/
+COPY web/ /app/web/
 
 # gen_tiles.py 是开发期生成瓦片夹具的脚本，镜像里不需要 Python
 RUN rm -f /app/web/tiles/gen_tiles.py \

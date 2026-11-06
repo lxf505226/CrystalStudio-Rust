@@ -13,19 +13,38 @@
 //!
 //! - 文件头 `TMapHeader` 固定 **52 字节**：`wWidth` u16@0、`wHeight` u16@2，其余 48 字节原样保留；
 //! - 三档全部对不上 ⇒ [`MapError::LengthMismatch`]，错误里列出三档期望长度与实际长度；
-//! - **尺寸护栏先于长度判据**：`w == 0 || h == 0` ⇒ [`MapError::ZeroDimension`]、
+//! - **尺寸护栏先于长度判据**（三条，官方短路顺序）：`w == 0 || h == 0` ⇒ [`MapError::ZeroDimension`]、
+//!   `w > 32767 || h > 32767`（[`MAX_DIMENSION`]）⇒ [`MapError::DimensionTooLarge`]、
 //!   `w*h > 16_000_000`（[`MAX_CELLS`]）⇒ [`MapError::TooManyCells`]；
 //! - **不看任何标题/魔法字节**，也不看扩展名 —— 长度等式是唯一判据。
 //!
-//! # 一·五、为什么拒 0 尺寸、为什么有 16M 格上限
+//! # 一·五、尺寸判据是**三条件合取**，不是「16M 格」单条
+//!
+//! 真值：CrystalStudio C# `MapDimensions.cs:11-12@acfbbf8a`：
+//!
+//! ```csharp
+//! public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
+//!     height is > 0 and <= short.MaxValue && (long)width * height <= MaximumCells;
+//! ```
+//!
+//! ⇒ 合法尺寸 = `w>0 && h>0` **且** `w<=32767 && h<=32767` **且** `w*h<=16_000_000`。
+//! 本 crate 把这三条实现成[`validate_dimensions`]（带原因）/ [`can_round_trip`]（布尔），
+//! [`Map::parse`] 直接调前者，不另写一套判断。
+//!
+//! ⚠ **旧文档的「只有 16M 格上限」表述是错的，本次已订正**：`40000×1` 只有 40000 格，
+//! 满足 16M 却违反 32767 —— 而 `.map` 头的宽高在 C# 侧是 `checked((short)Width)`
+//! （`Document.cs:90`）写出的 **16 位有符号**字段，本仓按 `i16` 读回 ⇒ 这类图写盘后回读不回来。
+//! 属于 round-trip 缺陷，不是「上限保守一点」的取舍。
 //!
 //! - **0 尺寸**：`w*h == 0` 时三档期望长度都等于 52（`52 + 0`），长度判据自己会命中 `Old12`
 //!   ⇒ 若不先拦，52 字节全零的损坏文件会被**静默救活**成「0×0 空地图」，而且它仍然可保存。
 //!   真值：客户端 `map_loader.gd:94-95`（`w <= 0 or h <= 0` ⇒ 报错）与 C# `LegacyMapReader.cs:50`
 //!   （`Width <= 0 || Height <= 0` ⇒ 抛 `Invalid or excessive map dimensions.`）都拒绝。
-//! - **16M 格**：真值取 C# `LegacyMapReader.cs:50` 的 `count > 16_000_000`（同值见 `Document.cs:58`）。
-//!   客户端**没有**这条上限 ⇒ 这是本库有意的编辑器护栏：格结构体 36 B 定长，12 B/格的图
+//! - **16M 格**：真值取 C# `MapDimensions.cs:7` 的 `MaximumCells`（同值见
+//!   `LegacyMapReader.cs:50` 的 `count > 16_000_000`、`Document.cs:58`）。
+//!   客户端**没有**这条格数上限 ⇒ 这是本库有意的编辑器护栏：格结构体 36 B 定长，12 B/格的图
 //!   内存约为文件的 3 倍，没有护栏时失败方式是 OOM 而不是明确报错。
+//!   （`32767` 那条**不是**自造护栏，见上。）
 //!
 //! # 二、存储顺序：列优先
 //!
@@ -74,8 +93,9 @@ mod error;
 mod map;
 
 pub use cell::{
-    expected_lengths, Cell, CellFormat, COMMON_CELL_LEN, EXT36_CELL_SIZE, HEADER_LEN, LIB_OFFSET,
-    MAX_CELLS, NEW14_CELL_SIZE, OLD12_CELL_SIZE, TAIL_LEN, TAIL_OFFSET,
+    can_round_trip, expected_lengths, validate_dimensions, Cell, CellFormat, COMMON_CELL_LEN,
+    EXT36_CELL_SIZE, HEADER_LEN, LIB_OFFSET, MAX_CELLS, MAX_DIMENSION, NEW14_CELL_SIZE,
+    OLD12_CELL_SIZE, TAIL_LEN, TAIL_OFFSET,
 };
 pub use error::MapError;
 pub use map::Map;

@@ -20,13 +20,16 @@
 //!
 //! # 二、配置全部来自环境变量（Docker 里只改 env，不改代码）
 //!
-//! | 变量 | 缺省 | 说明 |
+//! **没有一个路径有内置缺省值**（公开仓不绑任何开发机路径）。未设时不是"猜一个"，
+//! 而是**如实不可用**：对应端点返回明确的 4xx/5xx，启动横幅写明哪个变量没设。
+//!
+//! | 变量 | 缺省 | 未设时的行为 |
 //! |---|---|---|
-//! | `MIREDIT_MAP_ROOT` | `GodotClient/maps` | `/api/map/open` 的**白名单根**（相对路径按进程 cwd 绝对化） |
-//! | `MIREDIT_CLIENT_ROOT` | `mir2_assets::DEFAULT_CLIENT_ROOT` | 图库扫描根（`.wil/.wzl`） |
-//! | `MIREDIT_PALETTE_JSON` | `<仓库根>/CrystalStudio/catalogue/palette.json` | 印章目录索引 |
-//! | `MIREDIT_WEB_ROOT` | `<仓库根>/tools/miredit/web` | 静态前端目录（找不到就 404，**不伪造页面**） |
-//! | `MIREDIT_BIND` | `0.0.0.0:8080` | 监听地址 |
+//! | `MIREDIT_MAP_ROOT` | **无** | `/api/map/open`、`/api/maps` 一律 503（`assets_unavailable`，文案点名该变量） |
+//! | `MIREDIT_CLIENT_ROOT` | **无**（`mir2_assets::client_root`） | 图库为空 ⇒ 出图/素材端点 503 |
+//! | `MIREDIT_PALETTE_JSON` | **无** | `/api/stamps` 503（不猜 `catalogue/palette.json`） |
+//! | `MIREDIT_WEB_ROOT` | `<仓库根>/web`（相对 crate 清单位置，**中立回退**） | 找不到 ⇒ 静态请求 404，**不伪造页面** |
+//! | `MIREDIT_BIND` | `0.0.0.0:8080` | — |
 //!
 //! # 三、路径白名单（防目录穿越）
 //!
@@ -46,8 +49,12 @@ use tokio::sync::broadcast;
 
 use crate::error::{ApiError, ApiResult};
 
-/// 缺省地图根（相对进程 cwd；任务书 §四指定）。
-pub const DEFAULT_MAP_ROOT: &str = "GodotClient/maps";
+/// 缺省地图根：**恒为空串**（=「没有内建缺省」）。
+///
+/// 公开仓不绑任何开发机路径，也**不猜** `GodotClient/maps` 这类迁移前布局：
+/// 未设置 `MIREDIT_MAP_ROOT` 时地图端点一律 503 并点名该变量，而不是拿 cwd 下的相对路径
+/// 当白名单根（那会让 `starts_with("")` 对所有路径都成立 —— 等于没有白名单）。
+pub const DEFAULT_MAP_ROOT: &str = "";
 
 /// 缺省监听地址（Docker 里要 0.0.0.0 才能被 `-p` 映射到）。
 pub const DEFAULT_BIND: &str = "0.0.0.0:8080";
@@ -131,44 +138,60 @@ impl AppState {
     /// **不 panic**：图库扫不到、印章目录不存在、静态目录缺失都只是 `None` / 空，
     /// 由各端点如实报 503 / 404 —— 启动失败与"功能不可用"是两件事，不混在一起。
     pub fn from_env() -> AppState {
-        // ① 地图白名单根：相对路径按 cwd 绝对化（这样 `GodotClient/maps` 在仓库根启动就成立）
-        let map_root_raw = env_string("MIREDIT_MAP_ROOT").unwrap_or_else(|| DEFAULT_MAP_ROOT.into());
-        let map_root = absolutize(Path::new(&map_root_raw));
-        let map_root = std::fs::canonicalize(&map_root).unwrap_or(map_root);
+        // ① 地图白名单根：**必须显式设置**；未设 ⇒ 空路径（下文各处据此报 503）
+        let map_root_raw =
+            env_string("MIREDIT_MAP_ROOT").unwrap_or_else(|| DEFAULT_MAP_ROOT.into());
+        let map_root = if map_root_raw.is_empty() {
+            eprintln!("[地图] 未设置 MIREDIT_MAP_ROOT ⇒ 地图端点将一律 503（不猜任何缺省目录）");
+            PathBuf::new()
+        } else {
+            // 相对路径按 cwd 绝对化（显式给了相对值才这么做）
+            let abs = absolutize(Path::new(&map_root_raw));
+            std::fs::canonicalize(&abs).unwrap_or(abs)
+        };
 
-        // ② 静态前端目录
+        // ② 静态前端目录：未设 ⇒ `<仓库根>/web`（本仓真实布局，中立回退）
         let web_raw = env_string("MIREDIT_WEB_ROOT")
             .map(PathBuf::from)
-            .unwrap_or_else(|| repo_relative(&["tools", "miredit", "web"]));
+            .unwrap_or_else(|| repo_relative(&["web"]));
         let web_root = std::fs::canonicalize(&web_raw)
             .ok()
             .filter(|p| p.is_dir());
 
-        // ③ 图库：扫不到就是 None（不造空表冒充成功）
-        let client_root = env_string("MIREDIT_CLIENT_ROOT")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from(mir2_assets::DEFAULT_CLIENT_ROOT));
-        let libs = match LibPaths::discover(&client_root) {
-            Ok(p) if !p.is_empty() => {
-                println!(
-                    "[图库] {} 已登记 {} 个（地面 {} / 中层 {} / 表层 {}）",
-                    client_root.display(),
-                    p.available(),
-                    p.available_in(mir2_assets::Family::Ground),
-                    p.available_in(mir2_assets::Family::Middle),
-                    p.available_in(mir2_assets::Family::Surface)
+        // ③ 图库：未设置 / 不是目录 / 扫不到 ⇒ None（不造空表冒充成功，也不猜缺省路径）
+        let libs = match mir2_assets::client_root() {
+            None => {
+                eprintln!(
+                    "[图库] 未设置 {}（图库扫描根）⇒ 出图端点将返回 503",
+                    mir2_assets::CLIENT_ROOT_ENV
                 );
-                Some(p)
-            }
-            Ok(p) => {
-                eprintln!("[图库] {} 下一个库都没登记（{} 被跳过）⇒ 出图端点将返回 503",
-                    client_root.display(), p.skipped().len());
                 None
             }
-            Err(e) => {
-                eprintln!("[图库] 扫描失败：{e} ⇒ 出图端点将返回 503");
-                None
-            }
+            Some(client_root) => match LibPaths::discover(&client_root) {
+                Ok(p) if !p.is_empty() => {
+                    println!(
+                        "[图库] {} 已登记 {} 个（地面 {} / 中层 {} / 表层 {}）",
+                        client_root.display(),
+                        p.available(),
+                        p.available_in(mir2_assets::Family::Ground),
+                        p.available_in(mir2_assets::Family::Middle),
+                        p.available_in(mir2_assets::Family::Surface)
+                    );
+                    Some(p)
+                }
+                Ok(p) => {
+                    eprintln!(
+                        "[图库] {} 下一个库都没登记（{} 被跳过）⇒ 出图端点将返回 503",
+                        client_root.display(),
+                        p.skipped().len()
+                    );
+                    None
+                }
+                Err(e) => {
+                    eprintln!("[图库] 扫描失败：{e} ⇒ 出图端点将返回 503");
+                    None
+                }
+            },
         };
         let source = match &libs {
             Some(p) => match WilSource::open(p) {
@@ -182,9 +205,17 @@ impl AppState {
         };
 
         // ④ 印章目录索引（只记路径，首次 /api/stamps 时才读，避免拖慢启动）
+        //
+        // **不猜** `CrystalStudio/catalogue/palette.json`：没什么可服务的就不服务，
+        // `/api/stamps` 如实 503 并在文案里点名该变量。
         let palette_json = env_string("MIREDIT_PALETTE_JSON")
             .map(PathBuf::from)
-            .unwrap_or_else(|| repo_relative(&["CrystalStudio", "catalogue", "palette.json"]));
+            .unwrap_or_else(|| {
+                eprintln!(
+                    "[印章] 未设置 MIREDIT_PALETTE_JSON ⇒ /api/stamps 将返回 503（不猜任何缺省索引）"
+                );
+                PathBuf::new()
+            });
 
         let (events, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
         AppState {
@@ -221,6 +252,12 @@ impl AppState {
     /// 加载失败 ⇒ 503 `assets_unavailable`，**错误文本原样带出**（不猜"大概是什么问题"）；
     /// 失败结果会被缓存，避免每个请求都重读 5 MB JSON。
     pub fn with_stamps<T>(&self, f: impl FnOnce(&mut StampCatalog) -> ApiResult<T>) -> ApiResult<T> {
+        // 未设置索引路径 ⇒ 直接如实 503（不去 `StampCatalog::load("")` 捞一个语焉不详的 io 错误）
+        if self.palette_json.as_os_str().is_empty() {
+            return Err(ApiError::assets_unavailable(
+                "印章目录不可用：未设置 MIREDIT_PALETTE_JSON（印章目录索引路径）",
+            ));
+        }
         let mut guard = self.lock_stamps();
         if guard.is_none() {
             println!("[印章] 首次加载目录索引：{}", self.palette_json.display());
@@ -253,6 +290,13 @@ impl AppState {
     ///
     /// 相对路径按 `map_root` 拼接；绝对路径也必须在 `map_root` 之内。
     pub fn resolve_map_path(&self, requested: &str) -> ApiResult<PathBuf> {
+        // 闸⓪：白名单根**没设**就一律拒（不能拿空路径当根：`Path::new(x).starts_with("")`
+        // 恒为 true ⇒ 等于把整块磁盘都放进来）
+        if self.map_root.as_os_str().is_empty() {
+            return Err(ApiError::assets_unavailable(
+                "地图不可用：未设置 MIREDIT_MAP_ROOT（地图白名单根）",
+            ));
+        }
         let raw = requested.trim();
         if raw.is_empty() {
             return Err(ApiError::bad_request("path 不能为空"));
@@ -337,13 +381,13 @@ fn absolutize(p: &Path) -> PathBuf {
     std::path::absolute(p).unwrap_or_else(|_| p.to_path_buf())
 }
 
-/// 仓库根相对路径：`<crate 清单目录>/../../../..` = `E:\GodM2`（本 crate 在 `tools/miredit/crates/` 下）。
+/// 仓库根相对路径：`<crate 清单目录>/../..` = **仓库根**（本 crate 在 `crates/miredit-web/` 下）。
 ///
-/// 编译期就把清单目录写进二进制，所以**换 cwd 也能找到**（Windows 本地跑的关键）；
-/// Docker 里没有这些目录，会退化成 `None` / 503，由 env 覆盖。
+/// 编译期就把清单目录写进二进制，所以**换 cwd 也能找到**（本地跑的关键）；
+/// 只用于「本仓自带的静态前端」这一个中立回退 —— 地图 / 图库 / 印章索引**一律不猜路径**。
 fn repo_relative(parts: &[&str]) -> PathBuf {
     let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    for _ in 0..4 {
+    for _ in 0..2 {
         p.push("..");
     }
     for part in parts {

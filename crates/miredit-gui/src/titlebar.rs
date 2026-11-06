@@ -9,7 +9,8 @@
 //!
 //! ⚠ 标题文字**本单起是动态的**：上一版写死 `未命名 • 256 × 256 格 — 地图编辑器`，
 //! 图一打开这句话就是假的（图根本不是 256×256）。现在由 [`dyn_labels`] 用
-//! [`crate::ui_text::TITLE_TMPL`] 填真实文件名与格数。
+//! [`crate::ui_text::TITLE_TMPL`] 填真实文件名与格数；品牌段按 2026-11-06 用户裁定
+//! 固定写 `Crystal Studio`（旧版的「地图编辑器」只是历史写法）。
 
 use egui::{pos2, vec2, Align2, Painter, Rect, Response, Sense, Ui};
 

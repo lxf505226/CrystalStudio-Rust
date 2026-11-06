@@ -29,10 +29,26 @@ use miredit_render::RenderError;
 // 工具
 // ---------------------------------------------------------------------------
 
-/// 印章目录（真实路径，不是猜的）。
-const 印章目录: &str = r"I:\miredit\_upstream\Objects\mir";
+/// 取证根缺省值：`.X` 的取证来源（**整个文件里只出现这一处**）。换机器用 `MIREDIT_UPSTREAM_ROOT`。
+const 缺省取证根: &str = r"I:\miredit\_upstream";
 
-/// `tools/miredit/layout/refs`（相对本 crate 清单目录）。
+/// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`。
+///
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 取证根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省取证根));
+    root.is_dir().then_some(root)
+}
+
+/// 印章目录（相对取证根：`Objects/mir`）。缺取证根 ⇒ `None`（调用方打印 `[跳过]` 并返回）。
+fn 印章目录() -> Option<PathBuf> {
+    let dir = 取证根()?.join("Objects").join("mir");
+    dir.is_dir().then_some(dir)
+}
+
+/// `layout/refs`（相对本 crate 清单目录）。
 fn refs_目录() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -43,12 +59,14 @@ fn refs_目录() -> PathBuf {
 
 /// 按文件名升序取印章目录里的 `.X`（顺序取，确定性）。
 fn 印章列表() -> Option<Vec<PathBuf>> {
-    let dir = Path::new(印章目录);
-    if !dir.is_dir() {
-        eprintln!("[跳过] 印章目录不存在：{}", dir.display());
-        return None;
-    }
-    let mut v: Vec<PathBuf> = std::fs::read_dir(dir)
+    let dir = match 印章目录() {
+        Some(d) => d,
+        None => {
+            eprintln!("[跳过] 无取证根 MIREDIT_UPSTREAM_ROOT（或缺 Objects/mir）");
+            return None;
+        }
+    };
+    let mut v: Vec<PathBuf> = std::fs::read_dir(&dir)
         .ok()?
         .filter_map(|e| e.ok())
         .map(|e| e.path())
@@ -720,7 +738,11 @@ fn 单格三图号全零不画且missing不增() {
 
 /// 读 README 范例那枚印章；文件不在就返回 `None`。
 fn 读范例() -> Option<(Stamp, Vec<PositionedCell>)> {
-    let p = Path::new(印章目录).join("mir_00000.X");
+    let Some(dir) = 印章目录() else {
+        eprintln!("[跳过] 无取证根 MIREDIT_UPSTREAM_ROOT（或缺 Objects/mir）");
+        return None;
+    };
+    let p = dir.join("mir_00000.X");
     if !p.is_file() {
         eprintln!("[跳过] 范例印章不存在：{}", p.display());
         return None;

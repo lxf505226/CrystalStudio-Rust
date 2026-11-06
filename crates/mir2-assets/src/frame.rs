@@ -12,23 +12,31 @@ use crate::lib_paths::LibRef;
 ///
 /// | 来源 | 字段 | 出处 |
 /// |---|---|---|
-/// | 二进制（WIL/WIX） | 帧头 `[4:6] = px i16` / `[6:8] = py i16` | `tools/wil2atlas/src/wil_decoder.rs:206-209@412fe3e8` |
-/// | 二进制（WZL/WZX） | 块头 `[8:10] = px` / `[10:12] = py`（块头前多 4 字节 marker+unused） | `tools/wil2atlas/src/wzl_decoder.rs:264-269@412fe3e8` |
+/// | 二进制（WIL/WIX） | 帧头 `[4:6] = px i16` / `[6:8] = py i16` | `vendor/wil2atlas/src/wil_decoder.rs:206-209@412fe3e8` |
+/// | 二进制（WZL/WZX） | 块头 `[8:10] = px` / `[10:12] = py`（块头前多 4 字节 marker+unused） | `vendor/wil2atlas/src/wzl_decoder.rs:264-269@412fe3e8` |
 /// | 参考 C++ 客户端 | `TDXTextureInfo{ u16 nWidth; u16 nHeight; short px; short py; }` | `client/reference_full/Classes/Wil/WIL.h:50-56@412fe3e8` |
 /// | 官方 C# 编辑器 | `Sprite(Bitmap, int X, int Y)`，`X/Y` 读自帧记录 `[4:6]`/`[6:8]` | `CrystalStudio/CrystalStudio/Assets.cs:86@901dbe2f(未入库)` |
 ///
 /// 语义 = **图片左上角相对锚点的绘制偏移**（与客户端一致：`DrawSprite(dx + px, dy + py)`，
 /// 见 `GodotClient/game/resources/atlas_loader.gd:318-319@412fe3e8` 的同款注释）。
 ///
-/// # 覆盖范围：只有 `.wil` / `.wzl` 两条容器（`.lib` 不走这条路径）
+/// # 覆盖范围：三条容器路径（`.wil` / `.wzl` / 原版 `.lib`）
 ///
-/// [`crate::LibPaths::discover`] 只登记 `.wzl/.wzx` 与 `.wil/.wix` 两种容器
+/// [`crate::LibPaths`] 只登记 `.wzl/.wzx` 与 `.wil/.wix` 两种容器
 /// （`lib_paths.rs:257-262`：数据文件只认 `wzl|wil`，索引文件只认 `wzx|wix`），
-/// 其它扩展名一律忽略。官方 C# 编辑器读的 `.lib`（Crystal v2/v3）**不在本仓的解码路径上**，
-/// 因此这里不存在「第三种容器漏覆盖」的缺口：`anchor` 的生产点只有
-/// [`crate::WilSource::lookup_frame`] 一处，两种容器都经 `ImageLib::decode_frame` 汇聚到它。
-/// （`.lib` 的帧头与 WIL **前 8 字节逐字段同构**，见 `Assets.cs:86@901dbe2f(未入库)`；
-/// 若将来要接 `.lib`，语义同一字段、位置相同，不需要另立字段。）
+/// 其它扩展名一律忽略。官方 C# 编辑器读的 `.lib`（Crystal v2/v3、Sanxiu v5/v6）
+/// 走**另一条独立路径** [`crate::CrystalLibPaths`] + [`crate::CrystalLibrary`]，
+/// 不经过 `wil2atlas`。
+///
+/// 因此 `anchor` 有两个生产点，都指向**同一个字段**：
+///
+/// | 生产点 | 来源字段 |
+/// |---|---|
+/// | [`crate::WilSource::lookup_frame`] | WIL 帧头 `[4:6]` / WZL 块头 `[8:10]`（见上表） |
+/// | [`crate::CrystalLibrary::decode_checked`] | `.lib` 帧头 `[4:6]`；Sanxiu 取元数据的 `x/y`（`Assets.cs:86,163@901dbe2f`） |
+///
+/// `.lib` 的帧头与 WIL **前 8 字节逐字段同构**（`Assets.cs:86@901dbe2f`），
+/// 语义同一字段、位置相同，不需要另立字段。
 ///
 /// # ⚠ 消费口径（谁该用、谁不许用）
 ///

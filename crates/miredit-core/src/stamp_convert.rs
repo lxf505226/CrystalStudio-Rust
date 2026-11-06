@@ -145,7 +145,7 @@ impl std::error::Error for StampConvertError {}
 /// ```no_run
 /// use mir2_stamp::Stamp;
 ///
-/// let bytes = std::fs::read(r"E:\GodM2\CrystalStudio\Objects\mir\mir_00000.X")?;
+/// let bytes = std::fs::read("<dataRoot>/Objects/mir/mir_00000.X")?;
 /// let stamp = Stamp::parse(&bytes)?;
 /// let cells = miredit_core::cells_from_stamp(&stamp)?;
 /// assert_eq!(cells.len(), 25);
@@ -210,16 +210,34 @@ fn lib_byte(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
+    use std::path::PathBuf;
 
-    /// 真实印章样本（CrystalStudio 自带范例）。`mir2-stamp/src/lib.rs:66-67` 记它
-    /// **780 B / 25 格 / 8 格带前景**，与 `CrystalStudio/README.md:211-215` 逐项吻合。
-    const 印章路径: &str = r"I:\miredit\_upstream\Objects\mir\mir_00000.X";
+    /// 取证根缺省值：`.X` 的取证来源（**本模块里只出现这一处**）。换机器用 `MIREDIT_UPSTREAM_ROOT`。
+    const 缺省取证根: &str = r"I:\miredit\_upstream";
 
-    /// 读真实印章字节；读不到就**大声失败**（不静默跳过 —— 跳过等于这条测试不存在）。
-    fn 读真实印章() -> Vec<u8> {
-        let p = Path::new(印章路径);
-        std::fs::read(p).unwrap_or_else(|e| panic!("读不到印章 {}：{e}", p.display()))
+    /// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`。
+    ///
+    /// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+    fn 取证根() -> Option<PathBuf> {
+        let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(缺省取证根));
+        root.is_dir().then_some(root)
+    }
+
+    /// 读真实印章字节；**缺取证根或文件 ⇒ `None`**（公开仓/PR 的机器上没有 `.X` 素材，
+    /// 那不算代码错 ⇒ 调用方打印 `[skip]` 并返回）。
+    fn 读真实印章() -> Option<Vec<u8>> {
+        let root = 取证根()?;
+        let p = root.join("Objects").join("mir").join("mir_00000.X");
+        if !p.is_file() {
+            eprintln!("[skip] 缺文件 {}", p.display());
+            return None;
+        }
+        match std::fs::read(&p) {
+            Ok(b) => Some(b),
+            Err(e) => panic!("读不到印章 {}：{e}", p.display()),
+        }
     }
 
     fn i16_at(b: &[u8], at: usize) -> i16 {
@@ -339,7 +357,9 @@ mod tests {
     /// 并顺带把 25 格逐字段全比一遍（含 8 格带前景的 `fr` / `fr_lib` / `ani_frame` / `ani_tick`）。
     #[test]
     fn 真实印章二十五格_首格三族与直接读该格一致() {
-        let bytes = 读真实印章();
+        let Some(bytes) = 读真实印章() else {
+            return;
+        };
         let stamp = Stamp::parse(&bytes).expect("mir_00000.X 应能解析");
         let cells = cells_from_stamp(&stamp).expect("样本库号全在 0..=255 内，应转换成功");
 
@@ -371,7 +391,9 @@ mod tests {
     /// 测试 2：库号 300 必须 `Err`，消息含「300」；顺带把三族的族名与 1 起格号钉住。
     #[test]
     fn 库号三百必须报错_消息含格号族名与值() {
-        let bytes = 读真实印章();
+        let Some(bytes) = 读真实印章() else {
+            return;
+        };
         let mut stamp = Stamp::parse(&bytes).expect("解析");
         stamp.cells[0].cell.back_library = 300;
 

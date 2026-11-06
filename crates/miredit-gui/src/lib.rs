@@ -1,4 +1,6 @@
-//! `miredit-gui` —— 地图编辑器 GUI（仿 CrystalStudio 运行期界面）。
+//! `miredit-gui` —— Crystal Studio 桌面版 GUI（地图编辑器，仿上游运行期界面）。
+//!
+//! 产品显示名固定 `Crystal Studio`（2026-11-06 用户裁定）；`miredit-gui` 只是 crate 名。
 //!
 //! **本单范围**：把中间那块空画布换成**真实地图渲染** —— 打开 `.map`、从图库取帧、
 //! 按客户端规则合成、平移/缩放、图层开关、单元格信息与状态栏联动。
@@ -11,8 +13,8 @@
 //! [`theme`] 的两套色板。
 //!
 //! ## 唯一视觉基准
-//! `tools/miredit/layout/refs/crystalstudio-main-runtime-1500x950.png`（1500×950 真机运行截图）
-//! + `tools/miredit/layout/crystalstudio-ui.json`（几何/颜色/图标路径真值）。
+//! `layout/refs/crystalstudio-main-runtime-1500x950.png`（1500×950 真机运行截图）
+//! + `layout/crystalstudio-ui.json`（几何/颜色/图标路径真值）。
 //!
 //! ⚠ 明确不采信 `App.axaml` 的深色 `#14171D`：那是 XAML 声明值，
 //! 运行期 `ThemeService` 会按系统 accent 重算，**上屏是浅色 + 金色强调**。

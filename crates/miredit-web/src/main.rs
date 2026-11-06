@@ -15,7 +15,9 @@
 //! # 二、怎么跑
 //!
 //! ```text
-//! CARGO_INCREMENTAL=0  CARGO_TARGET_DIR='I:\miredit-web-target'
+//! CARGO_INCREMENTAL=0  CARGO_TARGET_DIR='<任意可写目录>/miredit-web-target'
+//! MIREDIT_MAP_ROOT=<地图目录>  MIREDIT_CLIENT_ROOT=<客户端根>  \
+//! MIREDIT_PALETTE_JSON=<dataRoot>/catalogue/palette.json  \
 //! cargo run -p miredit-web --release
 //! # 浏览器打开 http://127.0.0.1:8080/（前端目录存在时）或直接 curl 各端点
 //! ```
@@ -78,19 +80,30 @@ async fn run() -> Result<(), String> {
     println!("[启动] 监听 {addr}");
     println!(
         "[启动] 地图白名单根 = {}",
-        state::display_path(&state.map_root)
+        if state.map_root.as_os_str().is_empty() {
+            "未设置 MIREDIT_MAP_ROOT ⇒ 地图端点一律 503（不猜缺省目录）".to_owned()
+        } else {
+            state::display_path(&state.map_root)
+        }
     );
     match state.web_root.as_ref() {
         Some(p) => println!("[启动] 静态前端目录 = {}", state::display_path(p)),
         None => println!("[启动] 静态前端目录 = 不存在（GET / 将返回 404，不伪造页面）"),
     }
     println!(
-        "[启动] 印章目录索引 = {}（{}）",
-        state::display_path(&state.palette_json),
-        if state.palette_json.is_file() {
-            "存在，首次 /api/stamps 时加载"
+        "[启动] 印章目录索引 = {}",
+        if state.palette_json.as_os_str().is_empty() {
+            "未设置 MIREDIT_PALETTE_JSON ⇒ /api/stamps 503（不猜缺省索引）".to_owned()
+        } else if state.palette_json.is_file() {
+            format!(
+                "{}（存在，首次 /api/stamps 时加载）",
+                state::display_path(&state.palette_json)
+            )
         } else {
-            "不存在，/api/stamps 将返回 503"
+            format!(
+                "{}（不存在，/api/stamps 将返回 503）",
+                state::display_path(&state.palette_json)
+            )
         }
     );
 

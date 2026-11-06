@@ -33,7 +33,7 @@
 //! 门 2 补充里的 `tiles/sm_tiles/area` 断言分工覆盖。
 
 use std::collections::{BTreeMap, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use miredit_core::{
     apply, save_session, Command, EditSession, PlaceOutcome, StampCellInput,
@@ -42,10 +42,41 @@ use mir2_format::FormatId;
 use mir2_map::Cell;
 use mir2_stamp::Stamp;
 
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+/// 取证根缺省值：`.X` / `palette.json` 的取证来源。换机器用 `MIREDIT_UPSTREAM_ROOT`。
+const 缺省取证根: &str = r"I:\miredit\_upstream";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
+/// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`（同上）。
+fn 取证根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省取证根));
+    root.is_dir().then_some(root)
+}
+
 /// 真实印章样本（CrystalStudio 自带范例，README `:211-215` 记的就是它）。
-const 印章路径: &str = r"I:\miredit\_upstream\Objects\mir\mir_00000.X";
+fn 印章路径() -> Option<PathBuf> {
+    let p = 取证根()?.join("Objects").join("mir").join("mir_00000.X");
+    p.is_file().then_some(p)
+}
+
 /// 真实地图样本（700×700 / 12 B 每格 / `Shanda14` 之前的旧档）。
-const 地图路径: &str = r"E:\GodM2\GodotClient\maps\0.map";
+fn 地图路径() -> Option<PathBuf> {
+    let p = 资产根()?.join("GodotClient").join("maps").join("0.map");
+    p.is_file().then_some(p)
+}
 
 /// 临时目录（`%TEMP%` 下，按 `tag` + **进程 ID** 分开；每次先清空）。
 ///
@@ -81,7 +112,9 @@ fn 临时目录(tag: &str) -> PathBuf {
     d
 }
 
-/// 读真实印章并换成 [`StampCellInput`]；同时把「格数 + 包围盒」一并交出来自证。
+/// 读真实印章并换成 [`StampCellInput`]；同时把「印章真实路径 + 格数 + 包围盒」一并交出来自证。
+///
+/// 缺取证根 / 缺 `.X` 文件 ⇒ `None`（公开仓/PR 的机器上没有取证素材，调用方直接 `return`）。
 ///
 /// # 换算口只有一处（2026-11-05 收口）
 ///
@@ -99,9 +132,18 @@ fn 临时目录(tag: &str) -> PathBuf {
 ///
 /// 第 3/4 条在本样本上「碰巧不出错」（`back_image = 0x6000_0000` 的低 16 位本来就是 0，
 /// 且 `paint` 那边会再掩一次），但语义仍是错的。
-fn 读真实印章() -> (Vec<StampCellInput>, (i32, i32, i32, i32), usize) {
-    let p = Path::new(印章路径);
-    let bytes = std::fs::read(p).unwrap_or_else(|e| panic!("读不到印章 {}：{e}", p.display()));
+///
+/// 返回值的四元组是「(路径, 格表, 包围盒, 格数)」—— 本测试专用的小夹具，
+/// 拆成 `struct` 只会让十来处调用点各多一行解构，收益为零，
+/// 故对 `clippy::type_complexity` 就地豁免（2026-11-06 公开仓门禁 `-D warnings` 需要）。
+#[allow(clippy::type_complexity)]
+fn 读真实印章() -> Option<(PathBuf, Vec<StampCellInput>, (i32, i32, i32, i32), usize)> {
+    let Some(p) = 印章路径() else {
+        eprintln!("[skip] 无取证根 MIREDIT_UPSTREAM_ROOT（或缺 Objects/mir/mir_00000.X）");
+        return None;
+    };
+    let bytes = std::fs::read(&p)
+        .unwrap_or_else(|e| panic!("读不到印章 {}：{e}", p.display()));
     let stamp: Stamp = Stamp::parse(&bytes).unwrap_or_else(|e| panic!("印章解析失败：{e}"));
     let 有前景 = stamp.cells.iter().filter(|c| c.cell.foreground.is_some()).count();
     // 库号越界会在这里**大声失败**（`expect` 的消息来自 `StampConvertError::Display`），
@@ -151,7 +193,7 @@ fn 读真实印章() -> (Vec<StampCellInput>, (i32, i32, i32, i32), usize) {
         assert_eq!(c.tile_frames, s.cell.tile_frames, "第 {n} 格 地表动画帧数 = `.X` 真值");
     }
 
-    (cells, stamp.bounds(), 有前景)
+    Some((p, cells, stamp.bounds(), 有前景))
 }
 
 /// 按**规则**（不是按实现）算出一格贴完之后应该长什么样。
@@ -252,7 +294,9 @@ fn 差异清单(旧: &[u8], 新: &[u8]) -> Vec<(usize, u8, u8)> {
 /// **门 3**：放置后撤销 ⇒ `to_bytes()` 与原文件逐字节相等。
 #[test]
 fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
-    let (cells, bounds, 有前景) = 读真实印章();
+    let Some((印章, cells, bounds, 有前景)) = 读真实印章() else {
+        return;
+    };
     // ① 印章自证（任务书给的三个数必须对上，否则后面全是空转）
     assert_eq!(bounds, (-1, -2, 4, 3), "包围盒必须是 (-1,-2,4,3)");
     assert_eq!(cells.len(), 25, "格数必须是 25");
@@ -263,16 +307,20 @@ fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
     let 带物体 = cells.iter().filter(|c| c.fr != 0).count();
     println!(
         "GATE2 印章={} 格={} 包围盒={bounds:?} 带前景={有前景} 带地表={带地表} 带中层={带中层} 带物体={带物体}",
-        Path::new(印章路径).file_name().unwrap().to_string_lossy(),
+        印章.file_name().unwrap_or_default().to_string_lossy(),
         cells.len()
     );
     assert_eq!(带物体, 8, "8 格有前景图号（= 前景块个数）");
     assert_eq!(带地表 + 带中层, 0, "这枚是纯物件印章：back_image / middle_image 全 0");
 
     // ② 复制 0.map 到临时目录（真图只读，绝不改）
+    let Some(地图) = 地图路径() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+        return;
+    };
     let d = 临时目录("gate2");
     let 副本 = d.join("0.map");
-    std::fs::copy(地图路径, &副本).expect("复制 0.map 副本");
+    std::fs::copy(&地图, &副本).expect("复制 0.map 副本");
     let 原字节 = std::fs::read(&副本).expect("读副本");
     let mut ed = EditSession::load(&副本).expect("打开 0.map 副本");
     assert_eq!(ed.document().format_id(), FormatId::Old12, "0.map 是 12 B/格");
@@ -436,7 +484,9 @@ fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
 /// 为什么要这条：`0.map` 的 `(100,100)` 附近未必有阻挡格，光看真实地图可能"验了个寂寞"。
 #[test]
 fn 门2补充_真实印章贴带bit15合成图() {
-    let (cells, _, _) = 读真实印章();
+    let Some((_印章, cells, _, _)) = 读真实印章() else {
+        return;
+    };
     // 12×12 的 Old12 合成图：每格 bk/fr 都带 bit15（= 不可走），mid 也带（异常数据）
     let (w, h) = (12u16, 12u16);
     let mut 字节 = vec![0u8; 52 + 12 * (w as usize) * (h as usize)];
@@ -491,10 +541,16 @@ fn 门2补充_真实印章贴带bit15合成图() {
 /// **门 4**：同一枚印章贴到 `(0,0)` ⇒ 负偏移的格逐格跳过，出界的格没写。
 #[test]
 fn 门4_越界裁剪_贴到原点() {
-    let (cells, bounds, _) = 读真实印章();
+    let Some((_印章, cells, bounds, _)) = 读真实印章() else {
+        return;
+    };
+    let Some(地图) = 地图路径() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+        return;
+    };
     let d = 临时目录("gate4");
     let 副本 = d.join("0.map");
-    std::fs::copy(地图路径, &副本).expect("复制 0.map 副本");
+    std::fs::copy(&地图, &副本).expect("复制 0.map 副本");
     let 原字节 = std::fs::read(&副本).expect("读副本");
     let mut ed = EditSession::load(&副本).expect("打开副本");
     let (旧表, 新表, 期望越界) = 期望表(&ed, (0, 0), &cells);
@@ -547,10 +603,16 @@ fn 门4_越界裁剪_贴到原点() {
 /// **门 5**：贴到地图外 ⇒ `Refused`，文件**一字节不动**。
 #[test]
 fn 门5_全越界拒绝且文件一字节不动() {
-    let (cells, _, _) = 读真实印章();
+    let Some((_印章, cells, _, _)) = 读真实印章() else {
+        return;
+    };
+    let Some(地图) = 地图路径() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+        return;
+    };
     let d = 临时目录("gate5");
     let 副本 = d.join("0.map");
-    std::fs::copy(地图路径, &副本).expect("复制 0.map 副本");
+    std::fs::copy(&地图, &副本).expect("复制 0.map 副本");
     let 原字节 = std::fs::read(&副本).expect("读副本");
     let mut ed = EditSession::load(&副本).expect("打开副本");
 
@@ -751,7 +813,9 @@ fn 门7_重叠与撤销一次() {
 /// 绝不猜、也绝不静默放一枚空印章。
 #[test]
 fn 附_按id放置与撤销() {
-    let (cells, _, _) = 读真实印章();
+    let Some((_印章, cells, _, _)) = 读真实印章() else {
+        return;
+    };
     let d = 临时目录("byid");
     let p = d.join("byid.map");
     let 原 = 合成图(20, 20);
@@ -848,9 +912,13 @@ fn 找空落点(ed: &EditSession, 宽: u16, 高: u16, 起: u16) -> (u16, u16) {
 /// 反向对照：往**空白处**放同一枚 ⇒ 成功（证明没把功能关死）。
 #[test]
 fn 占用闸门_落点已有物件时整枚拒绝且字节不动() {
+    let Some(地图) = 地图路径() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+        return;
+    };
     let d = 临时目录("gate_occupied");
     let 副本 = d.join("0.map");
-    std::fs::copy(地图路径, &副本).expect("复制 0.map 副本");
+    std::fs::copy(&地图, &副本).expect("复制 0.map 副本");
     let 原字节 = std::fs::read(&副本).expect("读副本");
     let mut ed = EditSession::load(&副本).expect("打开副本");
     assert_eq!(ed.document().format_id(), FormatId::Old12);
@@ -940,9 +1008,13 @@ fn 占用闸门_落点已有物件时整枚拒绝且字节不动() {
 /// ⇒ 是"整枚拒绝"，**不是**"后者胜"（后者胜只存在于粘贴路径的矩形展开）。
 #[test]
 fn 坐标重复闸门_同一枚印章里重复坐标被拒() {
+    let Some(地图) = 地图路径() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+        return;
+    };
     let d = 临时目录("gate_dup");
     let 副本 = d.join("0.map");
-    std::fs::copy(地图路径, &副本).expect("复制 0.map 副本");
+    std::fs::copy(&地图, &副本).expect("复制 0.map 副本");
     let 原字节 = std::fs::read(&副本).expect("读副本");
     let mut ed = EditSession::load(&副本).expect("打开副本");
     let (ax, ay) = 找空落点(&ed, 2, 2, 0);

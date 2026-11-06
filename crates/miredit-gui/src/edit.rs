@@ -1208,6 +1208,30 @@ mod tests {
     use super::*;
     use mir2_map::HEADER_LEN;
 
+    /// 资产根缺省值：本机真实根（**整个测试模块里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+    const 缺省资产根: &str = r"E:\GodM2";
+
+    /// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+    ///
+    /// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+    /// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+    fn 资产根() -> Option<std::path::PathBuf> {
+        let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(缺省资产根));
+        root.is_dir().then_some(root)
+    }
+
+    /// `<资产根>/GodotClient/maps`（12/14/36 三档的现役语料）。
+    fn 语料_a(root: &Path) -> std::path::PathBuf {
+        root.join("GodotClient").join("maps")
+    }
+
+    /// `<资产根>/client/热血传奇23周年客户端/Map`（1,097 张全量语料）。
+    fn 语料_b(root: &Path) -> std::path::PathBuf {
+        root.join("client").join("热血传奇23周年客户端").join("Map")
+    }
+
     /// 测试专用：`EditLayer + 族内索引` → 宿主素材面板的图库定位键。
     ///
     /// 判据（层 → 族）仍然只有内核的 `lib_ref_of` 一处；这里只把结果换成
@@ -1913,8 +1937,11 @@ mod tests {
     /// 本机没有图库时**如实跳过**（打印原因，不假装通过）。
     #[test]
     fn 真图库下渲染出的是第九零四帧像素() {
-        let root = std::path::Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-        let Ok(paths) = mir2_assets::LibPaths::discover(root) else {
+        let Some(root) = mir2_assets::client_root() else {
+            eprintln!("[跳过] 未设置 {}（图库扫描根）", mir2_assets::CLIENT_ROOT_ENV);
+            return;
+        };
+        let Ok(paths) = mir2_assets::LibPaths::discover(&root) else {
             eprintln!("[跳过] 本机没有图库 {}", root.display());
             return;
         };
@@ -2943,19 +2970,25 @@ mod tests {
     ///
     /// ⚠ 只用 `std::fs::read` 读进内存、`Map::parse` 后在内存里改，**绝不写回磁盘**：
     /// 这些文件在 `client/` 与 `GodotClient/` 下，本单只允许改 `miredit-gui`。
-    /// 文件缺失时 `panic!` 明确报错，不静默跳过（禁假数据）。
-    const 三档真图: [(&str, &str, CellFormat); 3] = [
-        ("Old12", r"E:\GodM2\client\热血传奇23周年客户端\Map\0.map", CellFormat::Old12),
-        ("New14", r"E:\GodM2\GodotClient\maps\41.map", CellFormat::New14),
-        ("Ext36", r"E:\GodM2\client\热血传奇23周年客户端\Map\n0104.map", CellFormat::Ext36),
-    ];
+    /// 路径相对资产根（`MIREDIT_ASSET_ROOT`）；**缺根/缺文件时打印 `[skip]` 并跳过**
+    /// （公开仓/PR 的机器上没有游戏素材，不算代码错）。
+    fn 三档真图() -> Option<[(&'static str, std::path::PathBuf, CellFormat); 3]> {
+        let root = 资产根()?;
+        Some([
+            ("Old12", 语料_b(&root).join("0.map"), CellFormat::Old12),
+            ("New14", 语料_a(&root).join("41.map"), CellFormat::New14),
+            ("Ext36", 语料_b(&root).join("n0104.map"), CellFormat::Ext36),
+        ])
+    }
 
     /// 只读载入一张真图，并核档位 + 往返逐字节相等（不靠猜）。
-    fn 载入真图(tag: &str, path: &str, want: CellFormat) -> Map {
+    ///
+    /// 调用方须先确认文件存在；**文件在但读不出来 ⇒ panic**（那是真故障，不许静默跳过）。
+    fn 载入真图(tag: &str, path: &Path, want: CellFormat) -> Map {
         let bytes = std::fs::read(path)
-            .unwrap_or_else(|e| panic!("真值地图读不到，不许静默跳过：{tag} {path} ⇒ {e}"));
+            .unwrap_or_else(|e| panic!("真值地图读不到：{tag} {} ⇒ {e}", path.display()));
         let map = Map::parse(&bytes)
-            .unwrap_or_else(|e| panic!("真值地图解析失败：{tag} {path} ⇒ {e}"));
+            .unwrap_or_else(|e| panic!("真值地图解析失败：{tag} {} ⇒ {e}", path.display()));
         assert_eq!(map.format, want, "{tag} 档位与派单口径不符");
         assert_eq!(map.to_bytes(), bytes, "{tag} 往返必须逐字节相等");
         map
@@ -3024,8 +3057,16 @@ mod tests {
     /// bit15 前后相同、其余格 0 差异」，并打印 hex。
     #[test]
     fn 三档真实地图画笔写图号保留bit15() {
-        for (tag, path, fmt) in 三档真图 {
-            let mut map = 载入真图(tag, path, fmt);
+        let Some(三档) = 三档真图() else {
+            eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+            return;
+        };
+        for (tag, path, fmt) in 三档 {
+            if !path.is_file() {
+                eprintln!("[skip] 缺文件 {}", path.display());
+                continue;
+            }
+            let mut map = 载入真图(tag, &path, fmt);
             let (x, y, idx) = 找带bit15格(&map);
             let orig = map.to_bytes();
             let before = map.cells[idx];
@@ -3063,7 +3104,8 @@ mod tests {
             );
             assert_eq!(map.walkable(x, y), before_walk, "{tag} 改图号不许改变可走性");
             eprintln!(
-                "BIT15_HEX tag={tag} file={path} xy=({x},{y}) before=0x{:04X} after=0x{:04X} bit15={}→{} diff_bytes={} diff_cells={} other_cells=0 walkable={}→{} fmt={fmt:?}",
+                "BIT15_HEX tag={tag} file={} xy=({x},{y}) before=0x{:04X} after=0x{:04X} bit15={}→{} diff_bytes={} diff_cells={} other_cells=0 walkable={}→{} fmt={fmt:?}",
+                path.display(),
                 before.bk_img,
                 after.bk_img,
                 u16::from(before.bk_img & COLLISION_BIT != 0),
@@ -3138,8 +3180,17 @@ mod tests {
     /// 「bit15 变化格数 = 0」且全图 `walkable` 一格不变。
     #[test]
     fn 填充九百一十二格全部保留bit15() {
-        let (tag, path, fmt) = 三档真图[0];
-        assert_eq!(fmt, CellFormat::Old12, "主线程用例用的是 0.map / Old12");
+        let Some(三档) = 三档真图() else {
+            eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT");
+            return;
+        };
+        let (tag, path, fmt) = &三档[0];
+        assert_eq!(*fmt, CellFormat::Old12, "主线程用例用的是 0.map / Old12");
+        if !path.is_file() {
+            eprintln!("[skip] 缺文件 {}", path.display());
+            return;
+        }
+        let (tag, fmt) = (*tag, *fmt);
         let mut map = 载入真图(tag, path, fmt);
         let clicked = *map.cell(358, 0).unwrap();
         assert_eq!(clicked.bk_img, 0x815F, "真值：(358,0) 带 bit15、低 15 位 0x015F");

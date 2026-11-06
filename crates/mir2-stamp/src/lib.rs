@@ -9,7 +9,8 @@
 //!    并能把 id 解析成「真实路径 + 包围盒 + 格数」的索引，供 GUI「印章」页签使用。
 //!    索引口径与「缺失 / 损坏怎么算」写在该模块文档里（**逐条可复算**）。
 //!
-//! 真值来源：`E:\GodM2\CrystalStudio\CrystalStudio\Document.cs`（**只读参照，未改动**）。
+//! 真值来源：上游 CrystalStudio 的 `CrystalStudio/CrystalStudio/Document.cs`（**只读参照，未改动**；
+//! 对齐基线提交见根 `README.md`，本仓不内置它的本地路径）。
 //! 全部行号均指该文件；`ForegroundImages.cs` 的行号单独标注。
 //!
 //! # 一、文件级字节布局（`CellCodec.SaveStamp`，`Document.cs:137-147`）
@@ -107,7 +108,7 @@
 //!
 //! # 七、实测基线（2026-11-04，本机真实资源）
 //!
-//! - `E:\GodM2\CrystalStudio\Objects\**\*.X` 共 **9,170** 个（`mir` 9,159 / `StoneTemplate` 8 /
+//! - `<dataRoot>/Objects/**/*.X` 共 **9,170** 个（`mir` 9,159 / `StoneTemplate` 8 /
 //!   `InsectTemplate` 2 / `WallEntrances` 1），**全部 v2**；
 //! - 合计 **403,008** 格（有前景 187,218 / 无前景 215,790）；
 //! - `parse → to_bytes` **9,170 / 9,170 逐字节相等，0 失败、0 跳过**；

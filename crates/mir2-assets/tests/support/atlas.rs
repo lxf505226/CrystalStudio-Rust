@@ -15,7 +15,8 @@ pub struct MetaFrame {
     pub h: u32,
     /// 锚点偏移 `[px, py]`（对应帧头那对 i16；**可为负**）。
     ///
-    /// 与 [`mir2_assets::Frame::anchor`] 是同一个值（`wil2atlas` 的 `meta.rs:27` 落盘，
+    /// 与 [`mir2_assets::Frame::anchor`] 是同一个值（上游图集烘焙工具 `wil2atlas` 的
+    /// `meta.rs:27` 落盘；本仓只 vendor 了它的解码器，不含该文件；
     /// 本 crate 的 `WilSource` 从帧头搬）。meta 里缺该字段时为 `None`，
     /// 由调用方当「meta 不可用于锚点对账」处理，**不**当 `(0,0)`。
     pub anchor: Option<[i16; 2]>,
@@ -89,7 +90,7 @@ pub fn load_atlas_meta(path: &Path) -> Result<AtlasMeta, String> {
             .and_then(|v| v.as_u32())
             .ok_or_else(|| format!("帧 {idx} 缺 h"))?;
         let atlas = f.get("atlas").and_then(|v| v.as_usize());
-        // `anchor: [px, py]`（`wil2atlas/src/meta.rs:27` 写的字段；可为负）。
+        // `anchor: [px, py]`（上游 `wil2atlas` 的 `meta.rs:27` 写的字段，该文件未 vendor；可为负）。
         // 缺字段 / 不是 2 元数组 / 不是整数 ⇒ `None`（由调用方判「meta 不可用」）。
         let anchor = f.get("anchor").and_then(|v| v.as_arr()).and_then(|a| {
             if a.len() != 2 {

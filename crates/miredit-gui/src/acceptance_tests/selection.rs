@@ -6,7 +6,6 @@
 //! 门 6 的注入说明见 [`super`] 模块文档 §三。
 
 use std::collections::BTreeSet;
-use std::path::Path;
 
 use mir2_map::Map;
 
@@ -350,19 +349,20 @@ fn 门6_type5拒绝带地表内容_注入验证() {
     assert_eq!(宿主.to_bytes(), 注入前字节, "拒绝时地图必须逐字节不变");
 
     // ④ 反向对照：同一张 Type5 图 + 真实印章（`bk` 全 0）⇒ 放行
-    let 印章 = Path::new(印章路径);
-    if 印章.is_file() {
+    if let Some(印章) = 印章路径() {
         let armed = Armed {
             id: "mir/mir_00000".to_string(),
             name: "mir_00000".to_string(),
             bounds: Some((-1, -2, 4, 3)),
         };
-        let out = stamp_place::place(&mut ed, &mut 宿主, &armed, 印章, 8, 8)
+        let out = stamp_place::place(&mut ed, &mut 宿主, &armed, &印章, 8, 8)
             .expect("纯物件印章在 Type5 上应放行（拒的是逐格地表，不是整张图）");
         assert_eq!(out.cells, 8, "New14/Type5 上放同一枚纯物件印章都改 8 格");
         println!("GATE6 反向对照（Type5 + 纯物件印章）放行：改动 {} 格", out.cells);
     } else {
-        eprintln!("[跳过] 反向对照需要真实印章样本 {}", 印章.display());
+        eprintln!(
+            "[跳过] 反向对照需要取证根 MIREDIT_UPSTREAM_ROOT 与 Objects/mir/mir_00000.X"
+        );
     }
 }
 

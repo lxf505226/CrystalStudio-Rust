@@ -20,10 +20,10 @@
 //!
 //! 口径按用户明确要求「翻译文字使用官方的」，权威来源两份，都在仓里：
 //!
-//! 1. `tools/miredit/layout/crystalstudio-strings.json` —— 上游官方 893 条 `{English, Chinese}`
+//! 1. `layout/crystalstudio-strings.json` —— 上游官方 893 条 `{English, Chinese}`
 //!    （上游提交 `6f2dadde`）。**有官方译文的一律照抄**，每条常量右端注释里标
 //!    `官方: <Strings.json 的 key>`，便于以后逐条追溯。
-//! 2. `tools/miredit/layout/refs/crystalstudio-new-zh.png` —— 新版运行截图（全中文），
+//! 2. `layout/refs/crystalstudio-new-zh.png` —— 新版运行截图（全中文），
 //!    **最终视觉依据**。官方漏译处（例如该图里 `0 sets` 仍是英文）按截图里出现过的中文措辞
 //!    自定，并在注释里写「官方漏译，按截图自定」。
 //!
@@ -34,6 +34,11 @@
 //! 历史说明：本文件此前逐条照抄「任务书 §四 中文文案表」，`\n` 的断行位置沿用参考截图
 //! `layout/refs/crystalstudio-main-runtime-1500x950.png`。那一版的若干译名与官方不一致
 //! （旧称：素材面板 / 图库 / 物件层），本轮已全部按官方改正；旧称只在本文件注释里以「旧称」标注。
+//!
+//! ⚠ **品牌名例外**（2026-11-06 用户裁定，优先于上面两条口径）：软件显示名固定为
+//! `Crystal Studio`（两个词，C/S 大写，不译成中文）。标题栏与菜单栏的品牌段一律写
+//! `Crystal Studio`；`miredit-*` 只是 crate / 二进制的技术标识，不是产品名。
+//!
 //! 参考图里 Cell Inspector 的值列宽只有 81px（见 [`crate::metrics::INSPECTOR_VAL_X`]），
 //! 中文比英文宽，`Metadata` 那条原为单行、中文单行会溢出 ⇒ 按参考图"长值换行"的既有做法拆成两行
 //! （只拆行，不删字，不改语义）。
@@ -45,21 +50,21 @@
 /// 占位符：`{name}` 地图文件名、`{w}`/`{h}` 地图格数。
 /// `•` U+2022、`×` U+00D7、`—` U+2014 都需要字体有字形（字形测试会查）。
 ///
-/// ⚠ **后缀「地图编辑器」保留不改成 `Crystal Studio`**，依据：
-/// 官方译文表把 `Crystal Studio — Map Editor` 整句译作 `Crystal Studio — 地图编辑器`
-/// （`CrystalStudioMapEditor_AEA57DE1`）⇒ 官方**确实把 Map Editor 译成中文**。
-/// 而新版截图那一版标题栏写的是 `未命名 • 256 × 256 格 — Crystal Studio`（品牌未译）。
-/// 两说冲突时按「有官方译文的用官方」的口径取译文表的写法，**未擅自改品牌名**。
-pub const TITLE_TMPL: &str = "{name} • {w} × {h} 格 — 地图编辑器"; // EN: {name} • {w} × {h} cells — Crystal Studio ｜ 官方: CrystalStudioMapEditor_AEA57DE1
+/// ⚠ **品牌段固定为 `Crystal Studio`**（两个词，C/S 大写；品牌不译成中文）。
+/// 依据 2026-11-06 用户明确裁定：软件显示名就叫 `Crystal Studio`，标题按新版截图的口径
+/// 写 `— Crystal Studio`。官方译文表把 `Crystal Studio — Map Editor` 整句译作
+/// `Crystal Studio — 地图编辑器`（`CrystalStudioMapEditor_AEA57DE1`），那**只作历史参照**，
+/// 不再作为品牌口径 —— 上一版按该表把后缀译成「地图编辑器」的写法已订正。
+pub const TITLE_TMPL: &str = "{name} • {w} × {h} 格 — Crystal Studio"; // EN: {name} • {w} × {h} cells — Crystal Studio ｜ 品牌不译（2026-11-06 裁定）；官方 key CrystalStudioMapEditor_AEA57DE1 仅作历史参照
 
 /// 没有打开任何地图时的窗口标题（**不是**"未命名 + 假尺寸"，如实说没打开）。
-pub const WINDOW_TITLE_EMPTY: &str = "地图编辑器"; // EN: Crystal Studio ｜ 官方: CrystalStudioMapEditor_AEA57DE1（同 [`BRAND`]）
+pub const WINDOW_TITLE_EMPTY: &str = "Crystal Studio"; // EN: Crystal Studio ｜ 品牌不译（2026-11-06 裁定），同 [`BRAND`]
 
 /// 窗口标题模板（**有未保存修改**）：文件名后加 ` *`。
 ///
 /// 星号只表达"内存里的地图与磁盘不一致"这一件事，由
 /// [`crate::edit::EditSession::dirty`] 驱动（撤销回到保存点后会自动消失）。
-pub const TITLE_DIRTY_TMPL: &str = "{name} * • {w} × {h} 格 — 地图编辑器"; // EN: {name} * • {w} × {h} cells — Crystal Studio ｜ 官方: CrystalStudioMapEditor_AEA57DE1
+pub const TITLE_DIRTY_TMPL: &str = "{name} * • {w} × {h} 格 — Crystal Studio"; // EN: {name} * • {w} × {h} cells — Crystal Studio ｜ 品牌不译（2026-11-06 裁定），同 [`TITLE_TMPL`]
 
 // ───────────────────────── 工具名（本单只接线 3 个） ─────────────────────────
 
@@ -120,19 +125,20 @@ pub const MENU_TOOLS: &str = "工具(T)"; // EN: Tools ｜ 官方: Tools_FEDDD6F
 pub const MENU_HELP: &str = "帮助(H)"; // EN: Help ｜ 官方: Help_00BC9B98（表为 帮助(_H)；截图实测 帮助(H)）
 /// 菜单项（顺序与参考图一致）。
 pub const MENU_ITEMS: [&str; 5] = [MENU_FILE, MENU_EDIT, MENU_VIEW, MENU_TOOLS, MENU_HELP];
-/// 菜单栏右端品牌字。
+/// 菜单栏右端品牌字：`Crystal Studio`（两个词，C/S 大写）。
 ///
-/// 官方把「Crystal Studio — Map Editor」译作 `Crystal Studio — 地图编辑器`
-/// （`CrystalStudioMapEditor_AEA57DE1`）⇒「地图编辑器」**是官方译法**，保留。
-/// （新版截图那一版标题栏写的是 `— Crystal Studio`，与本表冲突；见 [`TITLE_TMPL`] 的说明。）
-pub const BRAND: &str = "地图编辑器"; // EN: Crystal Studio ｜ 官方: CrystalStudioMapEditor_AEA57DE1（地图编辑器）
+/// 2026-11-06 用户明确裁定软件显示名固定 `Crystal Studio`；官方把
+/// 「Crystal Studio — Map Editor」译作 `Crystal Studio — 地图编辑器`
+/// （`CrystalStudioMapEditor_AEA57DE1`）**只作历史参照**，已不作品牌口径
+/// —— 上一版取「地图编辑器」的写法已按该裁定订正（见 [`TITLE_TMPL`]）。
+pub const BRAND: &str = "Crystal Studio"; // EN: Crystal Studio ｜ 品牌不译（2026-11-06 裁定）
 
 // ───────────────────── 下拉菜单项（官方 5 菜单 / 39 项，2026-11-05） ─────────────────────
 //
 // **权威来源（两处，互相印证）**：
 // 1. `CrystalStudio/MainWindow.axaml:5` 的 `<Menu>` 树 —— 每项 `Header` 是
 //    `{local:Loc <Key>}`，`<Separator />` 的位置就是官方的分组；
-// 2. `tools/miredit/layout/crystalstudio-strings.json` 里同一批 key 的 `Chinese` 字段。
+// 2. `layout/crystalstudio-strings.json` 里同一批 key 的 `Chinese` 字段。
 //
 // ⚠ **助记键取"无下划线"写法**（`新建地图(N)…` 而非 `新建地图(_N)…`）：与菜单栏
 // [`MENU_FILE`] 同一条口径（截图是 `文件(F)`；下划线助记键在自绘菜单里画不出来，
@@ -1365,6 +1371,12 @@ pub const SIZE_UNIT_GB: &str = "GB"; // EN: GB
 /// 没有地图时画布中央的提示（画布不画空白"假网格"，如实说没打开）。
 pub const CANVAS_NO_MAP: &str = "未打开地图"; // EN: No map open
 
+/// **未指定**地图（公开仓没有内建缺省图）：启动时没有 `--map` 的真实原因。
+///
+/// 与 [`CANVAS_NO_MAP`]（画布中央的空态）分开：这句进**状态栏左段**（`map_error`），
+/// 要顺带告诉用户怎么打开一张图，否则界面上只剩"没开图"这一条无从下手的信息。
+pub const DIAG_MAP_NONE: &str = "未指定地图：用 --map <路径> 打开"; // EN: no map given — pass --map <path>
+
 // ───────────────────────── 通用符号 ─────────────────────────
 
 /// 搜索框右端的清除符。
@@ -1975,6 +1987,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("SIZE_UNIT_MB", SIZE_UNIT_MB),
     ("SIZE_UNIT_GB", SIZE_UNIT_GB),
     ("CANVAS_NO_MAP", CANVAS_NO_MAP),
+    ("DIAG_MAP_NONE", DIAG_MAP_NONE),
     ("SEARCH_CLEAR", SEARCH_CLEAR),
     ("CAPTION_CLOSE", CAPTION_CLOSE),
     ("CAPTION_MAXIMIZE", CAPTION_MAXIMIZE),
@@ -2230,6 +2243,7 @@ mod tests {
             ("SIZE_UNIT_MB", SIZE_UNIT_MB),
             ("SIZE_UNIT_GB", SIZE_UNIT_GB),
             ("CANVAS_NO_MAP", CANVAS_NO_MAP),
+            ("DIAG_MAP_NONE", DIAG_MAP_NONE),
             ("SEARCH_CLEAR", SEARCH_CLEAR),
             ("CAPTION_CLOSE", CAPTION_CLOSE),
             ("CAPTION_MAXIMIZE", CAPTION_MAXIMIZE),

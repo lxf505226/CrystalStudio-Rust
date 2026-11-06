@@ -1,4 +1,4 @@
-//! 静态前端：`GET /` 与 `GET /<其它路径>` 都从 `MIREDIT_WEB_ROOT`（缺省 `tools/miredit/web`）读。
+//! 静态前端：`GET /` 与 `GET /<其它路径>` 都从 `MIREDIT_WEB_ROOT`（缺省 = 本仓 `<仓库根>/web`）读。
 //!
 //! # 一、三条硬规矩（任务书 §三）
 //!
@@ -48,7 +48,7 @@ pub async fn fallback(State(st): State<Shared>, OriginalUri(uri): OriginalUri) -
 async fn serve_file(st: &Shared, rel: &str) -> Response {
     let Some(root) = st.web_root.as_ref() else {
         return ApiError::not_found(
-            "静态前端目录不存在（设置 MIREDIT_WEB_ROOT 指向 tools/miredit/web）",
+            "静态前端目录不存在（设置 MIREDIT_WEB_ROOT 指向本仓的 web/ 目录）",
         )
         .into_response();
     };

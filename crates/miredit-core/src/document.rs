@@ -51,6 +51,18 @@
 //! `view` 是**编辑面**（`view_mut()` 拿得到），`raw` 是**只读真值**（只有 `raw()`）。
 //! 唯一会写 `raw.cells` 的地方是 [`Document::try_to_bytes`]（写在一份 clone 上，
 //! 不改文档本身）。这样"文档里的 `raw`"永远等于"磁盘上那份字节"，可以直接做逐字节自证。
+//!
+//! # 六、五层计数（2026-11-06 新增，见 [`crate::layer_counts`]）
+//!
+//! 文档缓存五个官方层计数（`Document.LayerCounts.cs:5@acfbbf8a` 的等价物）：
+//!
+//! - **单格写**走 [`Document::write_view_cell`]（写视图 + O(1) 增量更新计数）；
+//!   它是编辑路径的**唯一**逐格写入口（`paint` / `fill` / `stamp` / 选区 / 撤销）。
+//! - **整块换视图**（`std::mem::swap(document.view_mut(), &mut map)`，GUI 的
+//!   `mapdoc.rs:154` / `:194`、`edit.rs:322` / `:324`）绕过了上一个入口 ⇒
+//!   换完**必须**调 [`Document::rebuild_layer_counts`]，否则计数停在旧视图上
+//!   （旧值不会报错，只会显示错数）。**直接改 `view_mut().cells[…]` 的调用方同理。**
+//! - 打开文件（[`Document::from_bytes`]）构造完立刻 `rebuild_layer_counts()` 一次。
 
 use std::path::{Path, PathBuf};
 
@@ -59,6 +71,7 @@ use mir2_map::{Cell, Map};
 
 use crate::convert::{ground_paint_supported, sync_view_into_raw, view_from_raw};
 use crate::error::CoreError;
+use crate::layer_counts::{cell_mask_ext, count_map, CountKeeper, LayerCounts, MaskContext};
 
 /// 一张已解析的地图 + 它的出处信息。抽取自 `mapdoc.rs:22-44`。
 #[derive(Debug)]
@@ -86,6 +99,11 @@ pub struct Document {
     /// 明确要求「上层拿到 `trailer_len() != 0` 时必须提示用户：本工具按头部 `w·h` 解释，
     /// 剩余 N 字节未解释」。实测 67 张真实文件（`EM001.map` 等）全部 `8040` 字节。
     tolerant_trailer: usize,
+    /// **五层计数缓存**（见模块文档第六节与 [`crate::layer_counts`]）。
+    ///
+    /// 唯一维护路径：[`Document::write_view_cell`]（增量）与
+    /// [`Document::rebuild_layer_counts`]（全量）；**没有第三处**。
+    counts: LayerCounts,
 }
 
 impl Document {
@@ -131,6 +149,13 @@ impl Document {
             orig_bytes: bytes,
             dirty: false,
             tolerant_trailer,
+            counts: LayerCounts::zero(),
+        })
+        // 构造完立刻全量数一次（`Document.LayerCounts.cs:5@acfbbf8a` 的五个计数在
+        // `MapDocument.Load` 的逐格 `Set` 里被累计，等价于这里的一次 O(n) 重建）。
+        .map(|mut doc| {
+            doc.rebuild_layer_counts();
+            doc
         })
     }
 
@@ -153,6 +178,69 @@ impl Document {
     /// 唯一有意义的改动是 `view.cells`。
     pub fn view_mut(&mut self) -> &mut Map {
         &mut self.view
+    }
+
+    // ── 五层计数（2026-11-06 新增；口径见 [`crate::layer_counts`]） ──
+
+    /// 当前五层计数（官方 `LayerCount(MapLayer)` × 5 的缓存）。
+    ///
+    /// 由 [`Document::write_view_cell`] / [`Document::rebuild_layer_counts`] 维护；
+    /// 直接改 `view_mut()` 的调用方必须自己调 `rebuild_layer_counts()`（模块文档第六节）。
+    pub fn layer_counts(&self) -> LayerCounts {
+        self.counts
+    }
+
+    /// **整块重建**五层计数（O(n)），返回重建后的结果。
+    ///
+    /// 两个调用点（**只有这两个**）：
+    /// 1. [`Document::from_bytes`] 构造完之后（自动）；
+    /// 2. 外部**整块换视图**之后 —— GUI 用
+    ///    `std::mem::swap(document.view_mut(), &mut map)`（`mapdoc.rs:154` / `:194`、
+    ///    `edit.rs:322` / `:324`）或直接改 `view_mut().cells[…]` 时，
+    ///    绕过了 [`Document::write_view_cell`] ⇒ 必须调本方法把计数追平新视图。
+    pub fn rebuild_layer_counts(&mut self) -> LayerCounts {
+        self.counts = count_map(&self.raw, &self.view);
+        self.counts
+    }
+
+    /// **写一格视图 + 增量更新计数**（编辑路径的**唯一**逐格写入口）。
+    ///
+    /// 返回 `true` = 真的写了（格值变了）；`false` = 没写、计数也没动，三种来源：
+    /// 1. `(x, y)` 越界；
+    /// 2. `after` 与当前格**逐字段相同**（no-op 不许动计数，也不许产生撤销步）；
+    /// 3. 字节层与视图的格号对不上（[`crate::convert::ConvertError::Shape`] 类不变量被破坏）
+    ///    —— 此时**宁可一格不写**，也不写一个「计数说不清」的格。
+    pub fn write_view_cell(&mut self, x: u16, y: u16, after: Cell) -> bool {
+        let Some(i) = index_of(&self.view, x, y) else {
+            return false;
+        };
+        let before = self.view.cells[i];
+        if before == after {
+            return false;
+        }
+        let Some(raw_cell) = self.raw.cells.get(i) else {
+            return false;
+        };
+        let ctx = MaskContext::from_raw(&self.raw);
+        let before_mask = cell_mask_ext(raw_cell, &before, ctx, x, y);
+        let after_mask = cell_mask_ext(raw_cell, &after, ctx, x, y);
+        self.view.cells[i] = after;
+        self.counts.apply(before_mask, after_mask);
+        true
+    }
+
+    /// 借出「视图（可写）+ 计数更新器（可写）+ 字节层（只读）」三件**不重叠**的借用。
+    ///
+    /// 给撤销 / 重做用：`UndoStack::undo_with` 需要 `&mut Map` 写回旧格，同时要按
+    /// 「每写一格」更新计数；若只借 `&mut Document`，两件事会撞在同一个 `&mut self` 上。
+    pub(crate) fn view_and_keeper(&mut self) -> (&mut Map, CountKeeper<'_>) {
+        let Document {
+            raw,
+            view,
+            counts,
+            ..
+        } = self;
+        (view, CountKeeper::new(raw, counts))
     }
 
     /// 格数组之前的**真头部字节**（九种格式各自长度不同，`mir2-format/src/model.rs:312-316`）。
@@ -385,6 +473,9 @@ pub fn cell_at(map: &Map, x: u16, y: u16) -> Option<&Cell> {
 ///
 /// 走 `Map::cells` 这个公开字段，**不需要**给 `mir2-map` 加 `cell_mut`
 /// （那个 crate 正在别路验收，本单一个字都不许改）。
+///
+/// ⚠ **它绕过五层计数**：改完必须自己对 [`Document::rebuild_layer_counts`] 负责
+/// （编辑路径请改用 [`Document::write_view_cell`]，那才是「写一格 + 计数增量」的入口）。
 pub fn cell_mut(map: &mut Map, x: u16, y: u16) -> Option<&mut Cell> {
     let i = index_of(map, x, y)?;
     map.cells.get_mut(i)

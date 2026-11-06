@@ -17,8 +17,17 @@
 //! [`crate::MapError::ZeroDimension`]（与客户端 `map_loader.gd:94-95`、
 //! C# `LegacyMapReader.cs:50` 同口径）⇒ 「52 字节的空图」不是合法地图。
 //!
-//! 边界二：`w*h > 16_000_000` —— 同样先于长度判据被 [`MAX_CELLS`] 拦下
+//! 边界二：`w > 32767` 或 `h > 32767`（[`MAX_DIMENSION`]）—— 同样先于长度判据被拦下
+//! ⇒ 得到 [`crate::MapError::DimensionTooLarge`]。真值是 C# `MapDimensions.cs:11-12@acfbbf8a`
+//! 的 `CanRoundTrip`（`width is > 0 and <= short.MaxValue && …`）：`.map` 头的宽高在
+//! C# 侧是 `checked((short)Width)`（`Document.cs:90`）写出的 **16 位有符号** 字段，
+//! `32768..=65535` 这一段虽然塞得进 `u16`，写盘后回读却回不来 ⇒ 属于往返缺陷，不是可选优化。
+//!
+//! 边界三：`w*h > 16_000_000`（[`MAX_CELLS`]）—— 同样先于长度判据被拦下
 //! ⇒ 超限文件得到的是 [`crate::MapError::TooManyCells`]，而不是「先分配再崩」。
+//!
+//! ①②③ 的**顺序**就是 C# `CanRoundTrip` 的短路顺序（0 → 32767 → 16M），
+//! 由 [`validate_dimensions`] 单点实现，[`crate::Map::parse`] 只是它的调用方。
 //!
 //! # 二、单元格字节偏移（三档共用前 12 字节，14/36 档再带两个库号字节）
 //!
@@ -52,6 +61,8 @@
 //! ⇒ 尾区**既不能丢、也不能重置为 0**，更不能按「零」来推断字段语义。
 //! 本库只做**原样保存 + 原样写回**，不解释、不命名、不做任何归一化。
 
+use crate::error::MapError;
+
 /// 文件头（`TMapHeader`）字节数。
 pub const HEADER_LEN: usize = 52;
 
@@ -76,21 +87,130 @@ pub const NEW14_CELL_SIZE: usize = 14;
 /// `Ext36` 档单格字节数。
 pub const EXT36_CELL_SIZE: usize = 36;
 
-/// 单张地图允许的最大格数（`w * h`）—— **编辑器护栏，不是客户端真值**。
+/// 单张地图允许的最大格数（`w * h`）—— 它只是**三条件合取中的第三条**。
 ///
-/// 口径来源（同值、同判据）：CrystalStudio 的 C#
-/// `CrystalStudio/CrystalStudio/LegacyMapReader.cs:50`（`ValidateDimensions` 内
-/// `if (Width <= 0 || Height <= 0 || count > 16_000_000) throw new
-/// InvalidDataException("Invalid or excessive map dimensions.");`），
-/// 同一数值也出现在 `Document.cs:58`。
+/// 口径来源（真值）：CrystalStudio C# `MapDimensions.cs:7`（`MaximumCells = 16_000_000`）
+/// 与 `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip`：
 ///
-/// 为什么需要这条护栏：本库的 [`Cell`] 是 **36 B 定长**（14 B 字段 + 22 B 尾区），
+/// ```csharp
+/// public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
+///     height is > 0 and <= short.MaxValue && (long)width * height <= MaximumCells;
+/// ```
+///
+/// 即合法尺寸 = **①`w>0` 且 `h>0` ②`w<=32767` 且 `h<=32767`（[`MAX_DIMENSION`]）
+/// ③`w*h<=16_000_000`（本常量）**，三条**合取**，缺一不可。
+///
+/// ⚠ **旧表述「只要 `w*h <= 16_000_000` 就合法」是错的**（本次订正）：
+/// `40000×1` 只有 40000 格，完全满足第三条，却因为 40000 > 32767 而写盘后回读不回来
+/// （`.map` 头的宽高是 16 位有符号字段）。所以本常量**不能**单独当合法性判据用，
+/// 判尺寸请一律调 [`validate_dimensions`]（或 [`can_round_trip`]）。
+///
+/// 读写两侧的其它同值出处（不是另一套真值，是同一数值在 C# 另两处的落点）：
+/// `LegacyMapReader.cs:50` 的 `ValidateDimensions`（`count > 16_000_000`）、`Document.cs:58`。
+///
+/// 为什么还需要这条「格数」护栏：本库的 [`Cell`] 是 **36 B 定长**（14 B 字段 + 22 B 尾区），
 /// 而 `Old12` 档每格只有 12 B ⇒ 内存约为文件大小的 3 倍。没有上限时，一张 200 MB 的
 /// 合法 12 B/格图会去申请约 600 MB，失败方式是 OOM 而不是明确报错。
 ///
-/// 与客户端的关系：Godot 客户端 `map_loader.gd` **没有**这条上限（只判 `w/h > 0`），
-/// 所以这是本库有意加的护栏，不是与客户端对齐的语义；上限值本身取自 C#（见上 `文件:行号`）。
+/// 与客户端的关系：Godot 客户端 `map_loader.gd` **没有**这条格数上限（只判 `w/h > 0`），
+/// 所以格数护栏是本库有意加的；但 `w/h <= 32767` 那一条**不是**本库自造的护栏 ——
+/// 它是上游 `CanRoundTrip` 的原文，也是 i16 头的物理容量。
 pub const MAX_CELLS: usize = 16_000_000;
+
+/// 单边维度上限（宽、高各自的最大值）= **32767** = `i16::MAX` = C# `short.MaxValue`。
+///
+/// 口径来源（真值）：C# `MapDimensions.cs:11-12@acfbbf8a` 的
+/// `CanRoundTrip` 里两条 `<= short.MaxValue`。
+///
+/// 为什么必须有这一条（是**往返缺陷**，不是可选优化）：
+/// `.map` 文件头的 `wWidth` / `wHeight` 在 C# 侧是**有符号 16 位**字段 ——
+/// `Document.cs:90` 写的是 `w.Write(checked((short)Width))`；本仓 `mir2-format` 也按
+/// `i16` 读回（`tmap_dims` 用 `i16_at`）。`32768..=65535` 这一段虽然塞得进 `u16`，
+/// 写盘后要么在 C# 侧 `checked` 直接抛溢出异常，要么回读成负数 ⇒ **存下去就再也读不回来**。
+///
+/// ⇒ 「能塞进 `u16`」≠「能往返」。判尺寸一律用 [`validate_dimensions`] / [`can_round_trip`]，
+/// 不要自己写 `w * h <= MAX_CELLS` 单条判断（那正是本次修掉的缺口）。
+pub const MAX_DIMENSION: u16 = i16::MAX as u16;
+
+/// 该宽高能不能**往返**（解析成功 → 写回 → 再解析，宽高与字节都不变）。
+///
+/// 与 C# `MapDimensions.CanRoundTrip` 逐字对应（`MapDimensions.cs:11-12@acfbbf8a`），
+/// 三条件**合取**，短路顺序也与官方一致：
+///
+/// 1. `width > 0` 且 `height > 0`；
+/// 2. `width <= `[`MAX_DIMENSION`]` (= 32767)` 且 `height <= `[`MAX_DIMENSION`]；
+/// 3. `width * height <= `[`MAX_CELLS`]` (= 16_000_000)`。
+///
+/// 实现上直接复用 [`validate_dimensions`]（`is_ok()`），保证「布尔判据」与
+/// 「带原因的判据」**永远同源**，不会各写一套后漂移。
+///
+/// ```
+/// use mir2_map::{can_round_trip, MAX_DIMENSION};
+///
+/// assert_eq!(MAX_DIMENSION, 32767);
+/// assert!(can_round_trip(32767, 1));
+/// assert!(!can_round_trip(32768, 1));      // 单边超 32767 ⇒ 存下去读不回来
+/// assert!(!can_round_trip(65535, 1));
+/// assert!(!can_round_trip(0, 10));
+/// assert!(can_round_trip(4000, 4000));     // 恰好 16_000_000 格
+/// assert!(!can_round_trip(4001, 4000));    // 16_004_000 格
+/// ```
+pub fn can_round_trip(width: u16, height: u16) -> bool {
+    validate_dimensions(width, height).is_ok()
+}
+
+/// 尺寸校验：`Ok(())` ⇒ 合法；`Err` ⇒ **第一个**不满足的条件（官方的短路顺序）。
+///
+/// 顺序**严格**照 C# `CanRoundTrip`（`MapDimensions.cs:11-12@acfbbf8a`）：
+///
+/// | 序 | 条件 | 拒绝时的错误变体 |
+/// |----|------|------------------|
+/// | ① | `width == 0` 或 `height == 0` | [`MapError::ZeroDimension`] |
+/// | ② | `width > 32767` 或 `height > 32767` | [`MapError::DimensionTooLarge`] |
+/// | ③ | `width * height > 16_000_000` | [`MapError::TooManyCells`] |
+///
+/// ②在③之前的理由不只是「照抄官方」：`40000×40000`（1.6G 格）两条都命中，
+/// 报「单边超 32767」才是根因（先改成 32767 以内，才谈得上讨论格数上限）。
+/// 注意 `30000×30000` 只命中③（30000 ≤ 32767），它报的是「格数超上限」。
+///
+/// 这是本 crate **唯一的尺寸判据**：[`crate::Map::parse`] 直接调它，
+/// 上层要判「这个尺寸能不能存」也调它，不许另写一套。
+///
+/// ```
+/// use mir2_map::{MapError, validate_dimensions};
+///
+/// assert!(validate_dimensions(32767, 1).is_ok());
+/// assert!(matches!(
+///     validate_dimensions(32768, 1),
+///     Err(MapError::DimensionTooLarge { width: 32768, height: 1, limit: 32767 })
+/// ));
+/// assert!(matches!(
+///     validate_dimensions(0, 1),
+///     Err(MapError::ZeroDimension { .. })
+/// ));
+/// ```
+pub fn validate_dimensions(width: u16, height: u16) -> Result<(), MapError> {
+    if width == 0 || height == 0 {
+        return Err(MapError::ZeroDimension { width, height });
+    }
+    if width > MAX_DIMENSION || height > MAX_DIMENSION {
+        return Err(MapError::DimensionTooLarge {
+            width,
+            height,
+            limit: MAX_DIMENSION,
+        });
+    }
+    let cells = u64::from(width) * u64::from(height);
+    if cells > MAX_CELLS as u64 {
+        return Err(MapError::TooManyCells {
+            width,
+            height,
+            cells,
+            limit: MAX_CELLS as u64,
+        });
+    }
+    Ok(())
+}
 
 /// 格长档位（由文件长度唯一确定，见模块文档第一节）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -376,5 +496,138 @@ mod tests {
         c.bk_img = 0x7FFF;
         c.fr_img = 0x4000;
         assert!(c.is_walkable());
+    }
+
+    // ─────────────────── 尺寸判据（C# `MapDimensions.CanRoundTrip`） ───────────────────
+
+    /// 单边 32767 接受、32768 / 65535 拒绝；0 一律拒绝。
+    ///
+    /// 真值：`MapDimensions.cs:11-12@acfbbf8a` 的两条 `<= short.MaxValue`。
+    #[test]
+    fn 单边上限32767的边界() {
+        assert_eq!(MAX_DIMENSION, 32767, "单边上限必须是 i16::MAX");
+        assert_eq!(MAX_DIMENSION, i16::MAX as u16);
+
+        assert!(can_round_trip(32767, 1), "32767×1 应可往返");
+        assert!(can_round_trip(1, 32767), "1×32767 应可往返");
+        assert!(!can_round_trip(32768, 1), "32768×1 必须拒绝（超 short.MaxValue）");
+        assert!(!can_round_trip(1, 32768), "1×32768 必须拒绝");
+        assert!(!can_round_trip(65535, 1), "65535×1 必须拒绝（u16 塞得进，i16 塞不进）");
+        assert!(!can_round_trip(65535, 65535), "65535×65535 必须拒绝");
+
+        // 0 尺寸（C# 第一条 `width is > 0`）
+        assert!(!can_round_trip(0, 0));
+        assert!(!can_round_trip(0, 10));
+        assert!(!can_round_trip(10, 0));
+    }
+
+    /// 三条件是**合取**：单看格数会放过 `40000×1`（40000 格 ≪ 16M，但单边超 32767）。
+    ///
+    /// 这正是本次修掉的缺口 —— 旧代码只有「`w*h <= 16M`」一条。
+    #[test]
+    fn 三条合取_格数合格不代表尺寸合格() {
+        // 40000×1：格数只有 40000（远小于 16M），旧的「只看格数」判据会放行它
+        assert!(40_000u64 < MAX_CELLS as u64);
+        assert!(!can_round_trip(40000, 1), "40000×1 单边超 32767，必须拒绝");
+        assert!(matches!(
+            validate_dimensions(40000, 1),
+            Err(MapError::DimensionTooLarge {
+                width: 40000,
+                height: 1,
+                limit: 32767
+            })
+        ));
+        // 40000×40000：单边超 32767（且格数也超 16M），按官方短路顺序报前者
+        assert!(matches!(
+            validate_dimensions(40000, 40000),
+            Err(MapError::DimensionTooLarge { .. })
+        ));
+        // 30000×30000：单边没超 32767，只有格数超 ⇒ 报 TooManyCells（别把两者混为一谈）
+        assert!(matches!(
+            validate_dimensions(30000, 30000),
+            Err(MapError::TooManyCells { .. })
+        ));
+    }
+
+    /// 格数上限边界：`16_000_000` 恰好通过，且**对每个宽度**「再多一格」必被拒。
+    ///
+    /// ⚠ `16_000_001` 本身**不可表示**为 `u16×u16` 的乘积：它最小的非平凡因子是 109，
+    /// 余因子 146789 > 65535（另两组 229×69869、641×24961 同样越界）。
+    /// 所以「恰好 16M 接受、16M+1 拒绝」这条边界改用**逐宽度穷举**证明：
+    /// 对每个 `w`，取 `h0 = floor(16M/w)`，则 `w*h0 <= 16M`（接受）而 `w*(h0+1) > 16M`（拒绝），
+    /// 即判据的临界点精确落在 `16_000_000 / 16_000_001` 之间，没有被写成 `>=` 或别的偏移。
+    #[test]
+    fn 格数上限边界逐宽度穷举() {
+        // 4000×4000 恰好等于上限 —— 必须通过（边界是「>」不是「>=」）
+        assert_eq!(4000u64 * 4000, MAX_CELLS as u64);
+        assert!(can_round_trip(4000, 4000), "恰好 16_000_000 格应通过");
+        assert!(validate_dimensions(4000, 4000).is_ok());
+
+        // 4001×4000 = 16_004_000 只超 4000 格 —— 必须报「格数超上限」而不是「尺寸超 32767」
+        assert!(matches!(
+            validate_dimensions(4001, 4000),
+            Err(MapError::TooManyCells {
+                cells: 16_004_000,
+                limit: 16_000_000,
+                ..
+            })
+        ));
+
+        // 逐宽度穷举临界点：w 从 489 起 h0 才会 ≤ 32767（16_000_000 / 32767 ≈ 488.3）
+        for w in 489u16..=MAX_DIMENSION {
+            let h0 = (MAX_CELLS as u64 / u64::from(w)) as u16;
+            assert!(
+                (1..=MAX_DIMENSION).contains(&h0),
+                "w={w} 时 h0={h0} 越界"
+            );
+            assert!(
+                u64::from(w) * u64::from(h0) <= MAX_CELLS as u64,
+                "w={w} h0={h0} 应在上限内"
+            );
+            assert!(can_round_trip(w, h0), "w={w} h0={h0} 应接受");
+            assert!(
+                !can_round_trip(w, h0 + 1),
+                "w={w} h={} 已超 16M，必须拒绝",
+                h0 + 1
+            );
+            assert!(
+                matches!(
+                    validate_dimensions(w, h0 + 1),
+                    Err(MapError::TooManyCells { .. })
+                ),
+                "w={w} h={} 应报 TooManyCells",
+                h0 + 1
+            );
+        }
+    }
+
+    /// 布尔判据与带原因的判据**必须永远同源**（`can_round_trip` 只是 `validate_dimensions` 的 `is_ok()`）。
+    ///
+    /// 这条用例防的是「两份判据各写一套，改了一处忘了另一处」。
+    #[test]
+    fn 布尔判据与带原因判据同源() {
+        let 样本: [(u16, u16); 14] = [
+            (0, 0),
+            (0, 5),
+            (5, 0),
+            (1, 1),
+            (32767, 1),
+            (1, 32767),
+            (32768, 1),
+            (1, 32768),
+            (65535, 1),
+            (65535, 65535),
+            (4000, 4000),
+            (4000, 4001),
+            (30000, 30000),
+            (1000, 600),
+        ];
+        for (w, h) in 样本 {
+            assert_eq!(
+                can_round_trip(w, h),
+                validate_dimensions(w, h).is_ok(),
+                "{w}×{h}：布尔判据与 validate_dimensions 不一致"
+            );
+        }
     }
 }

@@ -91,7 +91,7 @@
 //! # 七、⚠ `editable = false`：本格式是「错了也测不出来」的最高风险项
 //!
 //! 2026-11-05 把 [`FormatCaps::editable`](crate::FormatCaps::editable) 从 `true` **收紧为 `false`**，
-//! 依据 `deliverables/审查-mir2-format九格式-2026-11-05.md` §五。
+//! 依据内部取证文档《审查-mir2-format 九格式》§五（已移出公开仓，不随本仓分发）。
 //!
 //! **理由**：本格式是九种里**唯一「布局理解错了、连字节级往返都照样通过」**的格式，三条叠加：
 //!
@@ -111,8 +111,8 @@
 
 use crate::error::FormatError;
 use crate::model::{
-    i16_at, put_i16, put_u16, validate_dims, Cell, CollisionPolarity, FormatCaps, FormatId,
-    MapFormat, RawMap,
+    i16_at, put_i16, put_u16, validate_dims, validate_write_dims, Cell, CollisionPolarity,
+    FormatCaps, FormatId, MapFormat, RawMap,
 };
 
 /// 文件头字节数。
@@ -361,6 +361,10 @@ impl MapFormat for CrystalCs {
     }
 
     fn write(&self, map: &RawMap) -> Result<Vec<u8>, FormatError> {
+        // 尺寸门：CrystalCs 是变长格式、不走 `write_fixed`，所以必须自己挂在最顶部。
+        // 与读侧 `validate_dims` 同一判据（见 `validate_write_dims` 文档）；
+        // 放在任何窄化转换之前 ⇒ 超 32767 的宽高不会静默截断成一个别的尺寸。
+        validate_write_dims(FormatId::CrystalCs, map.width, map.height)?;
         if map.format != FormatId::CrystalCs {
             return Err(FormatError::inconsistent(format!(
                 "目标格式是 CrystalCs，而 RawMap.format 是 {:?}",

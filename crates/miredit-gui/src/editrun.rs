@@ -493,11 +493,31 @@ mod tests {
             "标题里必须是新文件名：{}",
             text.title
         );
-        assert!(
-            text.status_left.contains("b.map"),
-            "状态栏左段里必须是新文件名：{}",
-            text.status_left
-        );
+        // 状态栏左段**有优先级**（地图错 → 保存错 → 图库错 → 文件名）：图库不可用时，
+        // 左段会被「资源库装载失败」那句盖住 —— 那是既定设计（见 `screen_text` 模块文档），
+        // 不是本用例要验的东西。所以这里**按两种模式各断言自己那一档**：
+        //   有图库 ⇒ 左段必须是新文件名；
+        //   无图库（公开仓 / CI / 缺资产）⇒ 左段必须是图库失败原文，且**绝不能**还留着旧文件名。
+        // 2026-11-06 补齐：此前这条只在本机有真图库时才成立（缺资产模式会红）。
+        match st.assets.error() {
+            None => assert!(
+                text.status_left.contains("b.map"),
+                "状态栏左段里必须是新文件名：{}",
+                text.status_left
+            ),
+            Some(err) => {
+                assert!(
+                    text.status_left.contains(err),
+                    "图库不可用时左段应如实报图库失败：{}",
+                    text.status_left
+                );
+                assert!(
+                    !text.status_left.contains("saveastitle"),
+                    "左段里不许还留着旧文件名：{}",
+                    text.status_left
+                );
+            }
+        }
         let _ = std::fs::remove_dir_all(p.parent().unwrap());
     }
 

@@ -105,8 +105,8 @@
 
 use crate::error::FormatError;
 use crate::model::{
-    i16_at, put_u16, u16_at, validate_dims, Cell, CollisionPolarity, FormatCaps, FormatId,
-    MapFormat, RawMap,
+    i16_at, put_u16, u16_at, validate_dims, validate_write_dims, Cell, CollisionPolarity, FormatCaps,
+    FormatId, MapFormat, RawMap,
 };
 
 /// 文件头字节数（不含半分辨率背景块）。
@@ -271,6 +271,10 @@ impl MapFormat for Mir3Wemade {
     }
 
     fn write(&self, map: &RawMap) -> Result<Vec<u8>, FormatError> {
+        // 尺寸门：Mir3Wemade 的 header_raw 长度依赖 w/h（半分辨率背景块），走的不是
+        // `write_fixed`，所以必须自己挂在最顶部 —— 而且要挂在 `cells_offset(w, h)` 之前：
+        // 否则先算背景块长度就可能在超限尺寸上做无谓的大分配。
+        validate_write_dims(FormatId::Mir3Wemade, map.width, map.height)?;
         if map.format != FormatId::Mir3Wemade {
             return Err(FormatError::inconsistent(format!(
                 "目标格式是 Mir3Wemade，而 RawMap.format 是 {:?}",

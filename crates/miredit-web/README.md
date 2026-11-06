@@ -37,14 +37,16 @@ curl -s http://127.0.0.1:8080/api/health
 | 变量 | 缺省 | 说明 |
 |---|---|---|
 | `MIREDIT_BIND` | `0.0.0.0:8080` | 监听地址（Docker 里必须 `0.0.0.0` 才能被 `-p` 映射） |
-| `MIREDIT_MAP_ROOT` | 迁移前的相对布局 | **`/api/map/open` 的白名单根**（相对路径按进程 cwd 绝对化）—— 换机器请显式设置 |
-| `MIREDIT_CLIENT_ROOT` | `mir2_assets::DEFAULT_CLIENT_ROOT` | 图库根（`.wil/.wzl`）；扫不到 ⇒ 出图端点 503 |
-| `MIREDIT_PALETTE_JSON` | 迁移前的相对布局 | 印章目录索引（须落在 `<dataRoot>/catalogue/palette.json`）；不存在 ⇒ `/api/stamps` 503 |
-| `MIREDIT_WEB_ROOT` | 迁移前的相对布局 | 静态前端（本仓的 `web/`）；不存在 ⇒ `GET /` 404（**不伪造页面**） |
+| `MIREDIT_MAP_ROOT` | **无（必须显式设置）** | **`/api/map/open` 的白名单根**（相对路径按进程 cwd 绝对化）；未设 ⇒ 地图端点 503 |
+| `MIREDIT_CLIENT_ROOT` | **无（`mir2_assets::client_root`）** | 图库根（`.wil/.wzl`）；未设/扫不到 ⇒ 出图端点 503 |
+| `MIREDIT_PALETTE_JSON` | **无（必须显式设置）** | 印章目录索引（须落在 `<dataRoot>/catalogue/palette.json`）；未设/不存在 ⇒ `/api/stamps` 503 |
+| `MIREDIT_WEB_ROOT` | 本仓 `<仓库根>/web`（中立回退） | 静态前端（本仓的 `web/`）；不存在 ⇒ `GET /` 404（**不伪造页面**） |
+
+> ⚠ 2026-11-06 起**没有任何内置路径指向开发机**：四个路径变量的缺省值要么不存在（地图/图库/印章），
+> 要么是本仓自己的 `web/`。独立/公开部署时请按 §1.1 显式设置；不设就是"如实不可用"，不是"猜一个"。
 
 > ⚠ `MIREDIT_MAP_ROOT` 下发给 `/api/map/open` 的 `path` 必须在白名单根之内：前端一律传**相对路径**
-> （如 `maps/0.map`），绝对路径同样会被这四道闸校验一次。缺省值指向迁移前的布局，
-> 独立/公开部署时请按 §1.1 显式设置全部 `MIREDIT_*`。
+> （如 `maps/0.map`），绝对路径同样会被那四道闸校验一次。
 
 ### 1.3 Docker
 

@@ -5,7 +5,6 @@
 //! 两门互不污染。
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
 use mir2_map::Map;
 
@@ -31,7 +30,14 @@ fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
     let Some((d, 副本, 原字节)) = 复制地图("gate2") else {
         return;
     };
-    let 印章 = Path::new(印章路径);
+    let 印章 = match 印章路径() {
+        Some(p) => p,
+        None => {
+            eprintln!("[跳过] 无取证根 MIREDIT_UPSTREAM_ROOT（或缺 Objects/mir/mir_00000.X）");
+            let _ = std::fs::remove_dir_all(&d);
+            return;
+        }
+    };
     if !印章.is_file() {
         eprintln!("[跳过] 本机没有印章样本 {}", 印章.display());
         let _ = std::fs::remove_dir_all(&d);
@@ -53,7 +59,7 @@ fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
         &mut ed,
         &mut doc.doc.as_mut().expect("文档").map,
         &armed,
-        印章,
+        &印章,
         落点.0,
         落点.1,
     )
@@ -183,7 +189,7 @@ fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
         &mut ed,
         &mut doc.doc.as_mut().expect("文档").map,
         &armed,
-        印章,
+        &印章,
         落点.0,
         落点.1,
     )

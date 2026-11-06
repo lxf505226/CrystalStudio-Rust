@@ -26,7 +26,8 @@ use crate::edit::EditCmd;
 /// 解析后的命令行开关。
 #[derive(Default, Clone, Debug)]
 pub struct Cli {
-    /// `--map <路径>`：打开哪张 `.map`（缺省用 [`crate::mapdoc::DEFAULT_MAP_PATH`]）。
+    /// `--map <路径>`：打开哪张 `.map`（不给则用 [`crate::mapdoc::DEFAULT_MAP_PATH`]，
+    /// 那个常量**恒为空** ⇒ 启动时「未指定地图」，不猜任何路径）。
     pub map: Option<PathBuf>,
     /// `--center <x,y>`：把视口中心对准这个世界格（浮点允许，便于精确对位）。
     pub center: Option<(f32, f32)>,
@@ -950,15 +951,17 @@ mod tests {
 
     #[test]
     fn 常规开关() {
+        // ⚠ 这些路径**只做字符串往返**（解析后原样比对），不落盘 ⇒ 用相对路径即可，
+        // 不写死盘符（公开仓/PR 的机器上没有 `E:`/`I:`）。
         let c = p(&[
             "--map",
-            r"E:\GodM2\GodotClient\maps\0.map",
+            r"maps\0.map",
             "--center",
             "380,310",
             "--scale",
             "0.5",
             "--shot",
-            r"I:\x\a.png",
+            r"shots\a.png",
             "--frames",
             "12",
             "--autodrag",
@@ -966,7 +969,7 @@ mod tests {
             "--hover",
             "100,100",
         ]);
-        assert_eq!(c.map.unwrap().to_string_lossy(), r"E:\GodM2\GodotClient\maps\0.map");
+        assert_eq!(c.map.unwrap().to_string_lossy(), r"maps\0.map");
         assert_eq!(c.center, Some((380.0, 310.0)));
         assert_eq!(c.scale, Some(0.5));
         assert_eq!(c.frames, Some(12));
@@ -1201,10 +1204,10 @@ mod tests {
     /// ④ 与 `--save` 互不影响（两个开关各自独立）。
     #[test]
     fn 另存为开关() {
-        let c = p(&["--save-as", r"I:\miredit-saveas\b.map"]);
+        let c = p(&["--save-as", r"saveas\b.map"]);
         assert_eq!(
             c.save_as.as_deref(),
-            Some(std::path::Path::new(r"I:\miredit-saveas\b.map"))
+            Some(std::path::Path::new(r"saveas\b.map"))
         );
         assert!(c.errors.is_empty(), "{:?}", c.errors);
         assert!(c.headless(), "--save-as 必须隐含不开窗（否则无人值守跑不起来）");
@@ -1216,7 +1219,7 @@ mod tests {
         assert_eq!(c.errors.len(), 1);
 
         // 与 --save 同时给：两个都记下（先写原路径、再另存到新路径）
-        let c = p(&["--save", "--save-as", r"I:\x\b.map"]);
+        let c = p(&["--save", "--save-as", r"x\b.map"]);
         assert!(c.save && c.save_as.is_some());
         assert!(c.errors.is_empty(), "{:?}", c.errors);
 

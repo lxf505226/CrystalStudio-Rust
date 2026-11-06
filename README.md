@@ -4,7 +4,7 @@
 
 **Crystal Studio** 是传奇 M2 系地图编辑器（上游为 C# / Avalonia 实现）的 **Rust 全量移植**：8 个单向依赖的 crate，PC 原生版与网页版共用同一编辑内核，覆盖 **9 种地图格式**的判别、解析与写回。
 
-上游参照：[`fluttergo/CrystalStudio`](https://github.com/fluttergo/CrystalStudio)，本仓对齐的上游基线提交为 `901dbe2f`。
+上游参照：[`fluttergo/CrystalStudio`](https://github.com/fluttergo/CrystalStudio)，本仓对齐的上游基线提交为 `901dbe2f`。上游 HEAD `6450da90` 仅新增 CellHover + NativeAOT 发布链，未改变地图格式/渲染/资产解码。
 
 ## 一、能力
 
@@ -50,6 +50,9 @@ cargo clippy --all-targets -- -D warnings
 
 通过/失败的具体条数以**实际运行结果**为准（`cargo test` 会自己打印），本文件不锁定会过期的数字。
 
+**公开 CI**：[`.github/workflows/ci.yml`](.github/workflows/ci.yml) 在上述同三条命令上跑，且**不设任何素材环境变量** ——
+素材相关用例自己打印 `[skip]` / `[跳过]` 后返回，所以「没有游戏素材」也是全绿。CI 不跑 `cargo fmt`、不下载素材、不跑 Docker。
+
 发布构建：
 
 ```bash
@@ -57,8 +60,8 @@ cargo build -p miredit-gui --release
 cargo build -p miredit-web --release
 ```
 
-> **前置依赖**：`crates/mir2-assets` 通过 path 依赖引用 `wil2atlas`（WIL/WZL 解码层，本仓不复制其解析代码）。
-> 当前清单里写的是开发机绝对路径，clone 之后需先把它指向你自己的 `wil2atlas` 副本（或换成发布版依赖），否则 `cargo build` 会在解析依赖时失败。
+> **前置依赖**：WIL/WZL 解码器已 vendored 在 `vendor/wil2atlas/`（decoder-only，MIT；来源与逐文件 SHA256 见 `vendor/wil2atlas/NOTICE`），
+> `crates/mir2-assets` 以仓库内相对路径引用它 —— **无需外部 path 依赖**，clone 后可直接构建。
 >
 > 本项目**不使用 `cargo fmt`**，代码风格靠既有约定与 clippy 维持，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
@@ -86,23 +89,40 @@ MIREDIT_WEB_ROOT=/path/to/repo/web \
 cargo run -p miredit-web --release
 ```
 
-| 变量 | 作用 |
-|---|---|
-| `MIREDIT_BIND` | 监听地址（缺省 `0.0.0.0:8080`） |
-| `MIREDIT_MAP_ROOT` | `/api/map/open` 的白名单根 |
-| `MIREDIT_CLIENT_ROOT` | 图库（客户端）扫描根 |
-| `MIREDIT_PALETTE_JSON` | 印章目录索引 `palette.json` |
-| `MIREDIT_WEB_ROOT` | 静态前端目录（本仓的 `web/`） |
+| 变量 | 作用 | 未设置时 |
+|---|---|---|
+| `MIREDIT_BIND` | 监听地址（缺省 `0.0.0.0:8080`） | 用缺省值 |
+| `MIREDIT_MAP_ROOT` | `/api/map/open` 的白名单根 | 地图端点一律 503（**不猜目录**） |
+| `MIREDIT_CLIENT_ROOT` | 图库（客户端）扫描根 | 出图 / 素材端点 503 |
+| `MIREDIT_PALETTE_JSON` | 印章目录索引 `palette.json` | `/api/stamps` 503 |
+| `MIREDIT_WEB_ROOT` | 静态前端目录（缺省 = 本仓 `web/`，中立回退） | 找不到 ⇒ `GET /` 404（不伪造页面） |
 
-> ⚠ 这几个变量的**内置缺省值指向开发机上的布局**，换机器请全部显式设置；前端静态目录不设就会 404（不伪造页面）。接口契约见 [web/README.md](web/README.md)。
+> ⚠ **没有任何内置路径指向某台开发机**（2026-11-06 起）。四个路径变量都**必须显式设置**才
+> 能真的服务数据；不设就是"如实不可用"（503/404 + 启动横幅点名缺哪个变量），不会去猜一个
+> `GodotClient/maps` 之类的相对目录。接口契约见 [web/README.md](web/README.md)。
+
+### 4.3 PC 版的素材根
+
+PC 版与网页版共用同一套环境变量（**没有内建缺省根**）：
+
+```bash
+MIREDIT_CLIENT_ROOT=/path/to/client-root \
+cargo run -p miredit-gui --release -- --map /path/to/some.map
+```
+
+| 变量 | 作用 | 未设置时 |
+|---|---|---|
+| `MIREDIT_CLIENT_ROOT` | 图库扫描根（`.wzl/.wzx`、`.wil/.wix`、`.lib`） | 界面/状态栏如实报「资源库装载失败」，图库 0 个（**不 panic**） |
+| `MIR2_STAMP_PALETTE` | 印章目录索引 `palette.json` | 印章面板如实报「加载失败」（不静默空表） |
+
 
 ## 五、游戏素材（不随本仓分发）
 
 本仓**只含代码**。地图编辑器需要客户端素材才能出图：
 
 - **地图**：`.map` 文件目录 → 网页版 `MIREDIT_MAP_ROOT`，PC 版 `--map` / `--map-list-root`。
-- **图库**：客户端根目录（Mir2 的 `.wil/.wix`、`.wzl/.wzx`，或原版 Crystal `.lib`）→ 网页版 `MIREDIT_CLIENT_ROOT`；PC 版目前直接使用 `mir2-assets` 的内置客户端根常量（换机器需改该常量，GUI 侧尚未接 CLI / 环境变量）。
-- **印章**：`catalogue/palette.json` 与并列的 `Objects/*.X` → 网页版 `MIREDIT_PALETTE_JSON`。
+- **图库**：客户端根目录（Mir2 的 `.wil/.wix`、`.wzl/.wzx`，或原版 Crystal `.lib`）→ 网页版与 PC 版**都**用 `MIREDIT_CLIENT_ROOT`（2026-11-06 起 PC 版也走环境变量，不再有内置常量）。
+- **印章**：`catalogue/palette.json` 与并列的 `Objects/*.X` → 网页版 `MIREDIT_PALETTE_JSON`，PC 版 `MIR2_STAMP_PALETTE`。
 
 缺素材时各端点/界面如实报错（404 / 503 / 「图库未就绪」），**不会**画占位图冒充成功。
 

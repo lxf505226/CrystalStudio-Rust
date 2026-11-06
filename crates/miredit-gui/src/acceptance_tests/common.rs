@@ -15,10 +15,42 @@ use miredit_core::Selection;
 
 // ───────────────────────── 本机样本 ─────────────────────────
 
-/// 真实地图样本（700×700 / 12 B 每格 / `Old12`）。
-pub(super) const 地图路径: &str = r"E:\GodM2\GodotClient\maps\0.map";
+/// 资产根缺省值：本机真实根（**整个模块里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+pub(super) const 缺省资产根: &str = r"E:\GodM2";
+/// 取证根缺省值：`.X` 的取证来源。换机器用 `MIREDIT_UPSTREAM_ROOT`。
+pub(super) const 缺省取证根: &str = r"I:\miredit\_upstream";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[跳过]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+pub(super) fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
+/// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`。
+pub(super) fn 取证根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省取证根));
+    root.is_dir().then_some(root)
+}
+
+/// 真实地图样本（700×700 / 12 B 每格 / `Old12`）：`<资产根>/GodotClient/maps/0.map`。
+pub(super) fn 地图路径() -> Option<PathBuf> {
+    let p = 资产根()?.join("GodotClient").join("maps").join("0.map");
+    p.is_file().then_some(p)
+}
+
 /// 真实印章样本（25 格 / 包围盒 `(-1,-2,4,3)`；core 门 2 用的也是它）。
-pub(super) const 印章路径: &str = r"I:\miredit\_upstream\Objects\mir\mir_00000.X";
+pub(super) fn 印章路径() -> Option<PathBuf> {
+    let p = 取证根()?.join("Objects").join("mir").join("mir_00000.X");
+    p.is_file().then_some(p)
+}
+
 /// 真实地图的头部长度（`Old12`：52 字节头 + 12 字节/格）。
 pub(super) const 头长: usize = 52;
 /// 真实地图的格长。
@@ -39,14 +71,16 @@ pub(super) fn 临时目录(tag: &str) -> PathBuf {
 ///
 /// 真图**只读**：所有改动都发生在副本上（`0.map` 是用户资产，绝不碰）。
 pub(super) fn 复制地图(tag: &str) -> Option<(PathBuf, PathBuf, Vec<u8>)> {
-    let src = Path::new(地图路径);
-    if !src.is_file() {
-        eprintln!("[跳过] 本机没有地图样本 {}", src.display());
-        return None;
-    }
+    let src = match 地图路径() {
+        Some(p) => p,
+        None => {
+            eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+            return None;
+        }
+    };
     let d = 临时目录(tag);
     let p = d.join("0.map");
-    std::fs::copy(src, &p).expect("复制 0.map 副本");
+    std::fs::copy(&src, &p).expect("复制 0.map 副本");
     let 原 = std::fs::read(&p).expect("读副本");
     Some((d, p, 原))
 }

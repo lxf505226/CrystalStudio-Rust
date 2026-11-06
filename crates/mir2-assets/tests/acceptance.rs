@@ -14,10 +14,7 @@ mod support;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use mir2_assets::{
-    Family, Frame, LibPaths, LibRef, SkipReason, SpriteSource, WilSource,
-    DEFAULT_CLIENT_ATLAS_ROOT, DEFAULT_CLIENT_ROOT, DEFAULT_CLIENT_WIL_ROOT,
-};
+use mir2_assets::{Family, Frame, LibPaths, LibRef, SkipReason, SpriteSource, WilSource};
 
 use support::atlas::{decode_png_rgba, load_atlas_meta, MetaFrame};
 
@@ -34,33 +31,29 @@ const SAMPLE_LIBS: [(&str, LibRef); 4] = [
 /// 每库抽样帧数（派单 §五 指定 50）。
 const SAMPLES_PER_LIB: usize = 50;
 
-/// 客户端图库根（可用环境变量覆盖，默认取本机实测路径）。
-fn client_root() -> PathBuf {
-    std::env::var_os("GODM2_CLIENT_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_CLIENT_ROOT))
+/// 客户端图库根：读 `MIREDIT_CLIENT_ROOT`（**未设 / 不是目录 ⇒ `None`**）。
+///
+/// 公开仓不内置任何开发机路径 ⇒ 换机器只改环境变量，用例各自打印「跳过」并返回。
+fn client_root() -> Option<PathBuf> {
+    mir2_assets::client_root()
 }
 
-/// 客户端已烘焙图集根（只读）。
-fn atlas_root() -> PathBuf {
-    std::env::var_os("GODM2_CLIENT_ATLAS_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_CLIENT_ATLAS_ROOT))
+/// 客户端已烘焙图集根（只读）：读 `MIREDIT_CLIENT_ATLAS_ROOT`（未设 ⇒ `None`）。
+fn atlas_root() -> Option<PathBuf> {
+    mir2_assets::client_atlas_root()
 }
 
 /// 验收门 1 + 门 4：四个库各抽 50 帧，与客户端图集逐字节比对，并打印统计。
 #[test]
 fn 抽样五十帧与客户端图集逐像素比对() {
-    let client = client_root();
-    let assets = atlas_root();
-    if !client.is_dir() {
-        eprintln!("跳过：客户端根不存在 {}", client.display());
+    let Some(client) = client_root() else {
+        eprintln!("跳过：未设置 MIREDIT_CLIENT_ROOT（客户端图库根）");
         return;
-    }
-    if !assets.is_dir() {
-        eprintln!("跳过：图集根不存在 {}", assets.display());
+    };
+    let Some(assets) = atlas_root() else {
+        eprintln!("跳过：未设置 MIREDIT_CLIENT_ATLAS_ROOT（客户端图集根）");
         return;
-    }
+    };
     let paths = match LibPaths::discover(&client) {
         Ok(p) => p,
         Err(e) => {
@@ -239,11 +232,10 @@ fn 抽样五十帧与客户端图集逐像素比对() {
 /// 验收门 2：`discover` 至少能解析出 `Tiles` / `SmTiles` / `Objects` 三个基库。
 #[test]
 fn 扫描客户端目录能解析出三个基库() {
-    let client = client_root();
-    if !client.is_dir() {
-        eprintln!("跳过：客户端根不存在 {}", client.display());
+    let Some(client) = client_root() else {
+        eprintln!("跳过：未设置 MIREDIT_CLIENT_ROOT（客户端图库根）");
         return;
-    }
+    };
     let paths = match LibPaths::discover(&client) {
         Ok(p) => p,
         Err(e) => {
@@ -326,11 +318,10 @@ fn 扫描客户端目录能解析出三个基库() {
 /// 验收门 3：越界帧号（含 `u32::MAX`）/ 未登记库号返回 `None`，不 panic、不给假图。
 #[test]
 fn 越界帧号与缺失库返回none() {
-    let client = client_root();
-    if !client.is_dir() {
-        eprintln!("跳过：客户端根不存在 {}", client.display());
+    let Some(client) = client_root() else {
+        eprintln!("跳过：未设置 MIREDIT_CLIENT_ROOT（客户端图库根）");
         return;
-    }
+    };
     let paths = match LibPaths::discover(&client) {
         Ok(p) => p,
         Err(e) => {
@@ -401,13 +392,10 @@ fn 越界帧号与缺失库返回none() {
 /// 而 `discover` 同时收 `.wil/.wix`，不验就等于没接。
 #[test]
 fn 扫描wil容器目录能正确配对() {
-    let root = std::env::var_os("GODM2_CLIENT_WIL_ROOT")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(DEFAULT_CLIENT_WIL_ROOT));
-    if !root.is_dir() {
-        eprintln!("跳过：`.wil` 目录不存在 {}", root.display());
+    let Some(root) = mir2_assets::client_wil_root() else {
+        eprintln!("跳过：未设置 MIREDIT_CLIENT_WIL_ROOT（旧版 .wil/.wix 目录）");
         return;
-    }
+    };
     let paths = match LibPaths::discover(&root) {
         Ok(p) => p,
         Err(e) => {
@@ -487,7 +475,7 @@ fn 扫描wil容器目录能正确配对() {
 /// | 路径 | 生产点 |
 /// |---|---|
 /// | ① 本 crate 取帧 | `WilSource::lookup_frame` 从 `DecodedFrame.info.px/py` 搬进 [`Frame::anchor`] |
-/// | ② 离线烘焙图集 | `wil2atlas` 把同一对 `px/py` 写进 meta 的 `anchor`（`meta.rs:27`） |
+/// | ② 离线烘焙图集 | 上游 `wil2atlas` 把同一对 `px/py` 写进 meta 的 `anchor`（`meta.rs:27`，未 vendor） |
 ///
 /// 两条路共用同一个解码器，但**搬运的代码是两份**。只要有一份漏搬/搬错（例如把 `px` 和 `py`
 /// 顺序搞反、或 WZL 容器取了 WIL 的字节位置），这里就会逐帧报出来。
@@ -495,16 +483,14 @@ fn 扫描wil容器目录能正确配对() {
 /// （前者走「只读帧头」的快路径，后者走完整解码，两条实现必须一致）。
 #[test]
 fn 帧锚点与图集meta逐帧一致() {
-    let client = client_root();
-    let assets = atlas_root();
-    if !client.is_dir() {
-        eprintln!("跳过：客户端根不存在 {}", client.display());
+    let Some(client) = client_root() else {
+        eprintln!("跳过：未设置 MIREDIT_CLIENT_ROOT（客户端图库根）");
         return;
-    }
-    if !assets.is_dir() {
-        eprintln!("跳过：图集根不存在 {}", assets.display());
+    };
+    let Some(assets) = atlas_root() else {
+        eprintln!("跳过：未设置 MIREDIT_CLIENT_ATLAS_ROOT（客户端图集根）");
         return;
-    }
+    };
     let paths = match LibPaths::discover(&client) {
         Ok(p) => p,
         Err(e) => {

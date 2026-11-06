@@ -377,10 +377,10 @@ mod tests {
         assert_eq!(t.page, "资源库 0 个");
     }
 
-    /// 本机资源库（装不上就返回 `None`，让相关测试跳过大字报路径 —— 换机器不该变红）。
+    /// 本机资源库（未设 `MIREDIT_CLIENT_ROOT` 或装不上就返回 `None`，让相关测试跳过大字报路径 —— 换机器不该变红）。
     fn 就绪图库() -> Option<Assets> {
-        let root = std::path::Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-        let paths = mir2_assets::LibPaths::discover(root).ok()?;
+        let root = mir2_assets::client_root()?;
+        let paths = mir2_assets::LibPaths::discover(&root).ok()?;
         let src = mir2_assets::WilSource::open(&paths).ok()?;
         Some(Assets::Ready {
             paths,
@@ -392,7 +392,10 @@ mod tests {
     #[test]
     fn 正常态文案() {
         let Some(assets) = 就绪图库() else {
-            eprintln!("[跳过] 本机没有图库 {}", mir2_assets::DEFAULT_CLIENT_ROOT);
+            eprintln!(
+                "[跳过] 未设置 {}（图库扫描根）或本机装不上资源库",
+                mir2_assets::CLIENT_ROOT_ENV
+            );
             return;
         };
         let d = 文档(assets);
@@ -406,7 +409,7 @@ mod tests {
         );
         assert_eq!(t.status_coord, "—");
         assert_eq!(t.tab, "0.map");
-        assert_eq!(t.title, "0.map • 2 × 2 格 — 地图编辑器");
+        assert_eq!(t.title, "0.map • 2 × 2 格 — Crystal Studio");
         assert_eq!(t.zoom, "100%");
         assert_eq!(t.page, t.status_lib);
         assert_eq!(t.inspector_head, "—");
@@ -421,7 +424,7 @@ mod tests {
         let t = build(&d, &CanvasView::default(), None, &CellLines::unknown(), &空会话());
         assert_eq!(t.status_left, "地图打开失败：长度不符");
         assert_eq!(t.tab, "—");
-        assert_eq!(t.title, "地图编辑器");
+        assert_eq!(t.title, "Crystal Studio");
     }
 
     /// 悬停到某格：状态栏中段的坐标必须是真实坐标（不在图上就是 `—`）。
@@ -464,7 +467,7 @@ mod tests {
         let mut ed = 空会话();
         assert_eq!(
             build(&d, &CanvasView::default(), None, &CellLines::unknown(), &ed).title,
-            "0.map • 2 × 2 格 — 地图编辑器"
+            "0.map • 2 × 2 格 — Crystal Studio"
         );
         assert_eq!(
             build(&d, &CanvasView::default(), None, &CellLines::unknown(), &ed).tab,
@@ -478,13 +481,13 @@ mod tests {
         ed.apply_once(&mut map, 1, 1);
         assert!(ed.dirty());
         let t = build(&d, &CanvasView::default(), None, &CellLines::unknown(), &ed);
-        assert_eq!(t.title, "0.map * • 2 × 2 格 — 地图编辑器");
+        assert_eq!(t.title, "0.map * • 2 × 2 格 — Crystal Studio");
         assert_eq!(t.tab, "0.map *");
 
         ed.mark_saved();
         assert_eq!(
             build(&d, &CanvasView::default(), None, &CellLines::unknown(), &ed).title,
-            "0.map • 2 × 2 格 — 地图编辑器"
+            "0.map • 2 × 2 格 — Crystal Studio"
         );
     }
 

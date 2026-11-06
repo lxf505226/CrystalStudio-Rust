@@ -131,11 +131,30 @@ mod tests {
     use super::*;
     use miredit_render::{CollisionOverlay, LayerMask, Viewport};
     use mir2_assets::{LibPaths, WilSource};
-    use std::path::Path;
 
     /// 本机真值路径（不存在就跳过，换机器也能跑 —— 与 `miredit-render` 的
     /// `render_maps` 同一口径：环境缺资源不算代码错）。
-    const 真地图: &str = r"E:\GodM2\GodotClient\maps\0.map";
+    /// 路径**相对资产根** `MIREDIT_ASSET_ROOT`（缺省本机真实根）。
+    const 真地图: &str = "GodotClient/maps/0.map";
+
+    /// 资产根缺省值：本机真实根（**整个测试模块里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+    const 缺省资产根: &str = r"E:\GodM2";
+
+    /// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+    ///
+    /// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[跳过]` 并返回。
+    /// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+    fn 资产根() -> Option<std::path::PathBuf> {
+        let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(缺省资产根));
+        root.is_dir().then_some(root)
+    }
+
+    /// 真实地图的**绝对路径**（相对段挂在资产根下）；缺根 ⇒ `None`。
+    fn 真地图路径() -> Option<std::path::PathBuf> {
+        Some(资产根()?.join(真地图))
+    }
 
     /// **验收门 §五.4 的自证**：`/api/tiles` 的 PNG 必须与 `render_maps` 的 PNG 逐字节相同。
     ///
@@ -147,13 +166,20 @@ mod tests {
     /// 以及 PNG 写到内存还是写文件 —— 所以字节必须完全一样。
     #[test]
     fn 出图与render_maps逐字节相同() {
-        let map_path = Path::new(真地图);
+        let Some(map_path_buf) = 真地图路径() else {
+            eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+            return;
+        };
+        let map_path = map_path_buf.as_path();
         if !map_path.is_file() {
-            eprintln!("[跳过] 真实地图不存在：{真地图}");
+            eprintln!("[跳过] 真实地图不存在：{}", map_path.display());
             return;
         }
-        let root = Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-        let Ok(paths) = LibPaths::discover(root) else {
+        let Some(root) = mir2_assets::client_root() else {
+            eprintln!("[跳过] 未设置 {}（图库扫描根）", mir2_assets::CLIENT_ROOT_ENV);
+            return;
+        };
+        let Ok(paths) = LibPaths::discover(&root) else {
             eprintln!("[跳过] 图库根扫描失败：{}", root.display());
             return;
         };
@@ -202,13 +228,20 @@ mod tests {
     fn 倍率出图尺寸与体积() {
         use miredit_render::RenderScale;
 
-        let map_path = Path::new(真地图);
+        let Some(map_path_buf) = 真地图路径() else {
+            eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+            return;
+        };
+        let map_path = map_path_buf.as_path();
         if !map_path.is_file() {
-            eprintln!("[跳过] 真实地图不存在：{真地图}");
+            eprintln!("[跳过] 真实地图不存在：{}", map_path.display());
             return;
         }
-        let root = Path::new(mir2_assets::DEFAULT_CLIENT_ROOT);
-        let Ok(paths) = LibPaths::discover(root) else {
+        let Some(root) = mir2_assets::client_root() else {
+            eprintln!("[跳过] 未设置 {}（图库扫描根）", mir2_assets::CLIENT_ROOT_ENV);
+            return;
+        };
+        let Ok(paths) = LibPaths::discover(&root) else {
             eprintln!("[跳过] 图库根扫描失败：{}", root.display());
             return;
         };

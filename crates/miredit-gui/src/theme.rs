@@ -11,7 +11,7 @@
 //! CrystalStudio 的 `App.axaml` 里那套深色 `#14171D` 是 **XAML 声明值**，运行期
 //! `ThemeService.ApplyPalette(dark=false, …)` 会按系统 accent 重算 ⇒ 上屏是浅色 + 金色强调。
 //! 因此 [`LIGHT`] 的每个值**一律取自运行期截图**
-//! `tools/miredit/layout/refs/crystalstudio-main-runtime-1500x950.png`（1500×950，
+//! `layout/refs/crystalstudio-main-runtime-1500x950.png`（1500×950，
 //! 内容区原点 = (8, 0)，内容区尺寸 = 1484×942，见 `metrics::REF_CONTENT_ORIGIN`）。
 //! 取色方法：对每个区域做**直方图**（Pillow，区域像素 Counter 取众数），
 //! 每个字段的文档注释里写着 `(x,y)-(x,y)` 取样矩形与占比。

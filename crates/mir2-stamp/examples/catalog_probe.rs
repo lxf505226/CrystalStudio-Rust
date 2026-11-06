@@ -4,7 +4,7 @@
 //!
 //! ```text
 //! set CARGO_INCREMENTAL=0
-//! set CARGO_TARGET_DIR=I:\miredit-stamp-target
+//! set CARGO_TARGET_DIR=<任意可写目录>\miredit-stamp-target
 //! cargo run --release -p mir2-stamp --example catalog_probe
 //! ```
 //!
@@ -25,18 +25,32 @@ use std::time::Instant;
 use mir2_stamp::catalogue::StampCatalog;
 use mir2_stamp::Stamp;
 
-/// 默认 palette.json 路径（可用环境变量 `MIR2_STAMP_PALETTE` 覆盖）。
-const 默认目录文件: &str = r"I:\miredit\_upstream\catalogue\palette.json";
+/// 取证根缺省值：`.X` / `palette.json` 的取证来源（**本文件里只出现这一处**）。
+/// 换机器用 `MIREDIT_UPSTREAM_ROOT`。
+const 缺省取证根: &str = r"I:\miredit\_upstream";
 
-fn 目录文件() -> PathBuf {
+/// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`。
+///
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 取证根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省取证根));
+    root.is_dir().then_some(root)
+}
+
+/// palette.json 路径（`MIR2_STAMP_PALETTE` 优先；否则 `<取证根>/catalogue/palette.json`）。
+fn 目录文件() -> Result<PathBuf, String> {
     match std::env::var_os("MIR2_STAMP_PALETTE") {
-        Some(v) => PathBuf::from(v),
-        None => PathBuf::from(默认目录文件),
+        Some(v) => Ok(PathBuf::from(v)),
+        None => 取证根()
+            .map(|r| r.join("catalogue").join("palette.json"))
+            .ok_or_else(|| "无取证根 MIREDIT_UPSTREAM_ROOT（探针需要取证素材）".to_string()),
     }
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = 目录文件();
+    let path = 目录文件()?;
     println!("[探针] palette.json = {}", path.display());
 
     // —— 1. load 冷/热 ——

@@ -17,8 +17,8 @@ use crate::cell::{Front, StampCellData, HEADER_LEN};
 use crate::error::StampError;
 use crate::stamp::{trailing_bytes, Stamp, StampCell};
 
-/// 印章根目录。可用环境变量 `MIR2_STAMP_ROOT` 覆盖（换机/换盘时不必改代码）。
-const 默认印章根: &str = r"I:\miredit\_upstream\Objects";
+/// 取证根缺省值：`.X` 的取证来源（**本文件里只出现这一处**）。换机器用 `MIREDIT_UPSTREAM_ROOT`。
+const 缺省取证根: &str = r"I:\miredit\_upstream";
 
 /// 往返统计。
 #[derive(Default)]
@@ -84,11 +84,21 @@ impl Stats {
     }
 }
 
-/// 印章根目录（环境变量优先）。
-fn 印章根目录() -> PathBuf {
+/// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 [`缺省取证根`]；根不存在 ⇒ `None`。
+///
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 取证根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省取证根));
+    root.is_dir().then_some(root)
+}
+
+/// 印章根目录（`MIR2_STAMP_ROOT` 优先；否则 `<取证根>/Objects`）。缺取证根 ⇒ `None`。
+fn 印章根目录() -> Option<PathBuf> {
     match std::env::var_os("MIR2_STAMP_ROOT") {
-        Some(v) => PathBuf::from(v),
-        None => PathBuf::from(默认印章根),
+        Some(v) => Some(PathBuf::from(v)),
+        None => Some(取证根()?.join("Objects")),
     }
 }
 
@@ -185,7 +195,10 @@ fn 打印差异(label: &str, original: &[u8], regenerated: &[u8]) -> String {
 /// 门禁 1：**全量往返**。逐个 `parse → to_bytes`，断言与原文件逐字节相等。
 #[test]
 fn 全量往返_全部印章逐字节相等() {
-    let root = 印章根目录();
+    let Some(root) = 印章根目录() else {
+        println!("[往返] 无取证根 MIREDIT_UPSTREAM_ROOT ⇒ 本用例 skip（0 成功 / 0 失败）");
+        return;
+    };
     println!("[往返] 根目录 = {}", root.display());
     let Some(files) = 列出印章(&root) else {
         println!("[往返] 目录不存在 ⇒ 本用例 skip（0 成功 / 0 失败）");
@@ -249,7 +262,10 @@ fn 全量往返_全部印章逐字节相等() {
 /// 门禁 2：**版本分布**。只读文件头 3 字节（按 C# `:107` 的探测规则分类）。
 #[test]
 fn 版本分布统计() {
-    let root = 印章根目录();
+    let Some(root) = 印章根目录() else {
+        println!("[版本] 无取证根 MIREDIT_UPSTREAM_ROOT ⇒ 本用例 skip");
+        return;
+    };
     let Some(files) = 列出印章(&root) else {
         println!("[版本] 目录不存在 ⇒ 本用例 skip");
         return;
@@ -301,7 +317,10 @@ fn 版本分布统计() {
 /// 门禁 2·附：真实资源**尾部必须没有多余字节**（否则往返会静默丢尾巴）。
 #[test]
 fn 尾随字节必须为0() {
-    let root = 印章根目录();
+    let Some(root) = 印章根目录() else {
+        println!("[尾随] 无取证根 MIREDIT_UPSTREAM_ROOT ⇒ 本用例 skip");
+        return;
+    };
     let Some(files) = 列出印章(&root) else {
         println!("[尾随] 目录不存在 ⇒ 本用例 skip");
         return;
@@ -373,7 +392,8 @@ fn 负向_截断文件必须报错() {
     }
 
     // 用例 C：把真实文件砍一半 ⇒ 必须 Err（不能「读多少算多少」）
-    if let Some(files) = 列出印章(&印章根目录()) {
+    let 语料 = 印章根目录().and_then(|r| 列出印章(&r));
+    if let Some(files) = 语料 {
         if let Some(first) = files.first() {
             if let Ok(bytes) = fs::read(first) {
                 let half = &bytes[..bytes.len() / 2];
@@ -598,7 +618,10 @@ fn 历史版本_v0_v1可读且只能语义往返() {
 /// 本用例把这条**人写的口径**钉在代码上，防止文档与实现各说各话。
 #[test]
 fn readme范例_mir_00000必须吻合() {
-    let root = 印章根目录();
+    let Some(root) = 印章根目录() else {
+        println!("[README范例] 无取证根 MIREDIT_UPSTREAM_ROOT ⇒ 本用例 skip");
+        return;
+    };
     let path = root.join("mir").join("mir_00000.X");
     if !path.exists() {
         println!("[README范例] 文件不存在（{}）⇒ 本用例 skip", path.display());
@@ -717,7 +740,10 @@ fn 转储行(label: &str, stamp: &Stamp, bytes_len: usize, trailing: usize) -> V
 /// 必须完全相同。本用例同时断言「抽到的 5 个文件自身往返逐字节相等」。
 #[test]
 fn 字段级转储_5个样本() {
-    let root = 印章根目录();
+    let Some(root) = 印章根目录() else {
+        println!("[转储] 无取证根 MIREDIT_UPSTREAM_ROOT ⇒ 本用例 skip");
+        return;
+    };
     let Some(files) = 列出印章(&root) else {
         println!("[转储] 目录不存在 ⇒ 本用例 skip");
         return;

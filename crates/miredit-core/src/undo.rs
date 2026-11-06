@@ -205,7 +205,25 @@ impl UndoStack {
     }
 
     /// 撤销一步；返回还原了几格（0 = 没有可撤销的步骤）。来源：`edit.rs:1289-1305`。
+    ///
+    /// 本方法**只管地图**（旧测试与纯地图调用方用它）；要连带维护派生量（五层计数）请用
+    /// [`UndoStack::undo_with`]。
     pub fn undo(&mut self, map: &mut Map) -> usize {
+        self.undo_with(map, |_, _, _, _| {})
+    }
+
+    /// 撤销一步，并在**每写回一格**之后回调 `on_write(x, y, 写前格, 写后格)`。
+    ///
+    /// 为什么要回调：五层计数（[`crate::layer_counts`]）是「格的派生量」，
+    /// 撤销不经过 [`crate::Document::write_view_cell`]（那里要 `&mut Document`，
+    /// 与这里要的 `&mut Map` 是同一块内存）⇒ 用「写一格报一格」的方式让调用方
+    /// 在**同一处**把计数改回去。回调在**写完之后**调用，`写后格 == 该步的 before`。
+    ///
+    /// 返回还原了几格（越界格跳过、不回调 —— 与 `undo` 的原行为一致）。
+    pub fn undo_with<F>(&mut self, map: &mut Map, mut on_write: F) -> usize
+    where
+        F: FnMut(u16, u16, Cell, Cell),
+    {
         let Some(step) = self.undo.pop() else {
             return 0;
         };
@@ -213,7 +231,9 @@ impl UndoStack {
         // 逆序还原：同一格在一步里只出现一次，这里的顺序只是为了让"后写的先退"
         for c in step.changes.iter().rev() {
             if let Some(slot) = cell_mut(map, c.x, c.y) {
+                let prev = *slot;
                 *slot = c.before;
+                on_write(c.x, c.y, prev, c.before);
                 n += 1;
             }
         }
@@ -222,14 +242,26 @@ impl UndoStack {
     }
 
     /// 重做一步；返回重放了几格（0 = 没有可重做的步骤）。来源：`edit.rs:1308-1323`。
+    ///
+    /// 同 [`UndoStack::undo`]：只管地图；要连带更新计数请用 [`UndoStack::redo_with`]。
     pub fn redo(&mut self, map: &mut Map) -> usize {
+        self.redo_with(map, |_, _, _, _| {})
+    }
+
+    /// 重做一步，并在每写回一格之后回调（语义同 [`UndoStack::undo_with`]）。
+    pub fn redo_with<F>(&mut self, map: &mut Map, mut on_write: F) -> usize
+    where
+        F: FnMut(u16, u16, Cell, Cell),
+    {
         let Some(step) = self.redo.pop() else {
             return 0;
         };
         let mut n = 0;
         for c in step.changes.iter() {
             if let Some(slot) = cell_mut(map, c.x, c.y) {
+                let prev = *slot;
                 *slot = c.after;
+                on_write(c.x, c.y, prev, c.after);
                 n += 1;
             }
         }
@@ -367,6 +399,53 @@ mod tests {
         assert!(u.dirty(), "撤销到保存点之前又该脏");
         u.redo(&mut map);
         assert!(!u.dirty(), "重做回保存点应重新变干净");
+    }
+
+    /// `undo_with` / `redo_with`：每写回一格回调一次，且「写前 / 写后」两个格值必须是**真值**。
+    ///
+    /// 五层计数（[`crate::layer_counts`]）就是靠这条回调同步的：撤销要把计数按
+    /// 「写前格 → 写后格」的掩码差改回去。回调值一旦错位，计数会静默跑偏。
+    #[test]
+    fn 撤销回调逐格报告前后值() {
+        let mut map = 造图(2, 2, CellFormat::New14);
+        let before = *map.cell(1, 0).unwrap();
+        let mut after = before;
+        after.bk_img = 0x8005;
+        // 先把地图写成「改后值」（撤销要把它退回 before ⇒ 回调的写前值 = after）
+        *cell_mut(&mut map, 1, 0).unwrap() = after;
+        let mut u = UndoStack::new();
+        u.commit(vec![Change {
+            x: 1,
+            y: 0,
+            before,
+            after,
+        }]);
+
+        let mut 撤销轨迹 = Vec::new();
+        assert_eq!(
+            u.undo_with(&mut map, |x, y, prev, next| {
+                撤销轨迹.push((x, y, prev, next));
+            }),
+            1
+        );
+        assert_eq!(
+            撤销轨迹,
+            vec![(1u16, 0u16, after, before)],
+            "撤销：写前 = 改后值，写后 = 改前值"
+        );
+
+        let mut 重做轨迹 = Vec::new();
+        assert_eq!(
+            u.redo_with(&mut map, |x, y, prev, next| {
+                重做轨迹.push((x, y, prev, next));
+            }),
+            1
+        );
+        assert_eq!(
+            重做轨迹,
+            vec![(1u16, 0u16, before, after)],
+            "重做：写前 = 改前值，写后 = 改后值"
+        );
     }
 
     /// 整格快照：撤销能还原**任何一层**（图号 + 库号 + 位）。

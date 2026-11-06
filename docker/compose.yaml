@@ -1,15 +1,18 @@
 # =============================================================================
-# GodM2 地图编辑器 —— 一键起（后端 + 前端，一个容器全包）
+# Crystal Studio —— 一键起（后端 + 前端，一个容器全包）
 #
-#   1) 起：    cd <本目录>;  docker compose up -d --build
+#   1) 起：    cd docker;  docker compose up -d --build
 #   2) 验：    ./verify.sh          （Windows：.\verify.ps1）
 #   3) 看：    http://<本机或 NAS 的 IP>:8080/
 #
-# ⚠ 构建上下文是 `../../`（= `tools/`），**不是**本目录、也不是 `tools/miredit/`。
-#   原因：crates/mir2-assets 依赖 `../../../wil2atlas`（= tools/wil2atlas）。
+# ⚠ 构建上下文是**仓库根**（本目录的上一级 `..`），dockerfile 是 `docker/Dockerfile`。
+#   独立 clone 后目录名叫什么都可以（`CrystalStudio-Rust` / `crystal-studio` / …）：
+#   `crates/mir2-assets` 对解码器的依赖是**仓库内相对路径** `vendor/wil2atlas`，
+#   不再假设「上一级还并列着一个 wil2atlas/」。
 #
-# 镜像里自带二进制与静态前端；下面四个卷是**数据**，不挂也能起，
-# 但 /api/map/open、/api/tiles、/api/stamps 会如实返回 404/503（不伪造数据）。
+# 镜像里自带二进制与静态前端；下面四个卷是**数据**，缺省指向本目录下的空占位目录
+# （首次 `up` 时由 Docker 自动创建）⇒ 不挂真数据也能起，但 /api/map/open、/api/tiles、
+# /api/stamps 会如实返回 404/503（**不伪造数据**）。要真数据请设下面四个环境变量。
 # =============================================================================
 
 services:
@@ -18,10 +21,10 @@ services:
   # ---------------------------------------------------------------------------
   miredit:
     build:
-      context: ../..                      # = tools/（必须，见文件头）
-      dockerfile: miredit/docker/Dockerfile
+      context: ..                          # = 仓库根（必须，见文件头）
+      dockerfile: docker/Dockerfile
       target: runtime                     # 后端+前端；要 nginx 前置层请用 profile: front
-    image: godm2/miredit:dev
+    image: crystalstudio/miredit:dev
     container_name: miredit
     ports:
       # 宿主端口可用 MIREDIT_PORT 覆盖，如 MIREDIT_PORT=18080 docker compose up -d
@@ -38,13 +41,13 @@ services:
       MIREDIT_PALETTE_JSON: "/data/crystalstudio/catalogue/palette.json"
     volumes:
       # ---- 地图（.map）：/api/map/open 的白名单根 ----------------------------
-      - "${MIREDIT_MAP_DIR:-../../../GodotClient/maps}:/data/maps:ro"
+      - "${MIREDIT_MAP_DIR:-./data/maps}:/data/maps:ro"
       # ---- 图库（.wil/.wzl/.wix/.wzx）：/api/tiles、/api/palette ------------
-      # 客户端根（22 GB），只读挂载不复制
-      - "${MIREDIT_CLIENT_DIR:-../../../client/热血传奇23周年客户端}:/data/client:ro"
+      # 客户端根（二十多 GB），只读挂载不复制
+      - "${MIREDIT_CLIENT_DIR:-./data/client}:/data/client:ro"
       # ---- 印章目录：catalogue/ 与 Objects/ 必须并列在同一个 dataRoot 下 ----
-      - "${MIREDIT_CATALOGUE_DIR:-../../../CrystalStudio/catalogue}:/data/crystalstudio/catalogue:ro"
-      - "${MIREDIT_OBJECTS_DIR:-../../../CrystalStudio/Objects}:/data/crystalstudio/Objects:ro"
+      - "${MIREDIT_CATALOGUE_DIR:-./data/crystalstudio/catalogue}:/data/crystalstudio/catalogue:ro"
+      - "${MIREDIT_OBJECTS_DIR:-./data/crystalstudio/Objects}:/data/crystalstudio/Objects:ro"
     healthcheck:
       # 探 /api/health（不是 /）：/ 依赖静态目录，拿它当健康判据会把「没挂静态」误判成「进程挂了」
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/api/health >/dev/null || exit 1"]
@@ -68,10 +71,10 @@ services:
   front:
     profiles: ["front"]
     build:
-      context: ../..
-      dockerfile: miredit/docker/Dockerfile
+      context: ..
+      dockerfile: docker/Dockerfile
       target: web
-    image: godm2/miredit-front:dev
+    image: crystalstudio/miredit-front:dev
     container_name: miredit-front
     ports:
       - "${MIREDIT_FRONT_PORT:-8081}:8080"

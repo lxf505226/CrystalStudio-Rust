@@ -27,14 +27,28 @@ use miredit_render::{
     RenderScale, Viewport, INTERMEDIATE_MAX_BYTES, SCALED_MAX_BYTES,
 };
 
-/// 抽样地图（真实路径，不是猜的）：`0.map` 700×700 / Old12（52+12wh 精确整除）。
-const 真实地图: &str = r"E:\GodM2\GodotClient\maps\0.map";
+/// 抽样地图（**相对资产根** `MIREDIT_ASSET_ROOT`，不是猜的）：`0.map` 700×700 / Old12。
+const 真实地图: &str = "GodotClient/maps/0.map";
+
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[跳过]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
 
 // ---------------------------------------------------------------------------
 // 资源 / 造图小工具（与 tests/acceptance.rs 同款，缺资源就跳过）
 // ---------------------------------------------------------------------------
 
-/// `tools/miredit/layout/refs`（相对本 crate 清单目录）。
+/// `layout/refs`（相对本 crate 清单目录）。
 fn refs_目录() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("..")
@@ -77,24 +91,28 @@ fn 打开图源() -> Option<WilSource> {
     }
 }
 
-/// 读并解析一张地图；失败返回 `None`（打印原因）。
-fn 读地图(path: &str) -> Option<Map> {
-    let p = Path::new(path);
+/// 读并解析一张地图（`相对` = 相对资产根的路径段）；失败返回 `None`（打印原因）。
+fn 读地图(相对: &str) -> Option<Map> {
+    let Some(root) = 资产根() else {
+        eprintln!("[跳过] 无资产根 MIREDIT_ASSET_ROOT（需要真实地图素材）");
+        return None;
+    };
+    let p = root.join(相对);
     if !p.is_file() {
-        eprintln!("[跳过] 地图不存在：{path}");
+        eprintln!("[跳过] 地图不存在：{}", p.display());
         return None;
     }
-    let bytes = match std::fs::read(p) {
+    let bytes = match std::fs::read(&p) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("[跳过] 读文件失败 {path}：{e}");
+            eprintln!("[跳过] 读文件失败 {}：{e}", p.display());
             return None;
         }
     };
     match Map::parse(&bytes) {
         Ok(m) => Some(m),
         Err(e) => {
-            eprintln!("[跳过] 解析失败 {path}：{e}");
+            eprintln!("[跳过] 解析失败 {}：{e}", p.display());
             None
         }
     }

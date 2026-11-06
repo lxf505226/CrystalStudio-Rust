@@ -44,8 +44,25 @@ use miredit_core::{
 use mir2_format::FormatId;
 use mir2_map::Cell;
 
+/// 资产根缺省值：本机真实根（**整个文件里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
+const 缺省资产根: &str = r"E:\GodM2";
+
+/// 资产根：`MIREDIT_ASSET_ROOT` → 缺省 [`缺省资产根`]。
+///
+/// 根目录不存在（公开仓/PR 的机器上没有游戏素材）⇒ `None`，调用方打印 `[skip]` 并返回。
+/// 只做 `var_os` + `PathBuf`，不引入任何第三方库。
+fn 资产根() -> Option<PathBuf> {
+    let root = std::env::var_os("MIREDIT_ASSET_ROOT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(缺省资产根));
+    root.is_dir().then_some(root)
+}
+
 /// 真实地图样本（700×700 / 12 B 每格 / 无库号字节）。
-const 地图路径: &str = r"E:\GodM2\GodotClient\maps\0.map";
+fn 地图路径() -> Option<PathBuf> {
+    let p = 资产根()?.join("GodotClient").join("maps").join("0.map");
+    p.is_file().then_some(p)
+}
 
 /// 临时目录（`%TEMP%` 下，按 `tag` + **进程 ID** 分开；每次先清空）。
 ///
@@ -253,9 +270,13 @@ fn 找地表3x3(ed: &EditSession, 避开: Selection) -> (u16, u16) {
 /// **门 4**：粘贴后撤销 ⇒ `to_bytes()` 与操作前逐字节相等。
 #[test]
 fn 门2门4_复制粘贴0map副本_逐字节核对与撤销() {
+    let Some(地图) = 地图路径() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+        return;
+    };
     let d = 临时目录("gate2");
     let 副本 = d.join("0.map");
-    std::fs::copy(地图路径, &副本).expect("复制 0.map 副本");
+    std::fs::copy(&地图, &副本).expect("复制 0.map 副本");
     let 原字节 = std::fs::read(&副本).expect("读副本");
     let mut ed = EditSession::load(&副本).expect("打开 0.map 副本");
     assert_eq!(ed.document().format_id(), FormatId::Old12, "0.map 是 12 B/格");
@@ -502,9 +523,13 @@ fn 门2补充_三族与三个库号逐格搬运() {
 /// **门 4**：剪切后撤销 ⇒ 逐字节相等。
 #[test]
 fn 门3门4_剪切3x3_只清源9格且撤销逐字节() {
+    let Some(地图) = 地图路径() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+        return;
+    };
     let d = 临时目录("gate3");
     let 副本 = d.join("0.map");
-    std::fs::copy(地图路径, &副本).expect("复制 0.map 副本");
+    std::fs::copy(&地图, &副本).expect("复制 0.map 副本");
     let 原字节 = std::fs::read(&副本).expect("读副本");
     let mut ed = EditSession::load(&副本).expect("打开副本");
     let h = ed.map().height;
@@ -1125,9 +1150,13 @@ fn 找有物件3x3(
 ///    值没变 ⇒ 0 格、不产生空步。
 #[test]
 fn 粘贴路径不套占用闸门() {
+    let Some(地图) = 地图路径() else {
+        eprintln!("[skip] 无资产根 MIREDIT_ASSET_ROOT（或缺 GodotClient/maps/0.map）");
+        return;
+    };
     let d = 临时目录("paste_nogate");
     let 副本 = d.join("0.map");
-    std::fs::copy(地图路径, &副本).expect("复制 0.map 副本");
+    std::fs::copy(&地图, &副本).expect("复制 0.map 副本");
     let 原字节 = std::fs::read(&副本).expect("读副本");
     let mut ed = EditSession::load(&副本).expect("打开 0.map 副本");
 

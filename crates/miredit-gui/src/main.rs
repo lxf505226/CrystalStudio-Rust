@@ -12,7 +12,9 @@
 //! > 所以诊断输出照样看得到；`windows_subsystem` 只影响"要不要新开一个控制台窗"。
 //!
 //! 命令行开关见 [`miredit_gui::ui_text::DIAG_USAGE`]：
-//! - 无开关：打开 [`miredit_gui::mapdoc::DEFAULT_MAP_PATH`]；
+//! - 无开关：用 [`miredit_gui::mapdoc::DEFAULT_MAP_PATH`]（**恒为空 = 未指定地图**：
+//!   公开仓没有内建缺省图，界面会如实说「未指定地图」并留空画布，不猜路径）；
+//! - `--map <路径>`：打开哪张图（**唯一**指定地图的入口）。
 //! - `--probe x,y`：**不开窗**，只把该格的单元格信息打到 stderr（与面板同一套取数）；
 //! - `--edit-* [--save]`：**不开窗**跑编辑脚本并按需原子写回（见 [`miredit_gui::editrun`]）；
 //! - `--shot` / `--autodrag` / `--gate2-*`：取证用（截图、拖动实测、同视点比对）。

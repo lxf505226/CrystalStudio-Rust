@@ -17,7 +17,9 @@
 //! 1. [`Map::header_raw`] 原样保留 52 字节头，写回时逐字节照抄（含 w/h 之外的 48 字节）；
 //! 2. [`Cell::tail`]（`Ext36` 的 14..35）原样保存原样写回，**绝不清零**。
 
-use crate::cell::{read_cell, write_cell, Cell, CellFormat, HEADER_LEN, MAX_CELLS};
+use crate::cell::{
+    read_cell, validate_dimensions, write_cell, Cell, CellFormat, HEADER_LEN,
+};
 use crate::error::MapError;
 
 /// 一张地图。
@@ -44,17 +46,24 @@ impl Map {
     /// 解析 `.map` 字节流。
     ///
     /// 判定顺序（尺寸护栏**先于**格长判据，与 C# `LegacyMapReader.cs:47-54`
-    /// 的 `ValidateDimensions` 同序）：
+    /// 的 `ValidateDimensions` 同序，尺寸判据本身与 `MapDimensions.cs:11-12@acfbbf8a`
+    /// 的 `CanRoundTrip` 三条件一一对应）：
     /// 1. `len < 52` ⇒ [`MapError::TooShort`]；
     /// 2. `w == 0 || h == 0` ⇒ [`MapError::ZeroDimension`]
     ///    （真值：客户端 `map_loader.gd:94-95` 与 C# `LegacyMapReader.cs:50` 都直接拒绝。
     ///    放行会把「52 字节全零」这类损坏/截断文件静默救活成 0×0 空地图，且编辑器仍认为它可保存）；
-    /// 3. `w*h > MAX_CELLS`（16_000_000）⇒ [`MapError::TooManyCells`]
+    /// 3. `w > 32767 || h > 32767` ⇒ [`MapError::DimensionTooLarge`]
+    ///    （真值：C# `CanRoundTrip` 的两条 `<= short.MaxValue`。`.map` 头的宽高是
+    ///    16 位**有符号**字段，超限写盘后回读不回来 ⇒ 必须在入口就拒，不许读到内存里再截断）；
+    /// 4. `w*h > MAX_CELLS`（16_000_000）⇒ [`MapError::TooManyCells`]
     ///    （**必须在分配之前**：`Cell` 是 36 B 定长，12 B/格的图内存约为文件的 3 倍，
-    ///    口径见 [`MAX_CELLS`] 的文档 / C# `LegacyMapReader.cs:50`）；
-    /// 4. 按头部 w/h 算三档期望长度，与 `len` 精确比对 ⇒ 得 [`CellFormat`]；
+    ///    口径见 [`crate::MAX_CELLS`] 的文档）；
+    /// 5. 按头部 w/h 算三档期望长度，与 `len` 精确比对 ⇒ 得 [`CellFormat`]；
     ///    三档都不等 ⇒ [`MapError::LengthMismatch`]（错误里列出三档期望长度与实际长度）；
-    /// 5. 按档位逐格解码，列优先。
+    /// 6. 按档位逐格解码，列优先。
+    ///
+    /// 第 2~4 条由 [`crate::validate_dimensions`] 单点实现（顺序即官方短路顺序），
+    /// 本函数不另写一套判断。
     ///
     /// 本函数不校验任何字段语义（语义未确认），只保证字节可逆。
     pub fn parse(bytes: &[u8]) -> Result<Map, MapError> {
@@ -67,23 +76,15 @@ impl Map {
         let width = u16::from_le_bytes([header_raw[0], header_raw[1]]);
         let height = u16::from_le_bytes([header_raw[2], header_raw[3]]);
 
-        // 护栏①（E4）：0 尺寸不是「合法空地图」。
-        // 若放到长度判据之后，`w*h == 0` 会因为三档期望长度都等于 52 而被判成 Old12 空图。
-        if width == 0 || height == 0 {
-            return Err(MapError::ZeroDimension { width, height });
-        }
-
-        // 护栏②（E5）：16M 格上限，口径与 C# `LegacyMapReader.cs:50` 一致。
-        // 必须在 `Vec::with_capacity` 之前判：否则一张声明 5000×5000 的坏头部会先申请约 900 MB。
+        // 尺寸护栏（官方三条件合取，顺序照 C# `MapDimensions.cs:11-12@acfbbf8a` 的短路顺序）：
+        // ① 0 尺寸；② 单边 > 32767；③ 格数 > 16M。
+        //
+        // ① 若放到长度判据之后，`w*h == 0` 会因为三档期望长度都等于 52 而被判成 Old12 空图；
+        // ② 若缺失，会一条条漏到长度判据去报「长度不匹配」——`32768×1` 的最初表现正是如此，
+        //    那是把「尺寸非法」误诊成「文件损坏」；
+        // ③ 必须在 `Vec::with_capacity` 之前判：否则一张声明 5000×5000 的坏头部会先申请约 900 MB。
+        validate_dimensions(width, height)?;
         let cell_count = u64::from(width) * u64::from(height);
-        if cell_count > MAX_CELLS as u64 {
-            return Err(MapError::TooManyCells {
-                width,
-                height,
-                cells: cell_count,
-                limit: MAX_CELLS as u64,
-            });
-        }
 
         let format = CellFormat::detect(width, height, bytes.len())
             .ok_or_else(|| MapError::length_mismatch(width, height, bytes.len()))?;
@@ -114,6 +115,12 @@ impl Map {
     /// 头部字节一律取自 [`Map::header_raw`]。因此若要改变地图尺寸，必须同时改
     /// `header_raw[0..4]`、`width`、`height` 与 `cells`，否则写出的文件会自相矛盾
     /// （长度与头部声明的 w/h 不匹配）。
+    ///
+    /// ⚠ 本函数**不**再做尺寸校验，也不再需要：`header_raw` 是逐字节照抄的，
+    /// 不存在 `as i16` 这类会把宽高改掉的窄化转换。合法入口只有 [`Map::parse`]，
+    /// 它已经用 [`crate::validate_dimensions`] 把宽高限在 `1..=32767` 且格数 `<= 16M`；
+    /// 若你手工构造/改写了 `Map` 的字段，请自己对 `(width, height)` 调一次
+    /// [`crate::validate_dimensions`]，否则可能写出一张「存得下、读不回来」的图。
     pub fn to_bytes(&self) -> Vec<u8> {
         let cell_size = self.format.cell_size();
         let mut out = Vec::with_capacity(HEADER_LEN + self.cells.len() * cell_size);
@@ -147,7 +154,7 @@ impl Map {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cell::{expected_lengths, TAIL_LEN};
+    use crate::cell::{expected_lengths, OLD12_CELL_SIZE, TAIL_LEN};
 
     /// 造一张 `w*h` 的 Old12 图原始字节：头 52 字节填充非零，格内容按 idx 变化。
     fn 造图(w: u16, h: u16, fmt: CellFormat) -> Vec<u8> {
@@ -366,5 +373,112 @@ mod tests {
         // 防有人改 MAX_CELLS 却不同步注释/C# 口径
         assert_eq!(crate::MAX_CELLS, 16_000_000);
         assert_eq!(4000usize * 4000, crate::MAX_CELLS);
+        // 单边上限同理（C# `MapDimensions.cs:11-12` 的两条 `<= short.MaxValue`）
+        assert_eq!(crate::MAX_DIMENSION, 32767);
+    }
+
+    /// 单边超 32767 必须在**长度判据之前**报「尺寸超限」，
+    /// 而不是掉到长度判据去报 [`MapError::LengthMismatch`]（更不许报 [`MapError::TooManyCells`]）。
+    ///
+    /// 这是本次修的核心缺口：旧代码只查 `w*h > 16M`，`32768×1`（32768 格）一路漏到长度判据，
+    /// 用户看到的是「文件损坏」，实际是「尺寸根本存不下去」。
+    #[test]
+    fn 超单边上限先报尺寸超限不报长度() {
+        let 假头 = |w: u16, h: u16| {
+            let mut raw = vec![0u8; HEADER_LEN]; // 只给 52 字节：若漏到长度判据必然 LengthMismatch
+            raw[0..2].copy_from_slice(&w.to_le_bytes());
+            raw[2..4].copy_from_slice(&h.to_le_bytes());
+            raw
+        };
+
+        for (w, h) in [(32768u16, 1u16), (1, 32768), (65535, 1), (1, 65535), (40000, 1)] {
+            let err = Map::parse(&假头(w, h))
+                .err()
+                .unwrap_or_else(|| panic!("{w}×{h} 单边超 32767，必须 Err"));
+            match err {
+                MapError::DimensionTooLarge {
+                    width,
+                    height,
+                    limit,
+                } => {
+                    assert_eq!((width, height), (w, h), "错误里的宽高应是头部实际值");
+                    assert_eq!(limit, 32767, "上限必须是 short.MaxValue");
+                }
+                other => panic!("{w}×{h} 应报 DimensionTooLarge，实际 {other:?}"),
+            }
+            let msg = err.to_string();
+            assert!(msg.contains("32767"), "{w}×{h} 的信息必须点名 32767：{msg}");
+            assert!(
+                msg.contains("CanRoundTrip"),
+                "{w}×{h} 的信息必须点名 C# CanRoundTrip：{msg}"
+            );
+            assert!(
+                !msg.contains("长度"),
+                "{w}×{h} 不该被描述成长度问题：{msg}"
+            );
+        }
+
+        // 32767×1 只给 52 字节 ⇒ 尺寸合法，落到长度判据（证明 32767「放行」是真的放行）
+        assert!(
+            matches!(
+                Map::parse(&假头(32767, 1)),
+                Err(MapError::LengthMismatch { .. })
+            ),
+            "32767×1 尺寸合法，应放行到长度判据"
+        );
+    }
+
+    /// 同时命中「单边超 32767」与「格数超 16M」时，按官方短路顺序报**尺寸**超限。
+    #[test]
+    fn 双超时报尺寸而非格数() {
+        let mut raw = vec![0u8; HEADER_LEN];
+        raw[0..2].copy_from_slice(&30000u16.to_le_bytes());
+        raw[2..4].copy_from_slice(&30000u16.to_le_bytes());
+        // 30000×30000 = 900M 格（超 16M）且单边 30000 ≤ 32767（不超）
+        assert!(
+            matches!(Map::parse(&raw), Err(MapError::TooManyCells { .. })),
+            "30000×30000 单边没超 32767，应报格数超上限"
+        );
+
+        // 40000×40000：两条都超 ⇒ 官方先短路在 short.MaxValue 上
+        raw[0..2].copy_from_slice(&40000u16.to_le_bytes());
+        raw[2..4].copy_from_slice(&40000u16.to_le_bytes());
+        assert!(
+            matches!(
+                Map::parse(&raw),
+                Err(MapError::DimensionTooLarge { .. })
+            ),
+            "40000×40000 同时超两条，应报尺寸超 32767（官方短路顺序）"
+        );
+    }
+
+    /// 单边恰好 32767 的**整图往返**：解析 → 写回 → 逐字节相等。
+    ///
+    /// 体积：`52 + 32767 × 12 = 393_256` 字节（约 384 KiB），可控。
+    #[test]
+    fn 单边32767整图往返() {
+        let w = 32767u16;
+        let h = 1u16;
+        let raw = 造图(w, h, CellFormat::Old12);
+        assert_eq!(raw.len(), HEADER_LEN + 32767 * OLD12_CELL_SIZE);
+        assert_eq!(raw.len(), 393_256);
+
+        let map = Map::parse(&raw).expect("32767×1 是合法尺寸，必须解析成功");
+        assert_eq!((map.width, map.height), (w, h));
+        assert_eq!(map.format, CellFormat::Old12);
+        assert_eq!(map.cells.len(), 32767);
+        // 两端都要取得到，且中间不串位（列优先 idx = x*h + y，h=1 ⇒ idx = x）
+        assert!(map.cell(0, 0).is_some());
+        assert!(map.cell(32766, 0).is_some());
+        assert!(map.cell(32767, 0).is_none(), "x=32767 越界");
+
+        let back = map.to_bytes();
+        assert_eq!(back.len(), raw.len());
+        assert_eq!(back, raw, "32767×1 的整图往返必须逐字节相等");
+
+        // 再解析一次：宽高与格数都得回来
+        let again = Map::parse(&back).expect("写回的字节必须能再解析");
+        assert_eq!((again.width, again.height), (w, h));
+        assert_eq!(again.cells.len(), 32767);
     }
 }
