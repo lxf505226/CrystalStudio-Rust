@@ -18,6 +18,7 @@
 ### 修复
 
 - **A-018 前景加性混合帧落格锚点**：按上游 C# `MapSpriteDrawing.cs:43-52@f84566b` 的 `front && blend` 分支实现——Old12 三格库分支（库号 `14/27/(99,199)`）、0-based 帧号窗口 `2723..2732`、门偏移参与窗口判断；非混合帧仍走底边锚点、输出逐字节不变。A-018b（14 字节档 202 格因视图档位推不出库号）仍留旧位置，按「推不出就不猜」登记。
+- **A-024 `.X` 三族库号换算**：`.X` 的 `BackLibrary/MiddleLibrary/Front.Library` 是 C# 全局分配号（Wemade `0/1/2..99`、Shanda `100..109/110..119/120..150`），地图侧是族内页号；换算单点收敛到 `miredit-core::cells_from_stamp(stamp, 号段)`，GUI 与 Web 共用，未建模的 Sanxiu/Mir3/AniTiles 一律拒绝（不猜、不原样透传）。Old12 落位 `area=0`、New14 `sm_tiles=0` 已逐格验证。
 
 ### 已知缺口
 

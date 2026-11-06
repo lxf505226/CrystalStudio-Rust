@@ -24,6 +24,10 @@ use miredit_render::stamp::{render_stamp, StampRenderOptions};
 
 use crate::metrics as m;
 use crate::stamp_panel::{positioned_cells, render_thumb};
+
+/// 探针用的**库号号段**（A-024）：本机 `.X` 素材都是 CrystalStudio 自带的 Wemade 档，
+/// 探针又不接 `mapdoc::Assets` ⇒ 这里显式钉成 `Wemade`（不在渲染层猜）。
+const 号段: crate::stamp_place::库号号段 = crate::stamp_place::库号号段::Wemade;
 use crate::ui_text as tx;
 
 /// 跑完整套探针；返回进程退出码（0 = 全部对账通过）。
@@ -131,12 +135,12 @@ pub fn run(sweep: bool) -> i32 {
             continue;
         };
         // 面板路径
-        let panel = render_thumb(&res.path, &src);
+        let panel = render_thumb(&res.path, &src, 号段);
         // 直接调用（基准）
         let direct = std::fs::read(&res.path)
             .ok()
             .and_then(|b| Stamp::parse(&b).ok())
-            .and_then(|s| positioned_cells(&s).map(|c| (s.cells.len(), c)))
+            .and_then(|s| positioned_cells(&s, 号段).map(|c| (s.cells.len(), c)))
             .and_then(|(n, cells)| {
                 render_stamp(
                     &cells,
@@ -268,7 +272,7 @@ pub fn run(sweep: bool) -> i32 {
                 err += 1;
                 continue;
             };
-            match render_thumb(&r.path, &src) {
+            match render_thumb(&r.path, &src, 号段) {
                 Ok((cells, img)) => {
                     if img.cells_drawn == 0 || img.width == 0 {
                         empty += 1;
@@ -446,7 +450,7 @@ fn lru_drill(catalog: &mut StampCatalog, src: &WilSource) -> Drill {
             // 真渲染（与面板 `ensure` 同一条 `render_thumb`）
             let ok = catalog
                 .resolve(&id)
-                .map(|r| render_thumb(&r.path, src).is_ok())
+                .map(|r| render_thumb(&r.path, src, 号段).is_ok())
                 .unwrap_or(false);
             decodes += 1;
             cache.insert(id, ok);

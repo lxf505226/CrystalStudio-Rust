@@ -382,7 +382,15 @@ fn 门6_type5拒绝带地表内容_注入验证() {
             name: "mir_00000".to_string(),
             bounds: Some((-1, -2, 4, 3)),
         };
-        let out = stamp_place::place(&mut ed, &mut 宿主, &armed, &印章, 8, 8)
+        let out = stamp_place::place(
+            &mut ed,
+            &mut 宿主,
+            &armed,
+            &印章,
+            8,
+            8,
+            miredit_core::库号号段::Wemade,
+        )
             .expect("纯物件印章在 Type5 上应放行（拒的是逐格地表，不是整张图）");
         assert_eq!(out.cells, 8, "New14/Type5 上放同一枚纯物件印章都改 8 格");
         println!("GATE6 反向对照（Type5 + 纯物件印章）放行：改动 {} 格", out.cells);

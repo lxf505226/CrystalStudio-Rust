@@ -40,7 +40,13 @@ impl StampPanel {
     /// 取（必要时渲染并上传）列表第 `idx` 项的缩略图。
     ///
     /// 缺帧 / 读不出 / 渲染失败一律 `Hit::Missing`（负缓存），**绝不返回一张假图**。
-    fn ensure(&mut self, ctx: &Context, src: Option<&WilSource>, idx: usize) -> Hit {
+    fn ensure(
+        &mut self,
+        ctx: &Context,
+        src: Option<&WilSource>,
+        号段: crate::stamp_place::库号号段,
+        idx: usize,
+    ) -> Hit {
         let key = match (self.catalog(), self.visible.get(idx)) {
             (Some(cat), Some(Item::Entry(i))) => cat
                 .all()
@@ -79,7 +85,7 @@ impl StampPanel {
             return Hit::Missing;
         };
         self.decodes += 1;
-        match render_thumb(&path, src) {
+        match render_thumb(&path, src, 号段) {
             Ok((_, img)) if img.width > 0 && img.height > 0 && img.cells_drawn > 0
                 && img.missing == 0 =>
             {
@@ -118,6 +124,7 @@ impl StampPanel {
         &mut self,
         ctx: &Context,
         src: Option<&WilSource>,
+        号段: crate::stamp_place::库号号段,
     ) -> Option<(TextureId, u32, u32)> {
         let id = self.selected.as_ref()?.id.clone();
         if let Hit::Ready(t, w, h) = self.lookup(&id) {
@@ -130,7 +137,7 @@ impl StampPanel {
         let src = src?;
         let path = self.catalog_mut().and_then(|c| c.resolve(&id))?.path;
         self.decodes += 1;
-        match render_thumb(&path, src) {
+        match render_thumb(&path, src, 号段) {
             Ok((_, img)) if img.width > 0 && img.cells_drawn > 0 && img.missing == 0 => {
                 let color = ColorImage::from_rgba_unmultiplied(
                     [img.width as usize, img.height as usize],
@@ -309,7 +316,13 @@ impl StampPanel {
     // ── 绘制 ──
 
     /// 画网格本体（含缩略图 / 缺帧占位 / 选中金框 / 名称行）。**只渲染可见格**。
-    pub fn draw(&mut self, p: &Painter, l: &Layout, src: Option<&WilSource>) {
+    pub fn draw(
+        &mut self,
+        p: &Painter,
+        l: &Layout,
+        src: Option<&WilSource>,
+        号段: crate::stamp_place::库号号段,
+    ) {
         let g = Self::grid_rect(l);
         let vis = Self::visible_rect(l);
         pt::fill(p, g, t::ui().input_search_bg);
@@ -329,13 +342,21 @@ impl StampPanel {
                     break;
                 }
                 let cell = Self::cell_rect(l, self.row_off, row, col);
-                self.draw_cell(&clip, p, cell, idx, src);
+                self.draw_cell(&clip, p, cell, idx, src, 号段);
             }
         }
     }
 
     /// 画一格：底 + 缩略图（或缺帧占位）+ 名称行 + 选中金框。
-    fn draw_cell(&mut self, clip: &Painter, p: &Painter, cell: Rect, idx: usize, src: Option<&WilSource>) {
+    fn draw_cell(
+        &mut self,
+        clip: &Painter,
+        p: &Painter,
+        cell: Rect,
+        idx: usize,
+        src: Option<&WilSource>,
+        号段: crate::stamp_place::库号号段,
+    ) {
         pt::fill(clip, cell, t::ui().panel_bg);
         pt::border(clip, cell, t::ui().separator);
         let thumb = Rect::from_min_size(
@@ -345,7 +366,7 @@ impl StampPanel {
             ),
             vec2(m::STAMP_THUMB_W, m::STAMP_THUMB_H),
         );
-        match self.ensure(p.ctx(), src, idx) {
+        match self.ensure(p.ctx(), src, 号段, idx) {
             Hit::Ready(tex, w, h) => {
                 let dst = crate::palette::fit_rect(thumb, w, h);
                 clip.image(

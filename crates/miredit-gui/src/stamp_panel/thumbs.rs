@@ -163,10 +163,15 @@ pub fn fit_text(p: &Painter, s: &str, font: f32, max_w: f32) -> String {
 /// 为什么必须共用：两边各写一份的话，"面板里看到的缩略图"与"贴到地上的格"迟早不一致
 /// （哪怕只差一个掩码），而那种不一致只能靠逐字节比对才发现。
 ///
-/// 库号越界（真实 9,159 枚里没有）⇒ **返回 `None`**：绝不截断成另一个库号
-/// （那会取到别的图 = 假数据）。
-pub fn positioned_cells(stamp: &Stamp) -> Option<Vec<PositionedCell>> {
-    let cells = crate::stamp_place::cells_of(stamp)?;
+/// 库号：`.X` 里的三个库号是 **C# 全局分配号**，[`crate::stamp_place::cells_of`]
+/// 已按素材号段换算成**族内页号**（A-024）；本函数只做搬运，**不再换算、也不许再换算**。
+/// 不在号段内 ⇒ **返回 `None`**：绝不原样透传/截断成另一个库号（那会取到别的图 = 假数据）。
+pub fn positioned_cells(
+    stamp: &Stamp,
+    号段: crate::stamp_place::库号号段,
+) -> Option<Vec<PositionedCell>> {
+    // 唯一实现在 core（A-024）：本函数不搬字段、不换算库号，只掩 `0x7FFF`
+    let cells = crate::stamp_place::cells_of(stamp, 号段).ok()?;
     Some(
         cells
             .into_iter()
@@ -190,10 +195,11 @@ pub fn positioned_cells(stamp: &Stamp) -> Option<Vec<PositionedCell>> {
 pub fn render_thumb(
     path: &std::path::Path,
     src: &dyn mir2_assets::SpriteSource,
+    号段: crate::stamp_place::库号号段,
 ) -> Result<(usize, miredit_render::stamp::StampImage), String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let stamp = Stamp::parse(&bytes).map_err(|e| e.to_string())?;
-    let cells = positioned_cells(&stamp).ok_or_else(|| "库号超出 u8".to_owned())?;
+    let cells = positioned_cells(&stamp, 号段).ok_or_else(|| "库号不在素材号段内".to_owned())?;
     let img = render_stamp(
         &cells,
         src,

@@ -41,6 +41,8 @@ fn 造状态(root: PathBuf) -> Shared {
         session: Arc::new(RwLock::new(None)),
         libs: None,
         source: None,
+        // A-024：测试夹具只装 WIL ⇒ Default 号段
+        号段: miredit_core::库号号段::Wemade,
         stamps: Mutex::new(None),
         trailer_cache: Mutex::new(None),
         palette_json: PathBuf::new(),

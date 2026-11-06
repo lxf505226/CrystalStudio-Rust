@@ -195,8 +195,8 @@ pub fn load_stamp_cells(
         ))
     })?;
 
-    // ④ 换算成内核的格表 —— 字段映射全在 core，这里只翻错误
-    to_stamp_inputs(&stamp)
+    // ④ 换算成内核的格表 —— 字段映射与库号号段换算全在 core，这里只翻错误
+    to_stamp_inputs(&stamp, st.号段)
 }
 
 /// 薄封装：`mir2_stamp::Stamp` → 内核格表，错误翻成 HTTP（**纯函数**，便于单测钉住）。
@@ -208,8 +208,9 @@ pub fn load_stamp_cells(
 /// 库号越界 ⇒ [`ApiError::from_stamp_convert`] 给的 **422**；改前的 `as u8` 会静默截断，见模块文档第四节。
 pub fn to_stamp_inputs(
     stamp: &mir2_stamp::Stamp,
+    号段: miredit_core::库号号段,
 ) -> ApiResult<Vec<miredit_core::StampCellInput>> {
-    miredit_core::cells_from_stamp(stamp).map_err(ApiError::from_stamp_convert)
+    miredit_core::cells_from_stamp(stamp, 号段).map_err(ApiError::from_stamp_convert)
 }
 
 #[cfg(test)]
@@ -231,9 +232,11 @@ mod tests {
                     x: -1,
                     y: 2,
                     cell: StampCellData {
-                        back_library: 3,
+                        // A-024：库号是 **C# 全局分配号**，必须在 Wemade 号段内
+                        // （地表 0 / 中层 1 / 物体 2..=99），换算后才是族内页号
+                        back_library: 0,
                         back_image: 1234,
-                        middle_library: 4,
+                        middle_library: 1,
                         middle_image: 567,
                         foreground: Some(Front {
                             library: 5,
@@ -258,7 +261,7 @@ mod tests {
                     cell: StampCellData {
                         back_library: 0,
                         back_image: 0,
-                        middle_library: 6,
+                        middle_library: 1,
                         middle_image: 42,
                         foreground: None,
                         ..Default::default()
@@ -268,17 +271,19 @@ mod tests {
         };
         let bytes = stamp.to_bytes();
         let parsed = mir2_stamp::Stamp::parse(&bytes).expect("自造 .X 应能解析");
-        let cells = to_stamp_inputs(&parsed).expect("样本库号全在 0..=255 内，应转换成功");
+        let cells = to_stamp_inputs(&parsed, miredit_core::库号号段::Wemade)
+            .expect("样本库号应落在 Wemade 号段内");
         assert_eq!(cells.len(), 2);
 
         let a = cells[0];
         assert_eq!((a.dx, a.dy), (-1, 2), "dx/dy 取 StampCell.x/y（可负）");
         assert_eq!(a.bk, 1234);
-        assert_eq!(a.bk_lib, 3);
+        // 库号：`.X` 全局号 0/1/5 ⇒ 页 0/0/3（A-024：不是原样透传）
+        assert_eq!(a.bk_lib, 0, "地表全局号 0 → Tiles 页 0");
         assert_eq!(a.mid, 567);
-        assert_eq!(a.mid_lib, 4);
+        assert_eq!(a.mid_lib, 0, "中层全局号 1 → SmTiles 页 0");
         assert_eq!(a.fr, 89, "物体图号取 foreground.image");
-        assert_eq!(a.fr_lib, 5, "物体库号取 foreground.library");
+        assert_eq!(a.fr_lib, 3, "物体全局号 5 → Objects 页 3");
         // 附加字段：`.X` 里的真数据必须逐字段搬过去，不许落成缺省 0
         assert_eq!((a.door, a.door_offset, a.light), (7, 9, 11), "门/门偏移/光照原样搬");
         assert_eq!((a.ani_frame, a.ani_tick), (1, 2), "前景动画帧/节拍取 Front.frames/tick");
@@ -292,7 +297,7 @@ mod tests {
         let b = cells[1];
         assert_eq!((b.bk, b.bk_lib), (0, 0));
         assert_eq!((b.fr, b.fr_lib), (0, 0), "无前景 ⇒ 0（内核据此不写该族）");
-        assert_eq!((b.mid, b.mid_lib), (42, 6));
+        assert_eq!((b.mid, b.mid_lib), (42, 0), "中层全局号 1 → SmTiles 页 0");
         assert_eq!(
             (b.ani_frame, b.ani_tick),
             (0, 0),
@@ -319,7 +324,7 @@ mod tests {
                 },
             }],
         };
-        let cells = to_stamp_inputs(&stamp).expect("库号全 0，应转换成功");
+        let cells = to_stamp_inputs(&stamp, miredit_core::库号号段::Wemade).expect("库号全 0，应转换成功");
         assert_eq!(
             cells[0].bk, 7,
             "高位标记位与 bit15 都不进 bk，只剩纯图号 7"
@@ -346,7 +351,8 @@ mod tests {
             }],
         };
 
-        let err = to_stamp_inputs(&stamp).expect_err("库号 300 必须被拒绝，不许截断成 44");
+        let err = to_stamp_inputs(&stamp, miredit_core::库号号段::Wemade)
+            .expect_err("库号 300 不在号段内，必须拒绝");
         assert_eq!(
             err.status(),
             axum::http::StatusCode::UNPROCESSABLE_ENTITY,
@@ -359,11 +365,192 @@ mod tests {
 
         // 「原样透传」自证：与 core 的 `Display` **逐字**相同。
         // 不硬编码整句 —— core 改措辞时这条不该红，但 web 偷偷加前缀时必须红。
-        let core_msg = miredit_core::cells_from_stamp(&stamp)
+        let core_msg = miredit_core::cells_from_stamp(&stamp, miredit_core::库号号段::Wemade)
             .expect_err("core 侧同样应拒绝")
             .to_string();
         assert_eq!(msg, core_msg, "message 必须是 core 原文，web 不许二次包装");
         assert!(core_msg.contains("第 1 格"), "core 原文应含 1 起的格号：{core_msg}");
         assert!(core_msg.contains("地表"), "core 原文应含族名：{core_msg}");
+    }
+
+    // -----------------------------------------------------------------------
+    // A-024：库号是**全局 id**，落到地图字节前必须换算成族内页号
+    // -----------------------------------------------------------------------
+
+    /// 取证根：`MIREDIT_UPSTREAM_ROOT` → 缺省 `I:\miredit\_upstream`；根不存在 ⇒ `None`。
+    fn 取证根() -> Option<std::path::PathBuf> {
+        let root = std::env::var_os("MIREDIT_UPSTREAM_ROOT")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(r"I:\miredit\_upstream"));
+        root.is_dir().then_some(root)
+    }
+
+    /// 真实印章 `mir_00000.X`（25 格）—— 缺根/缺文件 ⇒ `None`（调用方跳过，不 panic）。
+    fn 真实印章() -> Option<mir2_stamp::Stamp> {
+        let p = 取证根()?.join("Objects").join("mir").join("mir_00000.X");
+        if !p.is_file() {
+            eprintln!("[跳过] 缺文件 {}", p.display());
+            return None;
+        }
+        let bytes = std::fs::read(&p).expect("读得到 .X");
+        Some(mir2_stamp::Stamp::parse(&bytes).expect("解析得了 .X"))
+    }
+
+    /// 合成一张 `w×h` 的 `格长` 档图，做成**会话**（`EditSession` 自己持有 `Document`，
+    /// `place_stamp_by_id` 改的是会话里的那份视图 ⇒ 断言直接读 `ed.document().to_bytes()`）。
+    fn 会话图(w: u16, h: u16, 格长: usize) -> miredit_core::EditSession {
+        let mut bytes = vec![0u8; mir2_map::HEADER_LEN + 格长 * (w as usize * h as usize)];
+        bytes[0..2].copy_from_slice(&w.to_le_bytes());
+        bytes[2..4].copy_from_slice(&h.to_le_bytes());
+        let doc = miredit_core::Document::from_bytes(
+            std::path::Path::new(r"E:\__stamp_web_test__.map"),
+            bytes,
+        )
+        .expect("合成图应能建文档");
+        miredit_core::EditSession::new(doc)
+    }
+
+    /// **真实 `.X`（25 格）经 web 换算后三族库号全是「页 0」**。
+    ///
+    /// 同时钉住 A-024 的病根：`.X` 原文是全局号 `0 / 1 / 2`，
+    /// 若原样透传，`mid_lib` 会是 `1`、`fr_lib` 会是 `2`（→ `SmTiles2` / `Objects3`）。
+    #[test]
+    fn 真实印章库号换算成页0() {
+        let Some(stamp) = 真实印章() else {
+            return;
+        };
+        let cells = to_stamp_inputs(&stamp, miredit_core::库号号段::Wemade)
+            .expect("真实印章应能在 Wemade 号段内换算");
+        assert_eq!(cells.len(), 25, "mir_00000.X 是 25 格");
+
+        // ① `.X` 原文（全局分配号）
+        // 地表 / 中层库号每格都有；前景库号只有带前景块的格才有（其余是 `None`）
+        assert!(
+            stamp.cells.iter().all(|c| c.cell.back_library == 0),
+            "本样本地表库号原文全是 0（Tiles）"
+        );
+        assert!(
+            stamp.cells.iter().all(|c| c.cell.middle_library == 1),
+            "本样本中层库号原文全是 1（SmTiles）"
+        );
+        let 前景原文: std::collections::BTreeSet<i16> = stamp
+            .cells
+            .iter()
+            .filter_map(|c| c.cell.foreground.map(|f| f.library))
+            .collect();
+        assert_eq!(
+            前景原文,
+            std::collections::BTreeSet::from([2]),
+            "带前景的 8 格库号原文全是 2（Objects）"
+        );
+
+        // ② 换算后的页号（落进地图字节的就是这三个）
+        assert!(
+            cells
+                .iter()
+                .all(|c| (c.bk_lib, c.mid_lib, c.fr_lib) == (0, 0, 0)),
+            "三族全局号 0/1/2 ⇒ Tiles/SmTiles/Objects 的**页 0**"
+        );
+        // ③ 反向确认：不许再出现「原样透传」的 1 / 2
+        assert!(
+            cells.iter().all(|c| c.mid_lib != 1 && c.fr_lib != 2),
+            "不许再把全局号 1/2 原样写进 btsmTiles/btArea"
+        );
+    }
+
+    /// **落位到 12 字节档：8 个前景格的 `btArea`（off10）必须是 0**（A-024 核心验收）。
+    ///
+    /// 走的是 web 放置路径在 core 侧的那两个调用（`register_stamp` + `place_stamp_by_id`），
+    /// 只看**落盘字节**，不看任何推导值。
+    #[test]
+    fn 落位12字节档的area字节为0() {
+        let Some(stamp) = 真实印章() else {
+            return;
+        };
+        let cells = to_stamp_inputs(&stamp, miredit_core::库号号段::Wemade).expect("换算");
+        let mut ed = 会话图(16, 16, 12); // 12 B/格 = Old12
+        ed.register_stamp("t".to_string(), cells).expect("注册应成功");
+        // 包围盒 (-1,-2,4,3) + 锚点 (3,3) ⇒ 覆盖 x 2..=7 / y 1..=6
+        let out = ed.place_stamp_by_id(3, 3, "t");
+        assert_eq!(
+            out,
+            miredit_core::PlaceOutcome::Placed {
+                cells: 8,
+                skipped: 0
+            },
+            "纯物件印章改 8 格"
+        );
+
+        let raw = ed.document().to_bytes();
+        let h = 16usize;
+        let mut 前景 = 0;
+        for x in 2..=7usize {
+            for y in 1..=6usize {
+                let off = mir2_map::HEADER_LEN + (x * h + y) * 12;
+                let fr = u16::from_le_bytes([raw[off + 4], raw[off + 5]]);
+                if fr & 0x7FFF == 0 {
+                    continue;
+                }
+                前景 += 1;
+                assert_eq!(
+                    raw[off + 10],
+                    0,
+                    "({x},{y}) 的 `btArea` 必须是 0（Objects 页 0），不是全局号 2"
+                );
+            }
+        }
+        assert_eq!(前景, 8, "8 个前景格必须逐格验到");
+    }
+
+    /// **落位到 14 字节档：`btsmTiles` = 0 且 `btArea` = 0，无地表格的 `btTiles` 保持原值**。
+    #[test]
+    fn 落位14字节档的sm_tiles与area为0() {
+        // 中层有图（全局 1）+ 前景有图（全局 2）的合成印章
+        let stamp = mir2_stamp::Stamp {
+            version: 2,
+            cells: vec![StampCell {
+                x: 0,
+                y: 0,
+                cell: StampCellData {
+                    back_library: 0,
+                    back_image: 0,
+                    middle_library: 1,
+                    middle_image: 5,
+                    foreground: Some(Front {
+                        library: 2,
+                        image: 9,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            }],
+        };
+        let cells = to_stamp_inputs(&stamp, miredit_core::库号号段::Wemade).expect("换算");
+        assert_eq!(
+            (cells[0].bk_lib, cells[0].mid_lib, cells[0].fr_lib),
+            (0, 0, 0),
+            "三族全局号都换算成页 0"
+        );
+
+        let mut ed = 会话图(4, 4, 14); // 14 B/格 = New14
+        // 先把目标格的 `btTiles` 设成 4，验「没有地表的层不许被写成 0」
+        ed.document_mut().view_mut().cells[0].tiles = 4;
+        ed.register_stamp("t".to_string(), cells).expect("注册应成功");
+        assert_eq!(
+            ed.place_stamp_by_id(0, 0, "t"),
+            miredit_core::PlaceOutcome::Placed {
+                cells: 1,
+                skipped: 0
+            }
+        );
+
+        let raw = ed.document().to_bytes();
+        let off = mir2_map::HEADER_LEN; // (0,0) 是第一格
+        assert_eq!(raw[off + 13], 0, "`btsmTiles` 必须是 0（SmTiles 页 0）");
+        assert_eq!(raw[off + 10], 0, "`btArea` 必须是 0（Objects 页 0）");
+        assert_eq!(
+            raw[off + 12], 4,
+            "本格没有地表图 ⇒ `btTiles` 保持原值 4（印章不写无图层的库号）"
+        );
     }
 }

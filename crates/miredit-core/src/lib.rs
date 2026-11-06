@@ -163,5 +163,5 @@ pub use save::{
 pub use selection::{Clipboard, Selection};
 pub use session::{line_cells, EditSession, FillRecord};
 pub use stamp::{PlaceOutcome, StampCellInput, STAMP_MAX_CELLS, STAMP_REGISTRY_MAX};
-pub use stamp_convert::{cells_from_stamp, StampConvertError, StampLibLayer};
+pub use stamp_convert::{cells_from_stamp, StampConvertError, StampLibLayer, 库号号段};
 pub use undo::{Change, Step, UndoStack, UNDO_LIMIT};

@@ -37,6 +37,8 @@ pub fn draw(
     pal: &mut PaletteState,
     stamps: &mut StampPanel,
     src: Option<&WilSource>,
+    // 印章库号号段（A-024）：与 `src` 同源，都来自 `mapdoc::Assets`。
+    号段: crate::stamp_place::库号号段,
     mini: &MiniMap,
     vis: &crate::menu::panels::PanelVis,
 ) {
@@ -51,7 +53,7 @@ pub fn draw(
 
     if vis.get(PanelId::Palette) {
         panel::draw_panel(p, &l.p_palette, tx::TITLE_PALETTE, "panel.palette", t::ui().panel_bg);
-        draw_palette(p, l, &labs, d, pal, stamps, src);
+        draw_palette(p, l, &labs, d, pal, stamps, src, 号段);
     }
 
     if vis.get(PanelId::ActiveAsset) {
@@ -62,7 +64,7 @@ pub fn draw(
             "panel.active_asset",
             t::ui().panel_bg,
         );
-        draw_active_asset(p, l, &labs, pal, stamps, src);
+        draw_active_asset(p, l, &labs, pal, stamps, src, 号段);
     }
 }
 
@@ -614,6 +616,9 @@ fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap) {
 
 // ───────────────────────── Palette（素材面板） ─────────────────────────
 
+// 8 个参数是"画一整块素材面板"所需的最小输入集（画笔 + 布局 + 标签 + 文档文案 + 面板状态 +
+// 印章面板 + 图库源 + 库号号段）；打结构体只是搬家，不减少耦合 ⇒ 与本文件 [`draw`] 同口径直接 `allow`。
+#[allow(clippy::too_many_arguments)]
 fn draw_palette(
     p: &Painter,
     l: &Layout,
@@ -622,6 +627,7 @@ fn draw_palette(
     pal: &mut PaletteState,
     stamps: &mut StampPanel,
     src: Option<&WilSource>,
+    号段: crate::stamp_place::库号号段,
 ) {
     let c = l.p_palette.content;
     let (_, x1) = palette_x_range(l);
@@ -795,7 +801,7 @@ fn draw_palette(
     // ⑤ 主体：「分类」页签 = 印章网格；「资源库」页签 = 真网格；其它页签 = 未实现；
     //    库打不开 = 如实说没有；没库 = 空态
     if stamp_tab {
-        stamps.draw(p, l, src);
+        stamps.draw(p, l, src, 号段);
     } else if pal.libs().is_empty() {
         // 空态：金色网格图标 + 标题 + 说明 + 金色按钮（一个库都没登记时才走这里）
         let icon_c = pos2(
@@ -953,6 +959,7 @@ fn draw_active_asset(
     pal: &mut PaletteState,
     stamps: &mut StampPanel,
     src: Option<&WilSource>,
+    号段: crate::stamp_place::库号号段,
 ) {
     let (card, text_x) = aa_card_and_text(l);
     // 卡片底（截图 `#EFF1F3` 卡片 x1147..1480 / y787..895）
@@ -974,7 +981,7 @@ fn draw_active_asset(
     if pal.tab() == STAMP_TAB {
         draw_sel(p, labs, "active_asset.caption");
         if stamps.selected().is_some() {
-            draw_stamp_active(p, &card, text_x, &preview, stamps, src);
+            draw_stamp_active(p, &card, text_x, &preview, stamps, src, 号段);
             return;
         }
         // 该页签还没选：如实写占位提示（不借用资源库那句"选择要绘制的地形组合"）
@@ -1054,9 +1061,10 @@ fn draw_stamp_active(
     preview: &Rect,
     stamps: &mut StampPanel,
     src: Option<&WilSource>,
+    号段: crate::stamp_place::库号号段,
 ) {
     // 预览框：选中那枚的**真缩略图**（走与网格同一份缓存；取不到就留空，不画假图）
-    if let Some((id, w, h)) = stamps.selected_texture(p.ctx(), src) {
+    if let Some((id, w, h)) = stamps.selected_texture(p.ctx(), src, 号段) {
         let dst = crate::palette::fit_rect(preview.shrink(4.0), w, h);
         p.with_clip_rect(*preview).image(
             id,

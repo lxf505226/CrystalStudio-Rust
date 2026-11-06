@@ -28,9 +28,16 @@
 //! 规则的出处：`miredit-core/src/paint.rs` 的 `Tool::Brush` 分支（= `edit.rs:1462-1468`）
 //! + `CrystalStudio/PlacedStamps.cs:90-92` 的「图号 0 ⇒ 该族不写」。
 //!
-//! ⚠ `0.map` 是 **12 B/格**（无库号字节）⇒ 这条门验不到库号字节；库号字节的闸门由
-//! `src/stamp.rs` 的单元测试（`库号写不进去要说明` / `十二字节档库号忽略`）与
-//! 门 2 补充里的 `tiles/sm_tiles/area` 断言分工覆盖。
+//! ⚠ `0.map` 是 **12 B/格**：**没有** `btTiles`/`btsmTiles` 两个库号字节（那两个只在
+//! 14/36 B 档），**但 `btArea`（off10）在 12 B 档是有位置的** ⇒ 门 2 的 ⑤b 段直接验
+//! 「8 格前景的 `btArea == 0`」（A-024：`.X` 全局号 2 换算成 `Objects` 页 0）。
+//! `btTiles`/`btsmTiles` 的闸门由 `src/stamp.rs` 的单元测试
+//! （`库号写不进去要说明` / `十二字节档库号忽略`）与门 2 补充里的
+//! `tiles/sm_tiles/area` 断言分工覆盖。
+//!
+//! ⚠ **2026-11-07 订正（A-024）**：本节上一版写的是「`0.map` 是 12 B/格（无库号字节）
+//! ⇒ 这条门验不到库号字节」。那句话把「没有 `btTiles`/`btsmTiles`」误推广成了
+//! 「一个库号字节都没有」——`btArea` 一直在，只是当时**没写对**（写的是全局号 2）。
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
@@ -148,34 +155,62 @@ fn 读真实印章() -> Option<(PathBuf, Vec<StampCellInput>, (i32, i32, i32, i3
     let 有前景 = stamp.cells.iter().filter(|c| c.cell.foreground.is_some()).count();
     // 库号越界会在这里**大声失败**（`expect` 的消息来自 `StampConvertError::Display`），
     // 而不是像旧的 `as u8` 那样静默截断后继续跑。
-    let cells = miredit_core::cells_from_stamp(&stamp).expect("真实印章应能转换");
+    let cells = miredit_core::cells_from_stamp(&stamp, miredit_core::库号号段::Wemade)
+        .expect("真实印章应能在 Wemade 号段内转换");
 
     // ── 真值自证：把「库号」与「5 个视图装不下的动画字段」钉在 `.X` 的真值上 ──
     //
-    // 断言口径从「填 0 / `as u8` 截断」改成「**等于 `.X` 真值**」之后必须显式比一遍：
-    // 本样本这 5 个字段的真值**恰好全 0**（25 格逐格实测），光看结果值分辨不出
-    // 「照搬」与「填 0」；写成「= `.X` 真值」后，换一枚带中层/地表动画的印章会立刻红。
+    // A-024 起库号有两段真值必须分别钉：
+    //   ① `.X` 原文（= C# `Assets` 全局分配号）：本样本实测 **0 / 1 / 2**；
+    //   ② 换算后的族内页号（`btTiles`/`btsmTiles`/`btArea` 口径）：**0 / 0 / 0**。
+    // 只钉② 会被"两处一起错"骗过；只钉① 则等于没测换算。
     assert_eq!(cells.len(), stamp.cells.len(), "换算不得增删格");
+    let 页 = |层: miredit_core::StampLibLayer, 原文: i16, 有图: bool| -> u8 {
+        if !有图 {
+            return 0;
+        }
+        miredit_core::库号号段::Wemade
+            .页号(层, 原文)
+            .unwrap_or_else(|| panic!("样本库号 {原文} 应落在 Wemade 号段内"))
+    };
     for (i, (c, s)) in cells.iter().zip(stamp.cells.iter()).enumerate() {
         let n = i + 1;
-        // 库号：真值，且**必须装得进单字节**（装不进就在这里 panic，绝不静默截断）
+        // 库号①：`.X` 原文（全局分配号）
+        assert_eq!(s.cell.back_library, 0, "第 {n} 格 地表库号原文 = 0（Tiles）");
+        assert_eq!(s.cell.middle_library, 1, "第 {n} 格 中层库号原文 = 1（SmTiles）");
+        if let Some(f) = s.cell.foreground {
+            assert_eq!(f.library, 2, "第 {n} 格 物体库号原文 = 2（Objects）");
+        }
+        // 库号②：换算后的族内页号（**没有图的层恒 0**）
         assert_eq!(
             c.bk_lib,
-            u8::try_from(s.cell.back_library).expect("地表库号必须装得进单字节"),
-            "第 {n} 格 地表库号 = `.X` 的 BackLibrary 真值"
+            页(
+                miredit_core::StampLibLayer::Ground,
+                s.cell.back_library,
+                (s.cell.back_image & 0x7FFF) != 0
+            ),
+            "第 {n} 格 地表库号页号"
         );
         assert_eq!(
             c.mid_lib,
-            u8::try_from(s.cell.middle_library).expect("中层库号必须装得进单字节"),
-            "第 {n} 格 中层库号 = `.X` 的 MiddleLibrary 真值"
+            页(
+                miredit_core::StampLibLayer::Middle,
+                s.cell.middle_library,
+                (s.cell.middle_image & 0x7FFF) != 0
+            ),
+            "第 {n} 格 中层库号页号"
         );
         assert_eq!(
             c.fr_lib,
-            s.cell
-                .foreground
-                .map_or(Ok(0), |f| u8::try_from(f.library))
-                .expect("物体库号必须装得进单字节"),
-            "第 {n} 格 物体库号 = `.X` 的 Foreground.Library 真值"
+            match s.cell.foreground {
+                Some(f) => 页(
+                    miredit_core::StampLibLayer::Front,
+                    f.library,
+                    (f.image & 0x7FFF) != 0
+                ),
+                None => 0,
+            },
+            "第 {n} 格 物体库号页号"
         );
         // 5 个「视图装不下」的字段：**照搬真值**（旧手写版在这里写死 0）
         assert_eq!(c.mid_ani_frame, s.cell.middle_frames, "第 {n} 格 中层动画帧 = `.X` 真值");
@@ -192,6 +227,16 @@ fn 读真实印章() -> Option<(PathBuf, Vec<StampCellInput>, (i32, i32, i32, i3
         );
         assert_eq!(c.tile_frames, s.cell.tile_frames, "第 {n} 格 地表动画帧数 = `.X` 真值");
     }
+    // ③ 这一枚的硬结论（不依赖上面那张换算表也算得出来）：8 格前景全部落 Objects 页 0
+    assert_eq!(
+        cells.iter().filter(|c| c.fr != 0).count(),
+        8,
+        "8 格带前景"
+    );
+    assert!(
+        cells.iter().all(|c| c.fr_lib == 0),
+        "前景全局号 2 ⇒ 每一格都必须换算成 Objects **页 0**（不是 2）"
+    );
 
     Some((p, cells, stamp.bounds(), 有前景))
 }
@@ -390,6 +435,26 @@ fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
             打印 += 1;
         }
     }
+
+    // ⑤b **A-024 硬结论（不依赖期望表）**：落位后 8 格前景的 `btArea`（off10）必须是 **0**
+    //     （= `Objects` 页 0），**不是** `.X` 里的全局号 2 —— 直接读地图格，不经任何推导函数。
+    let mut 落位前景 = 0;
+    for s in &cells {
+        if s.fr == 0 {
+            continue;
+        }
+        let x = (i64::from(锚点.0) + i64::from(s.dx)) as u16;
+        let y = (i64::from(锚点.1) + i64::from(s.dy)) as u16;
+        let 格 = ed.map().cell(x, y).expect("图内格");
+        落位前景 += 1;
+        assert_eq!(
+            格.area, 0,
+            "({x},{y}) 落位后的 `btArea` 必须是 0（Objects 页 0），实得 {}",
+            格.area
+        );
+        assert_ne!(格.fr_img, 0, "({x},{y}) 这格确实贴上了前景图号");
+    }
+    assert_eq!(落位前景, 8, "8 格前景必须逐格验到 `btArea`");
 
     // ⑥ 门 3：**先**验撤销（此刻还没保存，`saved_pos` 仍是 0 ⇒ 撤销回原样后必须不脏）
     let 放之后 = ed.document().to_bytes();

@@ -385,6 +385,8 @@ mod tests {
         Some(Assets::Ready {
             paths,
             src: Box::new(src),
+            // `.wzl/.wil` ⇒ Default 号段（与 `load_assets` 同口径）
+            号段: miredit_core::库号号段::Wemade,
         })
     }
 

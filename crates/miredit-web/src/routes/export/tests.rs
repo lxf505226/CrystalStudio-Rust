@@ -88,6 +88,8 @@ fn 空状态() -> Shared {
         session: Arc::new(RwLock::new(None)),
         libs: None,
         source: None,
+        // A-024：测试夹具只装 WIL ⇒ Default 号段
+        号段: miredit_core::库号号段::Wemade,
         stamps: Mutex::new(None),
         trailer_cache: Mutex::new(None),
         palette_json: PathBuf::new(),
@@ -588,6 +590,8 @@ async fn 无图库返回503中文() {
         session: Arc::new(RwLock::new(Some(session))),
         libs: None,
         source: None,
+        // A-024：测试夹具只装 WIL ⇒ Default 号段
+        号段: miredit_core::库号号段::Wemade,
         stamps: Mutex::new(None),
         trailer_cache: Mutex::new(None),
         palette_json: PathBuf::new(),

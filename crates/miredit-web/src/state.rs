@@ -119,6 +119,15 @@ pub struct AppState {
     pub libs: Option<LibPaths>,
     /// 图源（帧解码 + LRU 缓存；`None` = 图库不可用）。
     pub source: Option<WilSource>,
+    /// **库号号段**（A-024）：`.X` 三族库号（C# 全局分配号）→ 族内页号的换算基址。
+    ///
+    /// 本服务与 GUI 一样只装 `.wzl/.wil`（Default 号段）⇒ 恒
+    /// [`miredit_core::库号号段::Wemade`]。
+    ///
+    /// ⚠ **`.lib / Shanda` 接入点**：将来 `Shared` 支持 `CrystalLibSource` 时，
+    /// 按实际素材格式填 `Shanda`（或新增 Sanxiu 变体）；`load_stamp_cells` 与本字段
+    /// 是网页侧唯一需要改的两处（渲染层不参与号段判断）。
+    pub 号段: miredit_core::库号号段,
     /// 印章目录（懒加载；`Some(Err)` = 加载失败过，错误文本原样保留）。
     pub stamps: Mutex<Option<Result<StampCatalog, String>>>,
     /// `tolerant_trailer_bytes` 的缓存：`(路径, 值)`。地图不变时只需读一次盘（见 `routes/map.rs`）。
@@ -224,6 +233,8 @@ impl AppState {
             session: Arc::new(RwLock::new(None)),
             libs,
             source,
+            // `.wzl/.wil`（Default 号段）⇒ 恒 `Wemade`；接 `.lib` 时按格式改这里
+            号段: miredit_core::库号号段::Wemade,
             stamps: Mutex::new(None),
             trailer_cache: Mutex::new(None),
             palette_json,

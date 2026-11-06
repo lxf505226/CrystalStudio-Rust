@@ -216,6 +216,18 @@ pub enum Assets {
         paths: LibPaths,
         /// 取帧源（内含帧缓存；装箱理由见本枚举文档）。
         src: Box<WilSource>,
+        /// **库号号段**：`.X` 三族库号（C# 全局分配号）→ 族内页号的换算基址（A-024）。
+        ///
+        /// 本仓素材只有 `.wzl/.wil`（客户端的 `Tiles`/`SmTiles`/`Objects{n}` 命名 =
+        /// Default 号段）⇒ 现在恒 [`miredit_core::库号号段::Wemade`]。
+        ///
+        /// ⚠ **`.lib / Shanda` 接入点就是这里**：将来 `Assets` 支持 `CrystalLibSource`
+        /// 时，按实际 `CrystalAssetFormat` 填 `Shanda`（或新增 Sanxiu 变体），
+        /// `stamp_place::read/place` 与 `stamp_panel` 的 `号段` 参数原样透传即可 ——
+        /// 渲染侧（`miredit-render`）**永远不参与**号段判断。
+        /// 「混合根」（同一个根里同时有 WemadeMir2 与 ShandaMir2）暂不做：那种根下游标号
+        /// 有歧义，必须先定优先级（见 A-024 回执的「未覆盖」）。
+        号段: miredit_core::库号号段,
     },
     /// 装载失败，`0` 在这里是**真实原因字符串**，不是占位。
     Failed(String),
@@ -235,6 +247,14 @@ impl Assets {
         match self {
             // `src` 是 `&Box<WilSource>` ⇒ `as_ref()` 给出 `&WilSource`（不拷帧缓存）
             Assets::Ready { src, .. } => Some(src.as_ref()),
+            Assets::Failed(_) => None,
+        }
+    }
+
+    /// **库号号段**（A-024）：`.X` 全局库号 → 族内页号的换算基址；素材不可用 ⇒ `None`。
+    pub fn 号段(&self) -> Option<miredit_core::库号号段> {
+        match self {
+            Assets::Ready { 号段, .. } => Some(*号段),
             Assets::Failed(_) => None,
         }
     }
@@ -436,6 +456,9 @@ fn load_assets() -> Assets {
     Assets::Ready {
         paths,
         src: Box::new(src),
+        // `.wzl/.wil`（Default 号段）⇒ 号段恒 `Wemade`；接 `.lib` 时按 `CrystalAssetFormat`
+        // 改成 `Shanda`（或新增 Sanxiu 变体），见 `Assets::Ready::号段` 的文档。
+        号段: miredit_core::库号号段::Wemade,
     }
 }
 

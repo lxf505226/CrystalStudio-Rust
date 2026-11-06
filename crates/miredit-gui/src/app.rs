@@ -1468,10 +1468,16 @@ impl MireditApp {
             self.op = Some((stamp_place::fail_text(&why), true));
             return;
         };
+        // 库号号段（A-024）：与 `read`/缩略图同源（`mapdoc::Assets`）；装载失败时兜底 `Wemade`
+        let 号段 = self
+            .doc
+            .assets
+            .号段()
+            .unwrap_or(miredit_core::库号号段::Wemade);
         let Some(d) = self.doc.doc.as_mut() else {
             return;
         };
-        let out = stamp_place::place(&mut self.edit, &mut d.map, &armed, &path, x, y);
+        let out = stamp_place::place(&mut self.edit, &mut d.map, &armed, &path, x, y, 号段);
         // 内核在成功时也可能留一句"库号字节被忽略"的说明。**取走它，但不拼进回执**：
         //
         // ① 那句话很长（实测 88 字：`Old12（12B/格，TMapInfo 旧版） 里 物体 的库号字节没有
@@ -2297,6 +2303,13 @@ impl eframe::App for MireditApp {
                 //     否则会被比视口还大的纹理顶掉）。内容 = `Document::edit_warning()` 原文，
                 //     不是 toast、不自动消失（见 [`crate::banner`]）。
                 banner::draw(&p, &l, &self.text);
+                // 库号号段（A-024）：与图源同源，都来自 `mapdoc::Assets`。
+                // 素材装载失败时兜底 `Wemade` —— 那时一格图都画不出来，号段只影响字节语义。
+                let 号段 = self
+                    .doc
+                    .assets
+                    .号段()
+                    .unwrap_or(miredit_core::库号号段::Wemade);
                 dock_right::draw(
                     &p,
                     &l,
@@ -2304,6 +2317,9 @@ impl eframe::App for MireditApp {
                     &mut self.palette,
                     &mut self.stamps,
                     self.doc.assets.source(),
+                    // 库号号段与图源**同源**（都来自 `mapdoc::Assets`，A-024）：
+                    // 素材装载失败时给兜底 `Wemade`（那时没有任何图能画出来，号段只影响字节含义）
+                    号段,
                     &minimap,
                     &self.panels,
                 );

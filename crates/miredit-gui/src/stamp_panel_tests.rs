@@ -399,7 +399,8 @@ fn 缩略图与直接渲染逐字节一致() {
         let path = resolve_path(&sel.id).expect("能 resolve 出路径");
         let bytes = std::fs::read(&path).expect("读得到 .X");
         let stamp = mir2_stamp::Stamp::parse(&bytes).expect("解析得了 .X");
-        let positioned = sp::positioned_cells(&stamp).expect("库号在 u8 内");
+        let positioned =
+            sp::positioned_cells(&stamp, miredit_core::库号号段::Wemade).expect("库号在号段内");
         let direct = miredit_render::stamp::render_stamp(
             &positioned,
             &src,
@@ -410,7 +411,8 @@ fn 缩略图与直接渲染逐字节一致() {
         )
         .expect("直接渲染不报错");
         // 面板侧
-        let (_, panel_img) = sp::render_thumb(&path, &src).expect("面板渲染不报错");
+        let (_, panel_img) =
+            sp::render_thumb(&path, &src, miredit_core::库号号段::Wemade).expect("面板渲染不报错");
         eprintln!(
             "[印章] {} cells={} bounds={:?} 渲染 {}×{} 画格 {} 缺帧 {}",
             sel.id,
@@ -503,7 +505,7 @@ fn 纹理缓存峰值不超过上限且重访命中() {
                 break;
             }
             if panel.pick_slot(slot) {
-                let _ = panel.selected_texture(ctx, Some(src));
+                let _ = panel.selected_texture(ctx, Some(src), miredit_core::库号号段::Wemade);
                 n += 1;
             }
         }
