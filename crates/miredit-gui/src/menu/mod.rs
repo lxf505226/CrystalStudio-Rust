@@ -80,14 +80,18 @@ pub enum Overlay {
         /// 输入框里的目标 `.png` 路径（初值 = 地图同目录的 `<地图名>_选区.png`）。
         path: String,
     },
-    /// 「文件 → 导出小地图(M)…」的路径输入模态（2026-11-05 接线）。
+    /// 「文件 → 导出小地图(M)…」的路径 + 尺寸输入模态（2026-11-05 接线，2026-11-06 扩尺寸）。
     ///
-    /// @acfbbf8a 回源订正（2026-11-06）：回车后走
-    /// [`crate::export::export_minimap_sized`] + [`crate::export::MinimapSize::Default`]
-    /// （官方缺省 `W*12 × H*8`），档位映射见 [`crate::export::pick_official_scale`]。
+    /// 官方 `MinimapExportWindow.cs:20-41@6450da90`：路径之外还有
+    /// 「预设下拉 Small(¼)/Medium(½)/Large(1:1)（默认 Small）+ 自定义宽高」。
+    /// ⇒ 回车后走 [`crate::export::export_minimap_sized`]，尺寸口径由
+    /// [`crate::menu::dialog::MinimapDlg::resolve`] 校验后给出（默认 Small = `W*12 × H*8`，
+    /// 与本仓 CLI 缺省 [`crate::export::MinimapSize::Default`] 逐像素相同）。
     ExportMinimap {
         /// 输入框里的目标 `.png` 路径（初值 = 地图同目录的 `<地图名>_小地图.png`）。
         path: String,
+        /// 尺寸输入状态（预设三选一 + 宽/高文本框 + 错误提示）。
+        size: crate::menu::dialog::MinimapDlg,
     },
     /// 「帮助 → 键盘快捷键…」的只读浮层。
     Shortcuts,
@@ -97,6 +101,18 @@ impl Overlay {
     /// 是否有浮层（有 ⇒ 弹层与画布交互要让位）。
     pub fn is_some(&self) -> bool {
         !matches!(self, Overlay::None)
+    }
+
+    /// 打开「导出小地图」模态：路径初值 + **默认 Small 预设**
+    /// （官方 `MinimapExportWindow.cs:21` 的默认项）的宽高文本框初值。
+    ///
+    /// `cells` = 地图格数 `(宽, 高)`，预设像素由
+    /// [`crate::export::MinimapSize::resolve`] 算（不在这里另写倍率）。
+    pub fn export_minimap(path: String, cells: (u32, u32)) -> Self {
+        Overlay::ExportMinimap {
+            path,
+            size: crate::menu::dialog::MinimapDlg::new(cells),
+        }
     }
 }
 
@@ -1384,10 +1400,7 @@ mod tests {
             path: String::new()
         }
         .is_some());
-        assert!(Overlay::ExportMinimap {
-            path: String::new()
-        }
-        .is_some());
+        assert!(Overlay::export_minimap(String::new(), (1, 1)).is_some());
     }
 
     /// **鼠标命中判据**（点击语义的纯几何部分）：标签 / 弹层项 / 弹层空白 / 别处。

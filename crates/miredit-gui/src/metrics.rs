@@ -1044,6 +1044,46 @@ pub const OPEN_DLG_FIELD_H: f32 = 28.0;
 pub const OPEN_DLG_BTN_W: f32 = 88.0;
 pub const OPEN_DLG_BTN_H: f32 = 26.0;
 
+// ───────────── 「导出小地图」模态（2026-11-06，N F-R14-1：尺寸输入） ─────────────
+//
+// 它比通用路径模态多摆三行（预设三选一 / 宽高 / 错误提示），所以**单独**给高度：
+// [`OPEN_DLG_H`] 一个字都不改 ⇒ 打开 / 另存为 / 导出选区三个模态的几何与既有用例
+// 逐像素不变（`dialog_rects` 仍按 `OPEN_DLG_H` 算）。
+
+/// 导出小地图模态的高 **254**。
+///
+/// 算式（面板顶为 0）：`16(PAD) + 24(标题) + 28(路径框) + 12+18(提示带) + 10 + 26(预设行)
+/// + 10 + 26(宽高行) + 10 + 32(错误行) + 10 + 26(按钮) + 16(PAD)` = `254`；
+/// 两个按钮仍按 `panel.bottom() - PAD - BTN_H` **贴底**（与其它模态同一规则）。
+pub const MINIMAP_DLG_H: f32 = 254.0;
+
+/// 导出小地图模态里「预设行 / 宽高行」的行高 **26**（只比路径框矮 2，手感统一）。
+pub const MINIMAP_DLG_ROW_H: f32 = 26.0;
+
+/// 导出小地图模态里行与行的间距 **10**。
+pub const MINIMAP_DLG_GAP: f32 = 10.0;
+
+/// 导出小地图模态里错误提示带的高 **32**（两行 12px 中文，包住最长那条原因的前半段）。
+pub const MINIMAP_DLG_ERR_H: f32 = 32.0;
+
+/// 导出小地图模态里单个宽/高输入框的宽 **132**（放得下 10 位数字）。
+pub const MINIMAP_DLG_FIELD_W: f32 = 132.0;
+
+/// 导出小地图模态里单个预设按钮的宽 **150**（`Large (1:1)` 这种 11 字符的标签不挤）。
+pub const MINIMAP_DLG_PRESET_W: f32 = 150.0;
+
+/// 导出小地图模态里预设行左侧标签列宽 **56**（`尺寸预设` 四个字 48 + 8 呼吸）。
+pub const MINIMAP_DLG_PRESET_COL_W: f32 = 56.0;
+
+/// 导出小地图模态里「宽」/「高」两个标签列宽 **24**（两个字刚好）。
+pub const MINIMAP_DLG_SIZE_LABEL_W: f32 = 24.0;
+
+/// 导出小地图模态里宽高框后面 `px` 单位的占位宽 **24**（含与下一个标签之间的呼吸）。
+pub const MINIMAP_DLG_UNIT_W: f32 = 24.0;
+
+/// 导出小地图模态里「标签 → 控件」/「控件 → 下一个标签」的间距 **8**。
+pub const MINIMAP_DLG_LABEL_GAP: f32 = 8.0;
+
 #[cfg(test)]
 mod tests {
     use super::*;

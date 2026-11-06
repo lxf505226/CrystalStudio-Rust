@@ -535,10 +535,37 @@ pub const EXPORT_SEL_DLG_OK: &str = "导出"; // EN: Export ｜ 官方: ExportSe
 
 /// 导出小地图模态标题。
 pub const EXPORT_MINI_DLG_TITLE: &str = "导出小地图"; // EN: Export Minimap ｜ 官方: ExportMinimap_C5960A2C
-/// 导出小地图模态说明（点名「整图、按档位缩放」）。
-pub const EXPORT_MINI_DLG_HINT: &str = "输入目标 .png 的完整路径（回车导出，Esc 取消；整图按档位缩放）"; // EN: Type the target .png path (Enter exports, Esc cancels; whole map scaled by a render tier) ｜ 官方: ExportMinimap_C5960A2C
+/// 导出小地图模态说明（点名「先路径、再尺寸」与 Tab 换输入框）。
+pub const EXPORT_MINI_DLG_HINT: &str = "输入目标 .png 的完整路径，再选尺寸档位或手填宽高（回车导出，Tab 换输入框，Esc 取消）"; // EN: Type the target .png path, then pick a size preset or type width/height (Enter exports, Tab switches inputs, Esc cancels) ｜ 官方: ExportMinimap_C5960A2C
 /// 导出小地图模态主按钮。
 pub const EXPORT_MINI_DLG_OK: &str = "导出"; // EN: Export ｜ 官方: ExportMinimap_C5960A2C
+
+// ── 「导出小地图」模态的尺寸输入（2026-11-06，N F-R14-1） ──
+//
+// 官方 `MinimapExportWindow.cs:20-41@6450da90`：预设下拉 `Small (¼) / Medium (½) / Large (1:1)`
+// （**默认 Small**，除数 `{4,2,1}`）+ 自定义宽/高 TextBox + `Validate`
+// （`int.TryParse` ∧ `MinimapExporter.ValidSize`）。数值口径全部复用 `crate::export`。
+
+/// 预设行左侧的说明标签（官方的 ComboBox 上方没有标题，这条是本仓补的说明）。
+pub const EXPORT_MINI_DLG_PRESET_LABEL: &str = "尺寸预设"; // EN: Size preset ｜ 官方: MinimapExportWindow.cs:21（ComboBox）
+/// 三档预设的显示名（**与官方 `MinimapExportWindow.cs:21` 逐字相同**，不译）。
+pub const MINIMAP_PRESET_SMALL: &str = "Small (¼)"; // EN: Small (¼) ｜ 官方: MinimapExportWindow.cs:21
+/// 见 [`MINIMAP_PRESET_SMALL`]。
+pub const MINIMAP_PRESET_MEDIUM: &str = "Medium (½)"; // EN: Medium (½) ｜ 官方: MinimapExportWindow.cs:21
+/// 见 [`MINIMAP_PRESET_SMALL`]。
+pub const MINIMAP_PRESET_LARGE: &str = "Large (1:1)"; // EN: Large (1:1) ｜ 官方: MinimapExportWindow.cs:21
+/// 宽/高输入框前的标签（官方 `MinimapExportWindow.cs:26-33` 的两个 TextBox）。
+pub const EXPORT_MINI_DLG_WIDTH: &str = "宽"; // EN: W
+/// 见 [`EXPORT_MINI_DLG_WIDTH`]。
+pub const EXPORT_MINI_DLG_HEIGHT: &str = "高"; // EN: H
+/// 宽/高输入框后面的像素单位。
+pub const EXPORT_MINI_DLG_PX: &str = "px"; // EN: px
+/// 尺寸输入不是整数（官方 `Validate` 里 `int.TryParse` 的那一半失败）。
+pub const EXPORT_MINI_ERR_SIZE_PARSE_TMPL: &str = "小地图导出尺寸非法：{field}不是整数（收到「{got}」；没有写盘，一个文件都没多）"; // EN: minimap size: {field} is not an integer ({got}); nothing written
+/// 尺寸输入不是正整数（官方 `ValidSize` 要求 `w > 0 && h > 0`，0 与负数都拒）。
+pub const EXPORT_MINI_ERR_SIZE_POSITIVE_TMPL: &str = "小地图导出尺寸非法：{field}必须是正整数（收到 {got}；没有写盘，一个文件都没多）"; // EN: minimap size: {field} must be positive ({got}); nothing written
+/// 尺寸超出 [`crate::export::valid_minimap_size`] 口径时，追加在它那条原因后面的尾巴。
+pub const EXPORT_MINI_ERR_SIZE_SUFFIX: &str = "（没有写盘，一个文件都没多）"; // EN: (nothing written)
 
 /// 导出：目标路径是空串（**一个字节都没写**）。
 pub const EXPORT_ERR_EMPTY: &str = "目标路径为空（没有写盘，一个文件都没多）"; // EN: empty target path (nothing written)
@@ -1684,6 +1711,17 @@ pub const ALL: &[(&str, &str)] = &[
     ("EXPORT_MINI_DLG_TITLE", EXPORT_MINI_DLG_TITLE),
     ("EXPORT_MINI_DLG_HINT", EXPORT_MINI_DLG_HINT),
     ("EXPORT_MINI_DLG_OK", EXPORT_MINI_DLG_OK),
+    // 导出小地图的尺寸输入（2026-11-06，N F-R14-1）
+    ("EXPORT_MINI_DLG_PRESET_LABEL", EXPORT_MINI_DLG_PRESET_LABEL),
+    ("MINIMAP_PRESET_SMALL", MINIMAP_PRESET_SMALL),
+    ("MINIMAP_PRESET_MEDIUM", MINIMAP_PRESET_MEDIUM),
+    ("MINIMAP_PRESET_LARGE", MINIMAP_PRESET_LARGE),
+    ("EXPORT_MINI_DLG_WIDTH", EXPORT_MINI_DLG_WIDTH),
+    ("EXPORT_MINI_DLG_HEIGHT", EXPORT_MINI_DLG_HEIGHT),
+    ("EXPORT_MINI_DLG_PX", EXPORT_MINI_DLG_PX),
+    ("EXPORT_MINI_ERR_SIZE_PARSE_TMPL", EXPORT_MINI_ERR_SIZE_PARSE_TMPL),
+    ("EXPORT_MINI_ERR_SIZE_POSITIVE_TMPL", EXPORT_MINI_ERR_SIZE_POSITIVE_TMPL),
+    ("EXPORT_MINI_ERR_SIZE_SUFFIX", EXPORT_MINI_ERR_SIZE_SUFFIX),
     ("EXPORT_ERR_EMPTY", EXPORT_ERR_EMPTY),
     ("EXPORT_ERR_IS_DIR_TMPL", EXPORT_ERR_IS_DIR_TMPL),
     ("EXPORT_OVERWROTE", EXPORT_OVERWROTE),

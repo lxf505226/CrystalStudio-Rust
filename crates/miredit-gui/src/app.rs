@@ -1175,7 +1175,15 @@ impl MireditApp {
     }
 
     /// **导出小地图到指定路径**（导出小地图模态里点「导出」/ 回车）。
-    fn export_minimap_path(&mut self, path: &str, canvas: Rect) {
+    ///
+    /// `size` = 模态里校验过的尺寸口径（默认 `Preset(Small)`，手改宽高 ⇒ `Explicit`）；
+    /// 尺寸校验在模态里已经做过，这里只把它透传给 [`menu::action::export_minimap_path`]。
+    fn export_minimap_path(
+        &mut self,
+        path: &str,
+        size: crate::export::MinimapSize,
+        canvas: Rect,
+    ) {
         let out = {
             let mut cx = menu::action::Ctx {
                 doc: &mut self.doc,
@@ -1192,7 +1200,7 @@ impl MireditApp {
                 recent: &mut self.recent,
                 tool: self.selected_tool,
             };
-            menu::action::export_minimap_path(&mut cx, path)
+            menu::action::export_minimap_path(&mut cx, path, size)
         };
         self.finish_menu(menu::model::Action::ExportMinimap, out);
     }
@@ -1212,8 +1220,15 @@ impl MireditApp {
             // 导出选区模态：同一套输入，提交后走 `crate::export::export_selection`
             act = menu::dialog::interact_export_selection(ui, l, &mut self.overlay);
         } else if matches!(self.overlay, Overlay::ExportMinimap { .. }) {
-            // 导出小地图模态：同一套输入，提交后走 `crate::export::export_minimap`
-            act = menu::dialog::interact_export_minimap(ui, l, &mut self.overlay);
+            // 导出小地图模态：同一套路径输入 + **尺寸输入**（预设三选一 / 自定义宽高）。
+            // 地图格数每帧从文档取：选预设时按它算像素（官方 `document.Width*48/divisor`）。
+            let cells = self
+                .doc
+                .doc
+                .as_ref()
+                .map(|d| (u32::from(d.map.width), u32::from(d.map.height)))
+                .unwrap_or((0, 0));
+            act = menu::dialog::interact_export_minimap(ui, l, &mut self.overlay, cells);
         } else if matches!(self.overlay, Overlay::Shortcuts) {
             // 只读浮层：任意点击 / Esc 关闭
             if ui.input(|i| i.pointer.any_click()) || ui.input(|i| i.key_pressed(egui::Key::Escape))
@@ -1239,8 +1254,8 @@ impl MireditApp {
                 self.export_selection_path(&path, l.viewport);
                 ui.ctx().request_repaint();
             }
-            menu::dialog::DialogAction::ExportMinimap(path) => {
-                self.export_minimap_path(&path, l.viewport);
+            menu::dialog::DialogAction::ExportMinimap { path, size } => {
+                self.export_minimap_path(&path, size, l.viewport);
                 ui.ctx().request_repaint();
             }
         }
@@ -2302,8 +2317,15 @@ impl eframe::App for MireditApp {
                     Overlay::ExportSelection { path } => {
                         menu::dialog::draw_export_selection(&p, &l, path)
                     }
-                    Overlay::ExportMinimap { path } => {
-                        menu::dialog::draw_export_minimap(&p, &l, path)
+                    Overlay::ExportMinimap { path, size } => {
+                        // 画的时候也要地图格数：尺寸非法 ⇒「导出」按钮画灰（官方 IsEnabled）
+                        let cells = self
+                            .doc
+                            .doc
+                            .as_ref()
+                            .map(|d| (u32::from(d.map.width), u32::from(d.map.height)))
+                            .unwrap_or((0, 0));
+                        menu::dialog::draw_export_minimap(&p, &l, path, size, cells)
                     }
                     Overlay::Shortcuts => menu::dialog::draw_shortcuts(&p, &l),
                     Overlay::None => {}

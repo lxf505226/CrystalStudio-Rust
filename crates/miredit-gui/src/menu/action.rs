@@ -283,12 +283,18 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             }
             None => Outcome::refused(need_map_receipt()),
         },
-        // **导出小地图**：同一套模态，初值 = `<地图名>_小地图.png`。
+        // **导出小地图**：同一套模态 + 尺寸输入（2026-11-06，N F-R14-1）。
+        //
+        // 初值 = `<地图名>_小地图.png` + **Small 预设**（官方 `MinimapExportWindow.cs:21`
+        // 的默认项，与 CLI 缺省 `MinimapSize::Default` 逐像素相同）。
+        // 地图格数在这里取一次，交给模态算预设像素（`MinimapSize::resolve`）。
         Action::ExportMinimap => match cx.doc.doc.as_ref() {
             Some(d) => {
-                *cx.overlay = crate::menu::Overlay::ExportMinimap {
-                    path: default_export_path(&d.path, "_小地图"),
-                };
+                let cells = (u32::from(d.map.width), u32::from(d.map.height));
+                *cx.overlay = crate::menu::Overlay::export_minimap(
+                    default_export_path(&d.path, "_小地图"),
+                    cells,
+                );
                 Outcome::ok(tx::EXPORT_MINI_DLG_TITLE.to_owned())
             }
             None => Outcome::refused(need_map_receipt()),
@@ -697,13 +703,22 @@ pub fn export_selection_path(cx: &mut Ctx<'_>, path: &str) -> Outcome {
 /// **导出小地图到指定路径**（模态点「导出」/ 回车时走这里）。
 ///
 /// @acfbbf8a 回源订正：菜单路径与 CLI 缺省都走官方尺寸链
-/// [`crate::export::export_minimap_sized`] + [`crate::export::MinimapSize::Default`]
-/// （`W*12 × H*8`），**不再**经过本仓旧的 2048 长边两段式。
+/// [`crate::export::export_minimap_sized`]，**不再**经过本仓旧的 2048 长边两段式。
 /// 整图渲不出来时自动分块，**采样仍由 render crate 做**；官方 16 级 overview mip
 /// 到本仓 4 档的有据映射见 [`crate::export::pick_official_scale`]。
 ///
+/// `size` 由模态给出（2026-11-06，N F-R14-1）：默认 `Preset(Small)`，
+/// 也可手填宽高折成 `Explicit`。**校验已经在模态里做过**（`MinimapDlg::resolve`），
+/// 这里再交给 [`crate::export::export_minimap_sized`] 的 `valid_minimap_size` 兜一道。
+/// 导出层的顺序是「先取地图/图库 → 再验尺寸 → 再渲 → 最后才落盘」
+/// （`export.rs:1312-1321`）⇒ 两道里任一失败都**一个字节都不写**（连临时文件都不建）。
+///
 /// **门态**同 [`export_selection_path`]：传 [`Ctx::doors_open`]，缺省闭门。
-pub fn export_minimap_path(cx: &mut Ctx<'_>, path: &str) -> Outcome {
+pub fn export_minimap_path(
+    cx: &mut Ctx<'_>,
+    path: &str,
+    size: crate::export::MinimapSize,
+) -> Outcome {
     let (target, existed) = match precheck_export_target(path) {
         Ok(v) => v,
         Err(why) => return Outcome::refused(tx::fill(tx::MENU_EXPORT_FAIL_TMPL, &[("why", &why)])),
@@ -711,7 +726,7 @@ pub fn export_minimap_path(cx: &mut Ctx<'_>, path: &str) -> Outcome {
     let out = crate::export::export_minimap_sized(
         cx.doc,
         &target,
-        crate::export::MinimapSize::Default,
+        size,
         miredit_render::RenderOptions::with_doors_and_lighting(*cx.doors_open, *cx.lighting),
     );
     export_outcome(cx, out, existed, tx::MENU_EXPORT_MINI_OK_TMPL)
@@ -877,13 +892,20 @@ mod tests {
         assert_eq!(text, tx::EXPORT_SEL_DLG_TITLE);
 
         let out = apply(Action::ExportMinimap, &mut f.ctx(canvas));
-        assert_eq!(
-            f.overlay,
-            Overlay::ExportMinimap {
-                path: dir.join("exportdlg_小地图.png").display().to_string()
-            },
-            "导出小地图的模态初值必须是 <地图名>_小地图.png"
-        );
+        // 2026-11-06（N F-R14-1）起带尺寸输入状态：默认 **Small**，宽高 = 该档像素数
+        // （4×4 格 ⇒ 4*48/4 × 4*32/4 = 48 × 32）。
+        match &f.overlay {
+            Overlay::ExportMinimap { path, size } => {
+                assert_eq!(
+                    path,
+                    &dir.join("exportdlg_小地图.png").display().to_string(),
+                    "导出小地图的模态初值必须是 <地图名>_小地图.png"
+                );
+                assert_eq!(size.preset(), crate::export::MinimapPreset::Small);
+                assert_eq!((size.width_text(), size.height_text()), ("48", "32"));
+            }
+            other => panic!("导出小地图必须开带尺寸的模态，实得 {other:?}"),
+        }
         let (text, warn) = out.receipt.clone().expect("要有回执");
         assert!(!warn);
         assert_eq!(text, tx::EXPORT_MINI_DLG_TITLE);
@@ -937,7 +959,11 @@ mod tests {
         assert!(text.contains(tx::EXPORT_ERR_EMPTY), "回执没说清原因：{text}");
 
         // 已存在的目录
-        let out = export_minimap_path(&mut f.ctx(canvas), &dir.display().to_string());
+        let out = export_minimap_path(
+            &mut f.ctx(canvas),
+            &dir.display().to_string(),
+            crate::export::MinimapSize::Preset(crate::export::MinimapPreset::Small),
+        );
         let (text, warn) = out.receipt.clone().expect("必须有回执");
         assert!(warn);
         assert!(text.contains("是个目录"), "回执没说清原因：{text}");
@@ -955,6 +981,9 @@ mod tests {
 
     /// **导出走的是真实现**：夹具没有图库 ⇒ 回执里必须是「没有图库」这个**真原因**，
     /// 而不是"未实现"或空串。这条挡的是"菜单点了但根本没接到 exporter 上"。
+    ///
+    /// 小地图这条带上尺寸口径（`Preset(Small)`，即菜单模态的默认值）：尺寸变了，
+    /// 但「没图库」这个前置拒绝**必须仍在写盘之前**发生。
     #[test]
     fn 导出接到真实现上_没图库时报真原因() {
         let a = 造图("exportwired", 4, 4);
@@ -969,6 +998,51 @@ mod tests {
         assert!(warn);
         assert!(text.contains("没有图库"), "回执必须带真原因：{text}");
         assert!(!target.exists(), "失败时不许写文件");
+
+        // 导出小地图：同一张地图、默认 Small 档 ⇒ 仍是「没有图库」、仍不写文件
+        let mini = dir.join("out_mini.png");
+        let out = export_minimap_path(
+            &mut f.ctx(canvas),
+            &mini.display().to_string(),
+            crate::export::MinimapSize::Preset(crate::export::MinimapPreset::Small),
+        );
+        let (text, warn) = out.receipt.clone().expect("必须有回执");
+        assert!(warn);
+        assert!(text.contains("没有图库"), "小地图回执必须带真原因：{text}");
+        assert!(!mini.exists(), "失败时不许写文件");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **尺寸非法时也不许写出任何文件**（含临时文件）。
+    ///
+    /// ⚠ 顺序是**先图库、后尺寸**：`export_minimap_sized` 先 `map_and_source` 取地图与帧源，
+    /// 再 `resolve` + `valid_minimap_size`（`export.rs:1312-1321`）。夹具没有图库 ⇒ 这里拿到
+    /// 的必然是「没有图库」这条前置拒绝。**尺寸本身的中文拒绝**由两道更靠前的用例各自守住：
+    /// ① 模态层 `menu::dialog::tests::自定义宽高非法时拒绝且不写盘`（提交前就拒，不调导出）；
+    /// ② 导出层 `export::tests::官方尺寸链零值报中文原因`（有图库时 0 宽报原因、不写文件）。
+    /// 这条在本层钉住的是「无论拒绝发生在哪一段，目录里都不会多出文件」。
+    #[test]
+    fn 尺寸非法时也不写出任何文件() {
+        let a = 造图("exportbadsize", 4, 4);
+        let dir = a.parent().unwrap().to_path_buf();
+        let mut f = 夹具::打开(&a);
+        let canvas = 画布();
+        let target = dir.join("zero.png");
+        let out = export_minimap_path(
+            &mut f.ctx(canvas),
+            &target.display().to_string(),
+            crate::export::MinimapSize::Explicit { width: 0, height: 32 },
+        );
+        let (text, warn) = out.receipt.clone().expect("必须有回执");
+        assert!(warn, "拒绝必须回警示色");
+        assert!(text.contains("没有图库"), "夹具无图库 ⇒ 这是先发生的那条拒绝：{text}");
+        assert!(!target.exists(), "尺寸非法时不许写文件");
+        let names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert_eq!(names, vec!["exportbadsize.map".to_string()], "失败时不许写任何文件");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
