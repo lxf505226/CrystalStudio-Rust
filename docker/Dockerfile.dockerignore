@@ -1,0 +1,33 @@
+# =============================================================================
+# 构建上下文排除清单
+#
+# ⚠ 只有 BuildKit / Docker 20.10+ 会读 `<Dockerfile>.dockerignore`（即本文件）。
+#   旧版构建器（DOCKER_BUILDKIT=0）**不读**它 ⇒ 上下文会变成 ~7.6 GB（全是
+#   wil2atlas 的产物目录）。compose v2 默认走 BuildKit，正常不会踩到。
+#
+# 上下文根 = `tools/`（不是 `tools/miredit/`）。
+# 不排除 `miredit/crates/`：后端阶段要编译 miredit-web，且 cargo 解析 workspace
+# 时会检查每个成员的 target 源文件是否存在，排掉 src/ 会让 `cargo metadata` 直接失败。
+# =============================================================================
+
+# ---- 构建产物 / 参考图：构建完全用不到 --------------------------------------
+miredit/layout/
+miredit/target/
+wil2atlas/target/
+
+# ---- wil2atlas 的大产物目录（合计 ~7.5 GB，纯数据）-------------------------
+# 只要 wil2atlas/Cargo.toml + Cargo.lock + src/ + tests/ + examples/ 就够编译。
+wil2atlas/atlas_out/
+wil2atlas/verify_out/
+
+# ---- 开发期脚本与缓存 ------------------------------------------------------
+miredit/web/tiles/gen_tiles.py
+**/__pycache__/
+**/*.pyc
+
+# ---- 与本镜像无关的兄弟工具（各自独立，不属于 miredit）---------------------
+android-probe/
+cleanup/
+dualrun/
+memory/
+mirdb_gen/

@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/mir2-map",
+    "crates/mir2-assets",
+    "crates/miredit-render",
+    "crates/miredit-gui",
+    "crates/mir2-stamp",
+    "crates/mir2-format",
+    "crates/miredit-core",
+    "crates/miredit-web",
+]
