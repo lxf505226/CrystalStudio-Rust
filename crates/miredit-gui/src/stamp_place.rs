@@ -258,7 +258,7 @@ mod tests {
     use miredit_core::EditLayer;
 
     /// 本机真实印章（CrystalStudio 自带范例；core 的验收门 2 用的也是它）。
-    const 印章: &str = r"E:\GodM2\CrystalStudio\Objects\mir\mir_00000.X";
+    const 印章: &str = r"I:\miredit\_upstream\Objects\mir\mir_00000.X";
 
     /// 合成 8×8 `New14` 图：每格地表图号 = 序号 + 1（可区分）。
     fn 造图(w: u16, h: u16) -> Map {

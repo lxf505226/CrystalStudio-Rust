@@ -6,9 +6,12 @@ description = "传奇 M2 `.wil/.wix/.wz*` 图库解码层（地图编辑器渲�
 license = "MIT"
 
 [dependencies]
-# 解码实现全部复用 `tools/wil2atlas`，本 crate 不复制任何二进制解析代码。
-# 路径相对本清单目录（crates/mir2-assets）：`../../../wil2atlas` = `tools/wil2atlas`。
-wil2atlas = { path = "../../../wil2atlas" }
+# 解码实现全部复用 `wil2atlas`，本 crate 不复制任何二进制解析代码。
+# 2026-11-06：项目已从 E:\GodM2\tools\miredit 迁到 I:\miredit，但 wil2atlas
+# **按用户裁定继续用原位置** E:\GodM2\tools\wil2atlas（7.4 GB，不复制、不搬家）。
+# ⇒ 用绝对路径，避免相对层级随项目位置变化而失效。
+# 迁移前的旧值 `../../../wil2atlas` 在新位置会解析到不存在的 I:\wil2atlas。
+wil2atlas = { path = "E:/GodM2/tools/wil2atlas" }
 
 [dev-dependencies]
 # 仅测试用：读客户端已烘焙的图集 PNG，做逐像素比对（验收门 1）。

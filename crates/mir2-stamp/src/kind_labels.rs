@@ -141,7 +141,7 @@ mod tests {
     use super::{kind_label_zh, kind_label_zh_or, KIND_LABELS_ZH};
 
     /// 默认 `palette.json`（与 `catalogue_tests` 同一环境变量口径，换机时用 `MIR2_STAMP_PALETTE` 覆盖）。
-    const 默认目录文件: &str = r"E:\GodM2\CrystalStudio\catalogue\palette.json";
+    const 默认目录文件: &str = r"I:\miredit\_upstream\catalogue\palette.json";
 
     /// 实测基线：distinct kind 数（19 个英文 + 空串/null）。
     const DISTINCT_KIND_BASELINE: usize = 20;

@@ -43,7 +43,7 @@ use mir2_map::Cell;
 use mir2_stamp::Stamp;
 
 /// 真实印章样本（CrystalStudio 自带范例，README `:211-215` 记的就是它）。
-const 印章路径: &str = r"E:\GodM2\CrystalStudio\Objects\mir\mir_00000.X";
+const 印章路径: &str = r"I:\miredit\_upstream\Objects\mir\mir_00000.X";
 /// 真实地图样本（700×700 / 12 B 每格 / `Shanda14` 之前的旧档）。
 const 地图路径: &str = r"E:\GodM2\GodotClient\maps\0.map";
 

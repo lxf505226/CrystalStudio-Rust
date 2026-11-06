@@ -84,7 +84,7 @@ pub use thumbs::{fit_text, positioned_cells, render_thumb};
 pub const PALETTE_ENV: &str = "MIR2_STAMP_PALETTE";
 
 /// 缺省 `palette.json` 路径（本机实测存在；不存在时面板如实报「加载失败」，**不静默空表**）。
-pub const DEFAULT_PALETTE: &str = r"E:\GodM2\CrystalStudio\catalogue\palette.json";
+pub const DEFAULT_PALETTE: &str = r"I:\miredit\_upstream\catalogue\palette.json";
 
 /// 「分类」页签在 [`crate::ui_text::PALETTE_TABS`] 里的下标（0 = 资源库 / 1 = 收藏 / 2 = 最近使用 / 3 = 分类）。
 ///

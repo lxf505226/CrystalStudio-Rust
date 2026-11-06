@@ -30,7 +30,7 @@ use miredit_render::RenderError;
 // ---------------------------------------------------------------------------
 
 /// 印章目录（真实路径，不是猜的）。
-const 印章目录: &str = r"E:\GodM2\CrystalStudio\Objects\mir";
+const 印章目录: &str = r"I:\miredit\_upstream\Objects\mir";
 
 /// `tools/miredit/layout/refs`（相对本 crate 清单目录）。
 fn refs_目录() -> PathBuf {

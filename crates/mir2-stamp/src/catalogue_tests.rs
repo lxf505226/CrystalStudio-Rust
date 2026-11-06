@@ -17,7 +17,7 @@ use crate::stamp::{Stamp, StampCell};
 use crate::StampCellData;
 
 /// 默认 palette.json（可用环境变量 `MIR2_STAMP_PALETTE` 覆盖）。
-const 默认目录文件: &str = r"E:\GodM2\CrystalStudio\catalogue\palette.json";
+const 默认目录文件: &str = r"I:\miredit\_upstream\catalogue\palette.json";
 
 /// 真实 palette.json 路径（环境变量优先）。
 fn 目录文件() -> PathBuf {

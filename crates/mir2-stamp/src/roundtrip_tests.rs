@@ -18,7 +18,7 @@ use crate::error::StampError;
 use crate::stamp::{trailing_bytes, Stamp, StampCell};
 
 /// 印章根目录。可用环境变量 `MIR2_STAMP_ROOT` 覆盖（换机/换盘时不必改代码）。
-const 默认印章根: &str = r"E:\GodM2\CrystalStudio\Objects";
+const 默认印章根: &str = r"I:\miredit\_upstream\Objects";
 
 /// 往返统计。
 #[derive(Default)]

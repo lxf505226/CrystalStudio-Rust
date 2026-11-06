@@ -214,7 +214,7 @@ mod tests {
 
     /// 真实印章样本（CrystalStudio 自带范例）。`mir2-stamp/src/lib.rs:66-67` 记它
     /// **780 B / 25 格 / 8 格带前景**，与 `CrystalStudio/README.md:211-215` 逐项吻合。
-    const 印章路径: &str = r"E:\GodM2\CrystalStudio\Objects\mir\mir_00000.X";
+    const 印章路径: &str = r"I:\miredit\_upstream\Objects\mir\mir_00000.X";
 
     /// 读真实印章字节；读不到就**大声失败**（不静默跳过 —— 跳过等于这条测试不存在）。
     fn 读真实印章() -> Vec<u8> {

@@ -26,7 +26,7 @@ use mir2_stamp::catalogue::StampCatalog;
 use mir2_stamp::Stamp;
 
 /// 默认 palette.json 路径（可用环境变量 `MIR2_STAMP_PALETTE` 覆盖）。
-const 默认目录文件: &str = r"E:\GodM2\CrystalStudio\catalogue\palette.json";
+const 默认目录文件: &str = r"I:\miredit\_upstream\catalogue\palette.json";
 
 fn 目录文件() -> PathBuf {
     match std::env::var_os("MIR2_STAMP_PALETTE") {

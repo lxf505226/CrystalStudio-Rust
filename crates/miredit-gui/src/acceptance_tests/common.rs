@@ -18,7 +18,7 @@ use miredit_core::Selection;
 /// 真实地图样本（700×700 / 12 B 每格 / `Old12`）。
 pub(super) const 地图路径: &str = r"E:\GodM2\GodotClient\maps\0.map";
 /// 真实印章样本（25 格 / 包围盒 `(-1,-2,4,3)`；core 门 2 用的也是它）。
-pub(super) const 印章路径: &str = r"E:\GodM2\CrystalStudio\Objects\mir\mir_00000.X";
+pub(super) const 印章路径: &str = r"I:\miredit\_upstream\Objects\mir\mir_00000.X";
 /// 真实地图的头部长度（`Old12`：52 字节头 + 12 字节/格）。
 pub(super) const 头长: usize = 52;
 /// 真实地图的格长。
