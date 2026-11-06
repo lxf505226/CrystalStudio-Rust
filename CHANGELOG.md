@@ -13,6 +13,13 @@
 
 > 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。
 
+## [0.0.2] - 2026-11-07
+
+### 修复
+
+- GUI 打开模态时不再把对话框标题写进状态栏回执：About / OpenMap / SaveAs / ExportSelection / ExportMinimap / KeyboardShortcuts 统一走 `Outcome::opened_overlay()`（`receipt: None`），修掉「标题 + 状态栏同句」重复；About 的 `ABOUT_OPEN_RECEIPT` 同值常量已删除。
+- 网页版错误只保留一个持久出口：`/api/map` 读失败只显示空态正文（不再 toast 同一句）；编辑 409 `no_map` 只显示「尚未打开地图」空态；离线启动的 banner 与空态不再同为「后端未连接」，空态如实写「本页不会自动重试，需刷新」。
+
 ## [0.0.1] - 2026-11-06
 
 首个公开可用版本 **0.0.1**：C# / Avalonia 版 Crystal Studio 的 Rust 全量移植落地，PC 原生版与网页版共用同一编辑内核。此前没有任何对外版本，所以下面就是这一版的**全部内容**（不存在「相对上一版改了什么」的比较）。

@@ -169,7 +169,10 @@
         ME.ui.refresh();
       }
     } catch (e) {
-      ME.ui.toast('读取 /api/map 失败：' + ME.api.describe(e), 6000);
+      // 失败原因只上**一个**出口：空态正文（持久、可读、含完整 describe）。
+      // 以前 toast 也贴同一句 describe ⇒ 用户同时看到 toast 与空态正文两遍同一句话。
+      // 这里不再 toast，也不编一句更弱的替代句（那只是把重复换个说法）。
+      ME.debug.push('map:load-error', { code: e.code, message: e.message });
       showEmpty(true, '读取地图信息失败', ME.api.describe(e));
     }
   }
@@ -335,10 +338,15 @@
 
     ME.on('edit:error', function (p) {
       var e = p.error || {};
-      var msg = ME.api.describe(e);
-      ME.ui.toast(commandName(p.cmd) + ' 失败 · ' + msg, 7000);
       ME.debug.push('edit:error', { cmd: p.cmd, code: e.code, message: e.message });
-      if (e.code === 'no_map') showEmpty(true, '尚未打开地图', '先「打开地图…」再编辑。');
+      // 409 no_map：持久空态已经说了「尚未打开地图 + 先打开地图…再编辑」，
+      // 再 toast 一条「<命令> 失败 · 尚未打开地图（409）：请先点「打开地图…」…」
+      // 就是同一件事上屏两遍 ⇒ 这一种码不发 toast。其它错误仍照后端原文 toast，一个字不省。
+      if (e.code === 'no_map') {
+        showEmpty(true, '尚未打开地图', '先「打开地图…」再编辑。');
+        return;
+      }
+      ME.ui.toast(commandName(p.cmd) + ' 失败 · ' + ME.api.describe(e), 7000);
     });
   }
 
@@ -605,10 +613,14 @@
       state.mode = 'offline';
       document.body.dataset.mode = 'offline';
       document.body.dataset.connected = 'false';
+      // 横幅说全局连接状态（含原因 + 怎么起后端），空态说「画布为什么是空的」。
+      // 两处都写「后端未连接」= 同一句话上屏两遍，所以空态换一个引导性标题/说明。
+      // ⚠ 只写真正会发生的事：本页没有自动重试（health 只在启动探一次），必须刷新。
       ME.ui.showBanner('后端未连接：/api/health 无响应',
         '（' + (health.reason || '未探测') + '）请先启动 miredit-web（MIREDIT_BIND / MIREDIT_MAP_ROOT 是环境变量）。' +
         '未连接时画布不显示任何地图，也不发送编辑请求。');
-      showEmpty(true, '后端未连接', '/api/health 无响应。启动后端后刷新页面。');
+      showEmpty(true, '等待后端连接',
+        '画布要等 miredit-web 起好、刷新本页之后才有地图（本页不会自动重试）。');
     }
 
     ME.ui.syncLayers();

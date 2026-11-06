@@ -2988,6 +2988,25 @@ mod tests {
         .viewport
     }
 
+    /// 跑一帧 `handle_keys`，这一帧里按了一下 `key`（**真键盘路径**，不是直接调动作）。
+    ///
+    /// 为什么这样写：`handle_keys` 读的是 `ctx.input(...)`，只有把事件塞进
+    /// `ctx.run(RawInput{events})` 的那一帧才读得到 —— 与 `menu::dialog` 的模态用例同一套做法。
+    fn 按一次键(app: &mut MireditApp, key: egui::Key) {
+        let ctx = egui::Context::default();
+        let input = egui::RawInput {
+            events: vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: Default::default(),
+            }],
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| app.handle_keys(ctx));
+    }
+
     /// **无图时点「需要先开图」的项**：回执是「需要先开图：…」，且文档一个字节都不动。
     #[test]
     fn 无图时菜单项被拦且不改文档() {
@@ -3633,6 +3652,9 @@ mod tests {
     }
 
     /// 快捷键浮层：菜单项把它打开、`Overlay::is_some` 为真；再按 Esc 关掉。
+    ///
+    /// 2026-11-06 全类清理：与「关于」同一套口径 —— 打开浮层**不写状态栏回执**
+    /// （浮层标题「键盘快捷键」已在屏上），所以这里追加 `app.op.is_none()`。
     #[test]
     fn 快捷键浮层可开可关() {
         let mut app = 有图应用();
@@ -3641,6 +3663,18 @@ mod tests {
         app.dispatch_menu(menu::model::Action::KeyboardShortcuts, canvas);
         assert!(app.overlay == Overlay::Shortcuts, "菜单项没打开浮层");
         assert!(app.overlay.is_some());
+        assert!(
+            app.op.is_none(),
+            "快捷键浮层不该写状态栏回执（标题已写同一句）：{:?}",
+            app.op
+        );
+        // 按 `update` 的同一套装配重建文案：状态栏「上一次操作」那一段必须是空的
+        app.text = screen_text::build(&app.doc, &app.view, app.hover, &app.lines, &app.edit);
+        assert!(
+            app.text.status_op.is_none(),
+            "状态栏出现了回执：{:?}",
+            app.text.status_op
+        );
     }
 
     /// **帮助 → 关于**：菜单项打开只读模态，且**地图一字节不动**（`map_gen` 不变）。
@@ -3648,6 +3682,11 @@ mod tests {
     /// 为什么单列一条（不并进快捷键那条）：这两条走的是同一个 `dispatch_menu`，
     /// 但 About 是 2026-11-06 新增的**本仓功能**，它的"版本号现算 + 不碰文档"是硬要求，
     /// 得有一条用例在宿主层（app）钉住，而不是只在 `menu::action` 的夹具里绿。
+    ///
+    /// 2026-11-06 追加（用户截图红框标出）：**状态栏不许再出现「关于 Crystal Studio」**。
+    /// 浮层标题已经写着同一句，回执再写一遍就是同屏重复 —— 所以这里钉 `app.op.is_none()`
+    /// （它是 `status_op` 的唯一来源：`update` 只在 `op` 为 `Some` 时才往状态栏落字），
+    /// 并顺手按同一份 `screen_text::build` 重建一次文案，确认状态栏那一段确实是空的。
     #[test]
     fn 关于浮层打开且不改地图() {
         let mut app = 有图应用();
@@ -3658,13 +3697,145 @@ mod tests {
         assert!(app.overlay == Overlay::About, "菜单项没打开关于模态");
         assert!(app.overlay.is_some());
         assert_eq!(app.doc.map_gen, gen, "打开关于不许改地图/触发重渲");
-        let (text, warn) = app.op.clone().expect("要有回执");
-        assert!(!warn, "打开关于不是拒绝：{text}");
-        assert_eq!(text, tx::ABOUT_OPEN_RECEIPT);
+        assert!(
+            app.op.is_none(),
+            "关于不该写状态栏回执（否则标题与状态栏重复）：{:?}",
+            app.op
+        );
+        // 按 `update` 的同一套装配重建文案：`build` 先清空 `status_op`，而 `op` 是 `None`
+        // ⇒ 这一帧状态栏的「上一次操作」那一段必须是空的。
+        app.text = screen_text::build(&app.doc, &app.view, app.hover, &app.lines, &app.edit);
+        assert!(
+            app.text.status_op.is_none(),
+            "状态栏出现了回执：{:?}",
+            app.text.status_op
+        );
         // 版本号在宿主这一层也是同一份真源（`--version` / 关于 / 网页 health）
         assert_eq!(menu::about::VERSION, env!("CARGO_PKG_VERSION"));
         // 浮层是"只读模态"：`is_some()` ⇒ `handle_keys` 整段早退，编辑快捷键不会落进地图
         assert!(app.overlay.is_some(), "关于打开期间编辑快捷键必须被挡住");
+    }
+
+    /// **回归（2026-11-06 用户截图红框）**：打开「关于」后，状态栏不许出现「关于 Crystal Studio」。
+    ///
+    /// 与上一条的分工：上一条从**空状态栏**出发钉 `op.is_none()`；这一条先制造一条别的回执，
+    /// 证明"关于"**不会把自己的标题写进去**（不是靠清空状态栏掩盖重复），并直接断言
+    /// 文案装配里那一段不含标题 —— 这正是用户截图里红框圈出的同屏重复。
+    #[test]
+    fn 关于打开后状态栏不出现重复标题() {
+        let mut app = 有图应用();
+        let canvas = 画布();
+        // 先留下一条真回执：要让"重复"有机会发生，状态栏就不能是空的。
+        app.dispatch_menu(menu::model::Action::CellGrid, canvas);
+        assert!(app.op.is_some(), "前置：单元格网格开关本来就会写一条回执");
+        app.dispatch_menu(menu::model::Action::About, canvas);
+        assert_eq!(app.overlay, Overlay::About, "关于必须真的打开");
+        assert_ne!(
+            app.op.as_ref().map(|(t, _)| t.as_str()),
+            Some(tx::ABOUT_TITLE),
+            "关于不许把浮层标题当回执写进状态栏（同屏会重复两遍）"
+        );
+        // `update` 只把 `op` 落进 `status_op`，而 `screen_text::build` 先把它清空
+        // ⇒ 只要 `op` 不是那句标题，状态栏就不会出现重复标题。
+        app.text = screen_text::build(&app.doc, &app.view, app.hover, &app.lines, &app.edit);
+        assert!(
+            !app.text
+                .status_op
+                .as_deref()
+                .unwrap_or("")
+                .contains(tx::ABOUT_TITLE),
+            "状态栏「上一次操作」段混进了标题：{:?}",
+            app.text.status_op
+        );
+    }
+
+    /// **全类回归（2026-11-06）**：打开任何一个模态/浮层，状态栏都不许出现该浮层的标题。
+    ///
+    /// 用户截图红框标出的是「关于 Crystal Studio」，但同一个毛病在 6 个"打开浮层"的动作上
+    /// 都存在过（打开地图 / 另存为 / 导出选区 / 导出小地图 / 键盘快捷键 / 关于）——
+    /// 它们以前都 `Outcome::ok(<对话框标题>)`：标题在模态上写一遍、状态栏再写一遍。
+    /// 现在统一走 `Outcome::opened_overlay()`（`receipt: None`），本用例逐条钉住：
+    /// ① **空状态栏出发** ⇒ `app.op.is_none()`，重建文案后 `status_op` 为空；
+    /// ② **先留一条别人的真回执** ⇒ 打开浮层后仍是那条回执（不是靠清空状态栏掩盖重复），
+    ///    且重建后的状态栏**不含该浮层标题**；
+    /// ③ 地图一字节不动（`map_gen` 不变）、浮层真的开着（`overlay.is_some()`）；
+    /// ④ **快捷键早退**：浮层开着时按 `G`（无浮层时会翻单元格网格）一个字段都不许变 ——
+    ///    依据是 `handle_keys` ⓪ 的 `if self.overlay.is_some() { return; }`。
+    #[test]
+    fn 打开浮层不写标题回执_表驱动() {
+        let canvas = 画布();
+        let 用例: [(menu::model::Action, &str); 6] = [
+            (menu::model::Action::OpenMap, tx::OPEN_DLG_TITLE),
+            (menu::model::Action::SaveAs, tx::SAVE_AS_DLG_TITLE),
+            (menu::model::Action::ExportSelection, tx::EXPORT_SEL_DLG_TITLE),
+            (menu::model::Action::ExportMinimap, tx::EXPORT_MINI_DLG_TITLE),
+            (menu::model::Action::KeyboardShortcuts, tx::SHORTCUTS_TITLE),
+            (menu::model::Action::About, tx::ABOUT_TITLE),
+        ];
+        // ⓪ 反假绿：同一个按键助手在**没有浮层**时必须真的翻动网格，
+        //    否则下面「G 被挡住」可能只是"事件根本没送到"。
+        let mut 对照 = 有图应用();
+        let 对照前 = 对照.grid;
+        按一次键(&mut 对照, egui::Key::G);
+        assert_ne!(
+            对照.grid, 对照前,
+            "对照组：无浮层时按 G 必须真的翻单元格网格（否则早退断言是假绿）"
+        );
+
+        for (action, title) in 用例 {
+            // ① 空状态栏出发
+            let mut app = 有图应用();
+            let gen = app.doc.map_gen;
+            assert!(app.op.is_none(), "前置：{} 起点应是空状态栏", action.id());
+            app.dispatch_menu(action, canvas);
+            assert!(app.overlay.is_some(), "{} 必须真的打开浮层", action.id());
+            assert!(
+                app.op.is_none(),
+                "{} 把浮层标题当回执写进了状态栏：{:?}",
+                action.id(),
+                app.op
+            );
+            assert_eq!(app.doc.map_gen, gen, "{} 不许改地图/触发重渲", action.id());
+            app.text = screen_text::build(&app.doc, &app.view, app.hover, &app.lines, &app.edit);
+            assert!(
+                app.text.status_op.is_none(),
+                "{} 之后状态栏「上一次操作」段必须是空的：{:?}",
+                action.id(),
+                app.text.status_op
+            );
+
+            // ④ 快捷键早退：浮层开着时 G 必须被挡住
+            let grid_before = app.grid;
+            按一次键(&mut app, egui::Key::G);
+            assert_eq!(
+                app.grid,
+                grid_before,
+                "{} 打开期间按 G 不该翻网格（编辑快捷键要整段早退）",
+                action.id()
+            );
+
+            // ② 已有回执时也不许被标题覆盖 / 也不许被清空
+            app.overlay = Overlay::None;
+            app.dispatch_menu(menu::model::Action::CellGrid, canvas);
+            let 前一条 = app.op.clone().expect("前置：单元格网格本来就会写一条回执");
+            assert_ne!(前一条.0, title, "前置回执不许恰好是同名标题");
+            let gen = app.doc.map_gen;
+            app.dispatch_menu(action, canvas);
+            assert_eq!(
+                app.op.clone().expect("旧回执要留着"),
+                前一条,
+                "{} 覆盖了别人的回执（或把状态栏清空了）",
+                action.id()
+            );
+            assert_eq!(app.doc.map_gen, gen, "{} 第二次打开也不许改地图", action.id());
+            app.text = screen_text::build(&app.doc, &app.view, app.hover, &app.lines, &app.edit);
+            let 状态栏 = app.text.status_op.clone().unwrap_or_default();
+            assert!(
+                !状态栏.contains(title),
+                "{} 的标题混进了状态栏：{状态栏:?}",
+                action.id()
+            );
+        }
     }
 
     /// **`--menu-click file.open_recent`**：容器项**不执行任何动作**，只回一条"去哪选"的话。

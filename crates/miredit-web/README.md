@@ -19,7 +19,7 @@
 ```bash
 cargo build -p miredit-web --release
 
-export MIREDIT_BIND=127.0.0.1:8080
+export MIREDIT_BIND=127.0.0.2:8080
 export MIREDIT_MAP_ROOT=/path/to/maps          # /api/map/open 的白名单根
 export MIREDIT_CLIENT_ROOT=/path/to/client-root
 export MIREDIT_PALETTE_JSON=/path/to/crystalstudio/catalogue/palette.json
@@ -28,11 +28,11 @@ cargo run -p miredit-web --release
 ```
 
 ```bash
-curl -s http://127.0.0.1:8080/api/health
-# {"ok":true,"version":"0.0.1"}
+curl -s http://127.0.0.2:8080/api/health
+# {"ok":true,"version":"0.0.2"}
 ```
 
-> 上面的 `version` 是**当前快照**（`0.0.1`）：版本号唯一真源是根 `Cargo.toml` 的
+> 上面的 `version` 是**当前快照**（`0.0.2`）：版本号唯一真源是根 `Cargo.toml` 的
 > `[workspace.package].version`，实际值一律以 `/api/health` 的返回为准（本文不预写下一版号）。
 
 ### 1.2 环境变量
@@ -72,14 +72,14 @@ curl -s http://127.0.0.1:8080/api/health
 cd docker && docker compose up -d --build
 
 # 或手工构建（构建上下文必须是仓库根，原因见 docker/Dockerfile 头注释）
-docker build -f docker/Dockerfile -t miredit-web:0.0.1 .
+docker build -f docker/Dockerfile -t miredit-web:0.0.2 .
 docker run --rm -p 8080:8080 \
   -v /path/to/maps:/data/maps:ro \
   -v /path/to/client-root:/data/client:ro \
   -v /path/to/crystalstudio/catalogue:/data/crystalstudio/catalogue:ro \
   -v /path/to/crystalstudio/Objects:/data/crystalstudio/Objects:ro \
-  miredit-web:0.0.1
-curl http://127.0.0.1:8080/api/health
+  miredit-web:0.0.2
+curl http://127.0.0.2:8080/api/health
 ```
 
 > 镜像 tag 只是**示例**（用当前版本号打本地标签，方便对照 `docker/compose.yaml` 里的 `:dev`）；
@@ -97,7 +97,7 @@ curl http://127.0.0.1:8080/api/health
 
 | 方法 | 路径 | 成功响应 |
 |---|---|---|
-| GET | `/api/health` | `{"ok":true,"version":"0.0.1"}`（示例快照，实际以进程返回为准） |
+| GET | `/api/health` | `{"ok":true,"version":"0.0.2"}`（示例快照，实际以进程返回为准） |
 | GET | `/api/map` | `{"path","width","height","format","dirty","tolerant_trailer_bytes","format_label","editable","ground_paint_supported","edit_warning","disk_cell_len"}`；没开图时除 `width/height` 外全为 `null`（两个能力布尔也是 `null`，**不写 `false`**）。`editable` 与 `edit_warning` 的口径见 §2.0.1 |
 | POST | `/api/map/open` `{"path":"…"}` | 同上 |
 | GET | `/api/tiles?x&y&w&h&scale&layers&collision&doors&lighting` | `image/png` |
@@ -327,7 +327,7 @@ core: cells_from_stamp / register_stamp / place_stamp_by_id / Command::PlaceStam
 - **路径白名单**：`resolve_map_path` 是唯一入口，四道闸 ——
   ① 非空；② **任何 `..` 分量一律拒绝**；③ `canonicalize` 后必须仍在根内（顺带挡符号链接）；
   ④ 必须是普通文件。任一条不过 ⇒ 400/403/404。
-- **CORS**：只回显 `http://localhost:<任意端口>` / `http://127.0.0.1:<端口>` / `http://[::1]:<端口>`，
+- **CORS**：只回显 `http://localhost:<任意端口>` / `http://127.0.0.2:<端口>` / `http://[::1]:<端口>`，
   **不放 `*`**（否则任意网页都能调 `/api/save` 改你的地图）。
 - **静态文件**：`..` 拒绝 + `canonicalize` 后仍在 `web_root` 内；未实现的 `/api/*` 走 JSON 404。
 

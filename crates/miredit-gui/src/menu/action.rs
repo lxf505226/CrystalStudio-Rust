@@ -9,6 +9,7 @@
 //! State::Todo(why)      → 不动任何数据，回执「未实现：why」（状态栏警示色）
 //! State::NeedsMap + 无图 → 不动任何数据，回执「需要先开图：…」
 //! 其余                   → 真执行，回执写真实结果（成功/失败都带原因）
+//! 打开模态/浮层          → 只切浮层状态，**不写回执**（标题已在浮层上，写进状态栏就是同屏重复）
 //! ```
 //!
 //! ⚠ **灰显项绝不许"悄悄返回"**：每条都产生一条回执，且 `apply` 的调用方
@@ -109,6 +110,25 @@ impl Outcome {
     fn ok(text: String) -> Self {
         Self {
             receipt: Some((text, false)),
+            rebuild_text: true,
+            repaint: true,
+            ..Self::default()
+        }
+    }
+
+    /// 打开一个**只读浮层**：要重绘，但**不写状态栏回执**。
+    ///
+    /// 为什么单开一个构造器（2026-11-06 用户截图反馈）：浮层标题已经写着同一句话，
+    /// 再把同一句塞进状态栏就是**同一屏出现两遍**（「关于 Crystal Studio」被红框标出）。
+    /// 这类动作的正确回执是"没有回执"——不是换一句别的话继续占着状态栏。
+    ///
+    /// ⚠ **凡"打开模态/浮层"的动作都走这里**（打开地图 / 另存为 / 导出选区 /
+    /// 导出小地图 / 键盘快捷键 / 关于 —— 共 6 条，2026-11-06 全类清理）：
+    /// 判据是"这个动作是否只把 [`crate::menu::Overlay`] 从 `None` 切到某个模态"。
+    /// 是 ⇒ 标题在模态上已经可见，回执留空；不是（保存成功/失败、适应地图、光照、
+    /// 面板开关……）⇒ 照旧用 [`Outcome::ok`] / [`Outcome::refused`] 写真实结果。
+    fn opened_overlay() -> Self {
+        Self {
             rebuild_text: true,
             repaint: true,
             ..Self::default()
@@ -218,6 +238,10 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
     }
     match action {
         // ───────────── 文件 ─────────────
+        // **打开地图**：只把浮层切过去（真正的读盘在模态回车后走 [`open_path`]）。
+        //
+        // ⚠ **状态栏不回执**（2026-11-06 全类清理）：模态标题已写着「打开地图」，
+        // 回执再写同一句 ⇒ 同一屏出现两遍（用户截图红框标出的那一类）。
         Action::OpenMap => {
             let start = cx
                 .doc
@@ -226,7 +250,7 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
                 .map(|d| d.path.display().to_string())
                 .unwrap_or_else(|| crate::mapdoc::DEFAULT_MAP_PATH.to_owned());
             *cx.overlay = crate::menu::Overlay::OpenMap { path: start };
-            Outcome::ok(tx::OPEN_DLG_TITLE.to_owned())
+            Outcome::opened_overlay()
         }
         // 「最近打开」是**子菜单容器**（官方 `OpenRecentButton` 在 axaml 里没有 `Click`，
         // `MainWindow.RecentMaps.cs:23-40` 只往 `Items` 里填行）⇒ 派发它本身**不执行动作**。
@@ -267,7 +291,8 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             *cx.overlay = crate::menu::Overlay::SaveAs {
                 path: d.path.display().to_string(),
             };
-            Outcome::ok(tx::SAVE_AS_DLG_TITLE.to_owned())
+            // 打开模态不回执（模态标题「另存为」已在屏上，写进状态栏就是同屏重复）
+            Outcome::opened_overlay()
         }
         // **导出选区**（2026-11-05 接线）：打开路径输入模态，初值 = 地图同目录的
         // `<地图名>_选区.png`。真正的渲染与写盘在模态回车后走 [`export_selection_path`]。
@@ -279,7 +304,8 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
                 *cx.overlay = crate::menu::Overlay::ExportSelection {
                     path: default_export_path(&d.path, "_选区"),
                 };
-                Outcome::ok(tx::EXPORT_SEL_DLG_TITLE.to_owned())
+                // 打开模态不回执（模态标题「导出选区」已在屏上）
+                Outcome::opened_overlay()
             }
             None => Outcome::refused(need_map_receipt()),
         },
@@ -295,7 +321,8 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
                     default_export_path(&d.path, "_小地图"),
                     cells,
                 );
-                Outcome::ok(tx::EXPORT_MINI_DLG_TITLE.to_owned())
+                // 打开模态不回执（模态标题「导出小地图」已在屏上）
+                Outcome::opened_overlay()
             }
             None => Outcome::refused(need_map_receipt()),
         },
@@ -419,9 +446,11 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             ))
         }
         // ───────────── 帮助 ─────────────
+        // **键盘快捷键**：只读浮层，与「关于」同一套口径 —— 只改浮层状态、
+        // 不碰文档/视口/会话，且**不写状态栏回执**（浮层标题已写着「键盘快捷键」）。
         Action::KeyboardShortcuts => {
             *cx.overlay = crate::menu::Overlay::Shortcuts;
-            Outcome::ok(tx::SHORTCUTS_TITLE.to_owned())
+            Outcome::opened_overlay()
         }
         // 「关于 Crystal Studio」（2026-11-06 新增）：打开只读模态。
         //
@@ -429,9 +458,14 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         // 地图一字节不动，也没有"需要先开图"这一档（没有地图时照样能看版本号）。
         // 内容全部现算（版本 `CARGO_PKG_VERSION` + 构建档位 `cfg!(debug_assertions)`），
         // 见 [`crate::menu::about::rows`]。
+        //
+        // ⚠ **状态栏不回执**（2026-11-06 修）：浮层标题已经写「关于 Crystal Studio」，
+        // 回执再写同一句 ⇒ 标题与状态栏同屏重复（用户截图红框标出的就是这条）。
+        // 所以走 [`Outcome::opened_overlay`]（只重绘、`receipt: None`），
+        // 既不重复，也不拿「版本 0.0.1」之类另起一句去占状态栏。
         Action::About => {
             *cx.overlay = crate::menu::Overlay::About;
-            Outcome::ok(tx::ABOUT_OPEN_RECEIPT.to_owned())
+            Outcome::opened_overlay()
         }
         // ───────────── 视图：地图光照（2026-11-05 接线） ─────────────
         //
@@ -859,6 +893,9 @@ mod tests {
     }
 
     /// **菜单项「另存为」打开模态**：初值 = 当前地图路径（用户改个文件名最省事）。
+    ///
+    /// 2026-11-06 全类清理：打开模态**不写状态栏回执**（模态标题「另存为」已在屏上，
+    /// 再进状态栏就是同屏重复）⇒ 这里钉 `receipt.is_none()`，标题断言撤掉。
     #[test]
     fn 另存为菜单项打开模态且初值是当前路径() {
         let a = 造图("dlg", 4, 4);
@@ -872,9 +909,13 @@ mod tests {
             },
             "模态初值必须是当前地图路径"
         );
-        let (text, warn) = out.receipt.clone().expect("要有回执");
-        assert!(!warn, "打开模态是正常动作，不该用警示色");
-        assert_eq!(text, tx::SAVE_AS_DLG_TITLE);
+        assert!(
+            out.receipt.is_none(),
+            "打开模态不该写状态栏回执（标题已写同一句，会重复）：{:?}",
+            out.receipt
+        );
+        assert!(!out.touched_map, "打开模态不许碰地图");
+        assert!(out.repaint, "打开模态必须请求重绘");
         let _ = std::fs::remove_dir_all(a.parent().unwrap());
     }
 
@@ -882,6 +923,8 @@ mod tests {
     ///
     /// 初值必须是「地图同目录 + 地图名 + 后缀 + `.png`」——模态是真输入
     /// （没有文件选择器），给个默认值才让「回车即可」成立。
+    ///
+    /// 2026-11-06 全类清理：两条都是**打开模态** ⇒ 不写状态栏回执（`receipt.is_none()`）。
     #[test]
     fn 导出菜单项打开模态且初值是地图同目录png() {
         let a = 造图("exportdlg", 4, 4);
@@ -897,9 +940,12 @@ mod tests {
             },
             "导出选区的模态初值必须是 <地图名>_选区.png"
         );
-        let (text, warn) = out.receipt.clone().expect("要有回执");
-        assert!(!warn, "打开模态是正常动作，不该用警示色");
-        assert_eq!(text, tx::EXPORT_SEL_DLG_TITLE);
+        assert!(
+            out.receipt.is_none(),
+            "导出选区只是打开模态，不该写状态栏回执：{:?}",
+            out.receipt
+        );
+        assert!(!out.touched_map, "导出选区不许碰地图");
 
         let out = apply(Action::ExportMinimap, &mut f.ctx(canvas));
         // 2026-11-06（N F-R14-1）起带尺寸输入状态：默认 **Small**，宽高 = 该档像素数
@@ -916,19 +962,24 @@ mod tests {
             }
             other => panic!("导出小地图必须开带尺寸的模态，实得 {other:?}"),
         }
-        let (text, warn) = out.receipt.clone().expect("要有回执");
-        assert!(!warn);
-        assert_eq!(text, tx::EXPORT_MINI_DLG_TITLE);
+        assert!(
+            out.receipt.is_none(),
+            "导出小地图只是打开模态，不该写状态栏回执：{:?}",
+            out.receipt
+        );
+        assert!(!out.touched_map, "导出小地图不许碰地图");
 
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// **帮助 → 关于**：打开只读模态，回执点名产品，**地图一字节不动**、不需要先开图。
+    /// **帮助 → 关于**：打开只读模态，**不写状态栏回执**，**地图一字节不动**、不需要先开图。
     ///
-    /// 这一条钉住三件事：
+    /// 这一条钉住四件事：
     /// ① `Action::About` 真的接到了浮层状态（不是"点了没反应"）；
     /// ② 无图也照样打开（`State::Ready`，用户拿空界面问版本是天经地义）；
-    /// ③ 不改文档 ⇒ `touched_map == false`（不会触发重渲，也不会把地图标脏）。
+    /// ③ 不改文档 ⇒ `touched_map == false`（不会触发重渲，也不会把地图标脏）；
+    /// ④ **`receipt == None`**（2026-11-06 用户截图红框）：浮层标题已经写「关于 Crystal Studio」，
+    ///    状态栏再写同一句就是同屏重复 ⇒ About 走 `Outcome::opened_overlay()`，只重绘不落回执。
     #[test]
     fn 关于菜单项打开只读模态() {
         // ① 有图
@@ -937,11 +988,13 @@ mod tests {
         let canvas = 画布();
         let out = apply(Action::About, &mut f.ctx(canvas));
         assert_eq!(f.overlay, Overlay::About, "关于必须打开 About 浮层");
-        let (text, warn) = out.receipt.clone().expect("要有回执");
-        assert!(!warn, "打开关于是正常动作，不该用警示色");
-        assert_eq!(text, tx::ABOUT_OPEN_RECEIPT);
-        assert!(text.contains("Crystal Studio"), "回执要点名产品：{text}");
+        assert!(
+            out.receipt.is_none(),
+            "关于不该有状态栏回执（标题已写同一句，会重复）：{:?}",
+            out.receipt
+        );
         assert!(!out.touched_map, "关于不许碰地图");
+        assert!(out.repaint, "打开浮层必须请求重绘");
         // 模态里那一份版本号与 `--version` 同源
         assert_eq!(crate::menu::about::VERSION, env!("CARGO_PKG_VERSION"));
 
@@ -966,9 +1019,50 @@ mod tests {
         };
         let out = apply(Action::About, &mut g.ctx(canvas));
         assert_eq!(g.overlay, Overlay::About, "无图时关于也要能打开");
-        let (_, warn) = out.receipt.clone().expect("要有回执");
-        assert!(!warn, "无图不算拒绝（关于不依赖地图）");
+        assert!(out.receipt.is_none(), "无图也不算拒绝（关于不依赖地图）");
+        assert!(!out.touched_map, "关于不许碰地图（无图时同样）");
 
+        let _ = std::fs::remove_dir_all(a.parent().unwrap());
+    }
+
+    /// **全类回归（2026-11-06）**：凡"打开模态/浮层"的动作一律 `receipt == None`。
+    ///
+    /// 这一类重复的判据只有一条：动作**只把 `Overlay` 从 `None` 切到某个模态** ⇒ 模态标题
+    /// 已在屏上，状态栏再写同一句就是同一屏两遍（用户截图红框标出的正是「关于」那一条，
+    /// 但 OpenMap / SaveAs / 导出 ×2 / 快捷键是同一个毛病）。逐条钉住：
+    /// ① `receipt.is_none()`（不落回执）；② 浮层真的开了（不是"点了没反应"）；
+    /// ③ `touched_map == false`（地图一字节不动）；④ `repaint`（弹出模态必须重绘）。
+    ///
+    /// 分工：本表守**动作层**的返回值；宿主层（`app`）另有一条表驱动用例守
+    /// "`app.op` 不写、`status_op` 不含标题"，两边一起才封住这条重复。
+    #[test]
+    fn 打开浮层一律不回执_表驱动() {
+        let a = 造图("overlay_null_receipt", 4, 4);
+        let canvas = 画布();
+        for action in [
+            Action::OpenMap,
+            Action::SaveAs,
+            Action::ExportSelection,
+            Action::ExportMinimap,
+            Action::KeyboardShortcuts,
+            Action::About,
+        ] {
+            let mut f = 夹具::打开(&a);
+            let out = apply(action, &mut f.ctx(canvas));
+            assert!(
+                out.receipt.is_none(),
+                "{} 是打开模态，不该写状态栏回执（标题会重复）：{:?}",
+                action.id(),
+                out.receipt
+            );
+            assert!(
+                f.overlay.is_some(),
+                "{} 必须真的把浮层打开（不能只剩「没回执」）",
+                action.id()
+            );
+            assert!(!out.touched_map, "{} 不许碰地图", action.id());
+            assert!(out.repaint, "{} 打开浮层必须请求重绘", action.id());
+        }
         let _ = std::fs::remove_dir_all(a.parent().unwrap());
     }
 

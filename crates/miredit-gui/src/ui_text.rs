@@ -482,8 +482,11 @@ pub const ABOUT_PROFILE_DEBUG: &str = "debug（调试构建）"; // EN: debug
 pub const ABOUT_PROFILE_RELEASE: &str = "release（发布构建）"; // EN: release
 /// 关于对话框底部的关闭提示。
 pub const ABOUT_CLOSE_HINT: &str = "Esc 或点击任意处关闭"; // EN: Esc or click anywhere to close
-/// 打开关于对话框时状态栏的回执（= 标题，不另编一句）。
-pub const ABOUT_OPEN_RECEIPT: &str = "关于 Crystal Studio"; // EN: About Crystal Studio
+
+// ⚠ 这里**故意没有「打开关于」的回执常量**（2026-11-06 用户截图红框标出的重复缺陷）：
+// 浮层标题就是 [`ABOUT_TITLE`]，状态栏再写同一句 ⇒ 同一屏出现两遍。
+// `Action::About` 因此走 `Outcome::opened_overlay()`（`receipt: None`）。
+// 别为了"状态栏总得有点东西"再补一句 —— 不重复优先于占位（换「版本 0.0.1」同样是错的）。
 
 /// 键名：`Ctrl+N`。
 pub const KEY_CTRL_N: &str = "Ctrl+N"; // EN: Ctrl+N
@@ -2121,7 +2124,6 @@ pub const ALL: &[(&str, &str)] = &[
     ("ABOUT_PROFILE_DEBUG", ABOUT_PROFILE_DEBUG),
     ("ABOUT_PROFILE_RELEASE", ABOUT_PROFILE_RELEASE),
     ("ABOUT_CLOSE_HINT", ABOUT_CLOSE_HINT),
-    ("ABOUT_OPEN_RECEIPT", ABOUT_OPEN_RECEIPT),
     ("DIAG_USAGE", DIAG_USAGE),
     ("DIAG_WINDOW_ICON_FAIL", DIAG_WINDOW_ICON_FAIL),
     ("DIAG_EDIT_NO_MAP", DIAG_EDIT_NO_MAP),
@@ -2395,7 +2397,6 @@ mod tests {
     ("ABOUT_PROFILE_DEBUG", ABOUT_PROFILE_DEBUG),
     ("ABOUT_PROFILE_RELEASE", ABOUT_PROFILE_RELEASE),
     ("ABOUT_CLOSE_HINT", ABOUT_CLOSE_HINT),
-    ("ABOUT_OPEN_RECEIPT", ABOUT_OPEN_RECEIPT),
     ("DIAG_USAGE", DIAG_USAGE),
     ("DIAG_WINDOW_ICON_FAIL", DIAG_WINDOW_ICON_FAIL),
             ("DIAG_EDIT_NO_MAP", DIAG_EDIT_NO_MAP),
