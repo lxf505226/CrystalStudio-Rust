@@ -1,6 +1,6 @@
 [package]
 name = "mir2-assets"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "传奇 M2 图库解码层：`.wil/.wix`、`.wzl/.wzx` 与原版 `.lib`（地图编辑器渲染地基）"
 license = "MIT"

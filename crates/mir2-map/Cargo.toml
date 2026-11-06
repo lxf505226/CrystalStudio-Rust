@@ -1,6 +1,6 @@
 [package]
 name = "mir2-map"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "传奇 M2 `.map` 地图读写往返保真库（Old12 / New14 / Ext36 三档）"
 license = "MIT"

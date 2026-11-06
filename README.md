@@ -65,6 +65,18 @@ cargo build -p miredit-web --release
 >
 > 本项目**不使用 `cargo fmt`**，代码风格靠既有约定与 clippy 维持，见 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
+### 版本与更新
+
+当前版本**只有一个真源**：根 [`Cargo.toml`](Cargo.toml) 的 `[workspace.package].version`（8 个 crate 全部写 `version.workspace = true`，不各写各的）。本文不写版本号快照，读到的那个数就是当前版本；机制见 [`VERSIONING.md`](VERSIONING.md) §3.1。
+
+查手头这份是哪一版（三条路，都直接或间接读上面那一个值）：
+
+1. **PC 版**：`miredit-gui --version` ⇒ `Crystal Studio <版本>`（源码树里没有构建产物时用 `cargo run -p miredit-gui -- --version`）；
+2. **网页版**：连接状态显示「后端已连接 · \<版本\>」，或 `curl -s http://127.0.0.1:8080/api/health`；
+3. **源码树**：`cargo pkgid -p miredit-web`（输出末段 `#<版本>`），或直接看根 `Cargo.toml`；打过 tag 之后也可用 `git describe --tags`。
+
+每个版本改了什么见 [`CHANGELOG.md`](CHANGELOG.md)；递增判据（含 0.x 档位怎么判）、发布清单、兼容性承诺与回退办法见 [`VERSIONING.md`](VERSIONING.md)。
+
 ## 四、运行
 
 ### 4.1 PC 版

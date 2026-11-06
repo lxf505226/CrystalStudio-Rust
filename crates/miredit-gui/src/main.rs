@@ -12,6 +12,8 @@
 //! > 所以诊断输出照样看得到；`windows_subsystem` 只影响"要不要新开一个控制台窗"。
 //!
 //! 命令行开关见 [`miredit_gui::ui_text::DIAG_USAGE`]：
+//! - `--version`：**不开窗**，只打印 `Crystal Studio <版本>` 后退出（版本取
+//!   `CARGO_PKG_VERSION`，与网页 `/api/health` 同源；见 [`miredit_gui::cli::Cli::version_line`]）；
 //! - 无开关：用 [`miredit_gui::mapdoc::DEFAULT_MAP_PATH`]（**恒为空 = 未指定地图**：
 //!   公开仓没有内建缺省图，界面会如实说「未指定地图」并留空画布，不猜路径）；
 //! - `--map <路径>`：打开哪张图（**唯一**指定地图的入口）。
@@ -29,6 +31,12 @@ use miredit_gui::ui_text as tx;
 
 fn main() -> eframe::Result {
     let cli = Cli::parse(std::env::args().skip(1));
+    // `--version` 排在最前：既不读地图也不开窗，打印一行就走（`--version --help` 同时给时
+    // 版本优先，与 cargo/rustc 的手感一致）。输出格式的唯一判据是 `Cli::version_line`。
+    if cli.version {
+        println!("{}", Cli::version_line());
+        return Ok(());
+    }
     if cli.help {
         println!("{}", tx::DIAG_USAGE);
         return Ok(());

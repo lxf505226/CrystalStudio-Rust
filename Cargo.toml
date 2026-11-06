@@ -15,3 +15,12 @@ members = [
     # `cargo check --workspace` 也一并覆盖它）。
     "vendor/wil2atlas",
 ]
+
+# ── 版本号唯一真源（VERSIONING.md §3.1）──
+# 发布递增**只改这一行**；`crates/*` 的 8 个 crate 一律写 `version.workspace = true`，
+# 任何 crate 里出现写死的 `version = "x.y.z"` 都算缺陷（`scripts/bump-version.ps1 -Check`
+# 会把它判红）。
+# 例外：`vendor/wil2atlas` 是 vendored 的上游解码器子集，保留它自己的上游版本号，
+# 不随本仓 bump，也不参与上面那条比对。
+[workspace.package]
+version = "0.2.0"

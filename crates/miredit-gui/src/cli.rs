@@ -307,6 +307,8 @@ pub struct Cli {
     pub show_maps: bool,
     /// `--settings <路径>`：覆盖设置文件路径（验收时不去动真实的 `%LOCALAPPDATA%`）。
     pub settings: Option<PathBuf>,
+    /// `--version`：打印 `Crystal Studio <版本>` 后退出（见 [`Cli::version_line`]）。
+    pub version: bool,
     /// `--help`：打印用法后退出。
     pub help: bool,
     /// 解析期遇到的错误（已原样打印到 stderr，这里留档便于测试断言）。
@@ -404,12 +406,25 @@ impl Cli {
 }
 
 impl Cli {
+    /// `--version` 打印的那一行（**唯一格式判据**；`main` 直接用它，不许另拼字符串）。
+    ///
+    /// 版本号取 `CARGO_PKG_VERSION`，与网页 `/api/health` 用的是同一个值 —— 两者都来自
+    /// `Cargo.toml` 的 `[package].version`，而本仓已把它收敛成根 `[workspace.package].version`
+    /// （`version.workspace = true`，见 `VERSIONING.md` §3.1）。所以「PC 版声称的版本」与
+    /// 「网页后端声称的版本」不可能各说一套。
+    ///
+    /// 纯函数（不读环境、不开窗口），所以能直接单测。
+    pub fn version_line() -> String {
+        format!("Crystal Studio {}", env!("CARGO_PKG_VERSION"))
+    }
+
     /// 解析 `std::env::args().skip(1)`。
     pub fn parse<I: IntoIterator<Item = String>>(args: I) -> Self {
         let mut c = Cli::default();
         let mut it = args.into_iter();
         while let Some(a) = it.next() {
             match a.as_str() {
+                "--version" | "-V" => c.version = true,
                 "--help" | "-h" => c.help = true,
                 "--map" => match it.next() {
                     Some(v) => c.map = Some(PathBuf::from(v)),
@@ -1336,5 +1351,39 @@ mod tests {
         let c = p(&["--menu-click", "view.nope@40"]);
         assert_eq!(c.menu_clicks.len(), 1);
         assert_eq!(c.errors.len(), 1);
+    }
+
+    /// `--version`：纯函数（不启动窗口、不读地图）。
+    ///
+    /// 判据：① 输出格式固定为 `Crystal Studio <版本>`；② 版本号就是本 crate 的
+    /// `CARGO_PKG_VERSION`（= 根 `Cargo.toml` 的 `[workspace.package].version`，与网页
+    /// `/api/health` 同源），不是另写字面量；③ `--version` / `-V` 都置位，且不顺手点亮 `--help`。
+    #[test]
+    fn 版本行格式与开关() {
+        let line = Cli::version_line();
+        let ver = match line.strip_prefix("Crystal Studio ") {
+            Some(v) => v,
+            None => panic!("版本行前缀必须是 `Crystal Studio `：{line}"),
+        };
+        assert_eq!(
+            ver,
+            env!("CARGO_PKG_VERSION"),
+            "版本号必须取 CARGO_PKG_VERSION（单一真源），不许写死"
+        );
+        let parts: Vec<&str> = ver.split('.').collect();
+        assert_eq!(parts.len(), 3, "必须是三段 SemVer：{ver}");
+        assert!(
+            parts
+                .iter()
+                .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit())),
+            "三段都必须是十进制数字：{ver}"
+        );
+
+        let c = p(&["--version"]);
+        assert!(c.version);
+        assert!(!c.help, "--version 不该顺手点亮 --help");
+        assert!(c.errors.is_empty(), "{:?}", c.errors);
+        assert!(p(&["-V"]).version, "-V 是 --version 的短名");
+        assert!(!p(&[]).version, "缺省不打印版本");
     }
 }

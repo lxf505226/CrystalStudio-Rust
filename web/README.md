@@ -96,7 +96,7 @@ cargo run -p miredit-web --release
 
 **200（恒）**
 ```json
-{ "ok": true, "version": "0.1.0" }
+{ "ok": true, "version": "0.2.0" }
 ```
 > 进程能应答就返回 200。图库/印章目录不可用**不算**进程不健康。
 

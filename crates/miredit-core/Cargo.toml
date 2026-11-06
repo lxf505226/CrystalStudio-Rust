@@ -1,6 +1,6 @@
 [package]
 name = "miredit-core"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "地图编辑器编辑内核（无 UI 依赖：图层/笔刷/落笔/填充/撤销/原子保存/可序列化命令）"
 license = "MIT"

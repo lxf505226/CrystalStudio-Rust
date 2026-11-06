@@ -1,6 +1,6 @@
 [package]
 name = "mir2-stamp"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "CrystalStudio `.X` 印章读写往返保真库 + 印章目录索引（编辑器印章体系地基）"
 license = "MIT"

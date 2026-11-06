@@ -1,6 +1,6 @@
 [package]
 name = "miredit-web"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "网页版地图编辑器的 HTTP 后端：把 miredit-core（编辑内核）与 miredit-render（出图）暴露成 REST/WS API"
 license = "MIT"

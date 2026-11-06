@@ -1,6 +1,6 @@
 [package]
 name = "miredit-gui"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "地图编辑器 GUI（egui，仿 CrystalStudio 运行期界面）"
 

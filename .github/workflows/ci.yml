@@ -46,6 +46,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # 版本号门禁（VERSIONING.md §3.1 / §5.3）：根 Cargo.toml 的
+      # [workspace.package].version 可读且是合法 SemVer，crates/ 下 8 个 crate
+      # 全部是 version.workspace = true（vendor/wil2atlas 作为 vendored 上游例外）。
+      # 放在编译之前：先证明「版本号只有一个真源」，再花 runner 时间跑构建。
+      - name: 版本号一致性（bump-version -Check）
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/bump-version.ps1 -Check
+
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
         with:

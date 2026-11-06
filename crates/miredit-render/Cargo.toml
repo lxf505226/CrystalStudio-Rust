@@ -1,6 +1,6 @@
 [package]
 name = "miredit-render"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "地图离屏合成器：map + 图库 → RGBA（无窗口，供 GUI 与截图比对共用）"
 license = "MIT"
