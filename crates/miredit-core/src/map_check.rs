@@ -55,6 +55,18 @@
 //! Type5 的地面例外：它的背图库号**不在格内**（块级），`Cell::bk_idx` 恒 0 ⇒ 地面一律
 //! `未检查`，不从格内字段臆测哨兵。
 //!
+//! ## 三·二、没有图库时：图号引用**整条不查**（上游 `libraries == null`）
+//!
+//! `MapCheck.Image` 的第一句是 `if (image == 0 || libraries == null) return;`（`:26`）
+//! ⇒ 没有库表时上游**一条图号问题都不报**，连上面那种「必然缺库」的哨兵格也不报
+//! （它在同一个 `return` 之后）。而**门两警告与不连通区照常**：那两段在 `:54-95`，
+//! 根本不读 `libraries`。
+//!
+//! 本模块的行为由 [`LibProbe::has_libraries`] 决定：`false` ⇒ 图号引用整体跳过
+//! （[`check_map`] 的 `查一层` 第一句就返回），门/BFS 一条不少。
+//! 宿主用 [`NoLibProbe`] 表达「没有库表」，并在界面上追加官方那句
+//! 「Load libraries to check image references.」。
+//!
 //! # 四、图号掩码 / 开门帧 / 可走（逐条对上 C#）
 //!
 //! | 项 | 上游 | 本模块 |
@@ -63,19 +75,23 @@
 //! | 中层图号 | `cell.MiddleImage`（不掩） | [`middle_image`]：Wemade2010 要先 `^xor`（头 23..25） |
 //! | 物件图号 | `front.Image & 0x7FFF` | [`objects_image`]：Wemade2010 先 `^xor`；Mir3 先 `+1`（`csharp_image`） |
 //! | 开门帧 | `image != 0 && (Door & 0x7F) != 0 ⇒ image + DoorOffset` | [`open_door_image`] |
-//! | 可走（非 Mir3） | `BackImage & 0x60000000 == 0`（装载期把 bk 的 bit15 折成 `0x20000000`、fr 的折成 `0x40000000`） | `bk_img & 0x8000 == 0 && fr_img & 0x8000 == 0`（= 视图 [`mir2_map::Cell::is_walkable`]，与上游聚合两位等价） |
+//! | 可走（Type0/2/3/4/7） | `BackImage & 0x60000000 == 0`（装载期把 bk 的 bit15 折成 `0x20000000`、fr 的折成 `0x40000000`） | `bk_img & 0x8000 == 0 && fr_img & 0x8000 == 0`（= 视图 [`mir2_map::Cell::is_walkable`]，与上游聚合两位等价） |
+//! | 可走（`CrystalCs`） | 29/30 位是**持久化的碰撞位**（`CellCodec.Write` 整字写盘、`MapViewport.cs:505/546` 涂图号时保留 `& 0x60000000`）；装载期另把**前景** `bit15` 折成 `0x40000000`（仅 `ver > 1`） | `csharp_back_mark(bk_img, fr_img, ver) & 0x6000_0000 == 0`（`bit15` 只算图号，**不判阻挡**） |
 //! | 可走（Mir3） | `flag&1==1` 才背景可走、`flag&2==2` 才前景可走（`LegacyMapReader.cs:436-437/494-495`） | `flag & 1 == 1 && flag & 2 == 2`（视图没有 `flag`，只能用 raw） |
 //!
 //! ## 有意差异 / 已知不精确（不静默）
 //!
-//! 1. **Wemade2010 / CrystalCs 的 bk `bit15`**：上游只有 Type0/2/3/7 把背景 `bit15`
-//!    折进 `0x20000000`；Type1（`LegacyMapReader.cs:190-211`）与 Type100（`:576-625`）
-//!    **不折**（Type100 连 `ver == 1` 时前景 `bit15` 都不折）。本模块按 R33 统一用磁盘
-//!    `bit15` ⇒ 这两种格式上比上游**更严格**（可能多报「不连通」）。
-//!    依据：`wemade2010.rs` 的 `FormatCaps.collision_note` 也把这条漏搬记成「9 种里唯一」。
-//!    为什么仍这样选：本仓画布的可走性就是 [`mir2_map::Cell::is_walkable`]，
-//!    检查结论必须与用户看到的阻挡标记一致；两种格式**零真实样本**，不拿未验证的上游
-//!    特例去反向覆盖已在生产路径上跑了 1158 张图的判据。
+//! 1. **`Wemade2010`（Type1）的 bk `bit15`**：上游只把 Type0/2/3/4/7 的背景 `bit15`
+//!    折进 `0x20000000`；Type1（`LegacyMapReader.cs:190-211`）**漏搬**（`wemade2010.rs`
+//!    的 `FormatCaps.collision_note` 也把这条记成「9 种里唯一」）。本模块仍按磁盘 `bit15`
+//!    判 ⇒ 该格式上比上游**更严格**（可能多报「不连通」）。
+//!    为什么这样选：本仓画布的可走性就是 [`mir2_map::Cell::is_walkable`]，检查结论必须与
+//!    用户看到的阻挡标记一致；该格式**零真实样本**，不拿未验证的上游特例去反向覆盖
+//!    已在生产路径上跑了 1158 张图的判据。
+//!
+//!    ⚠ **`CrystalCs` 不在这个差异里**（R34 复核订正）：它的阻挡位是**持久化的**
+//!    `bit29/bit30`（见第四节表格那一行），`bit15` 只是图号高位 ⇒ 按 `& 0x60000000`
+//!    判才是上游口径；拿 `bit15` 判会把「图号 ≥ 32768」的格**误挡**。
 //! 2. **`N0` 千分位**：上游 `"Disconnected walkable area: {0:N0} cells"` 会输出 `1,234`，
 //!    本模块输出 `1234`（[`MapIssue`] 不带本地化格式化）。文案本身逐字同形。
 //! 3. **`HasDoor` 的 `& 0x7F`**：上游 `cell.Door` 在 CrystalCs 里**已被 reader 掩过**
@@ -87,6 +103,7 @@
 //! | 检查项 | 上游 | 本模块 |
 //! |---|---|---|
 //! | 图号引用（按 `(库, 图号)` 缓存） | `MapCheck.cs:24-41` | [`LibProbe`] 注入 + [`check_map`] 内 `HashMap` 缓存 |
+//! | 问题文案里的 `Library {n}` | 上游 `:38` 打的是 **C# 扁平全局号** | 同样打全局号（[`csharp_back_lib`]/[`csharp_middle_lib`]/[`csharp_front_lib`]）；族内页号另存于 [`MapLibRef::index`] |
 //! | 门格没有前景图 / 四周没有可走格 | `:54-59` | [`MSG_DOOR_NO_FOREGROUND`] / [`MSG_DOOR_NO_WALKABLE`] |
 //! | 8 邻 BFS 断开区（**最大块不报**） | `:61-95` | [`MSG_DISCONNECTED`] |
 //! | 只留前 1000 条、`total` 全量 | `:18-22` | [`MAP_CHECK_ISSUE_CAP`] |
@@ -100,7 +117,9 @@
 
 use std::collections::HashMap;
 
-use mir2_format::formats::{heroes34, mir3_shanda, mir3_wemade, old12, shanda14, shanda2012, wemade2010};
+use mir2_format::formats::{
+    crystal_cs, heroes34, mir3_shanda, mir3_wemade, old12, shanda14, shanda2012, wemade2010,
+};
 use mir2_format::{Cell as RawCell, FormatId, RawMap};
 
 /// 问题清单上限（上游 `MapCheck.cs:21`）。
@@ -193,6 +212,17 @@ pub trait LibProbe {
     ///
     /// 图号 `0` 由 [`check_map`] 先跳过，调用方不必处理。
     fn frame_state(&self, lib: MapLibRef, image_1based: u32) -> ImageState;
+
+    /// 本次检查**有没有图库表**（上游 `libraries != null`）。
+    ///
+    /// `false` ⇒ 图号引用这一项**整条不查**（`MapCheck.Image` 的第一句就是
+    /// `if (image == 0 || libraries == null) return;`，连「必然缺库」的哨兵格也不报）；
+    /// **门两警告与不连通区照常**（上游那两段 `MapCheck.cs:54-95` 根本不看库表）。
+    ///
+    /// 缺省 `true`（既有实现者一行都不用改）；[`NoLibProbe`] 覆盖成 `false`。
+    fn has_libraries(&self) -> bool {
+        true
+    }
 }
 
 /// **「没有图库」探针**：图号引用一项**整体不查**（等价于上游 `libraries == null`）。
@@ -209,6 +239,11 @@ pub struct NoLibProbe;
 impl LibProbe for NoLibProbe {
     fn frame_state(&self, _lib: MapLibRef, _image_1based: u32) -> ImageState {
         ImageState::Ok
+    }
+
+    /// **没有图库表** ⇒ 图号引用整条不查（`check_map` 在这一层就早退，连哨兵也不报）。
+    fn has_libraries(&self) -> bool {
+        false
     }
 }
 
@@ -283,6 +318,12 @@ pub struct MapCheckReport {
     ///
     /// 非空 ⇒ 报告只是「查了能查的层」，GUI 必须把原因显示出来（不许假装全绿）。
     pub 未检查: Vec<(LibFamily, &'static str)>,
+    /// **没有图库表**（上游 `libraries == null`）⇒ 图号引用**整项没查**。
+    ///
+    /// 与 [`MapCheckReport::未检查`] 分开记：那是「这一族的库号不可推导」，
+    /// 这是「压根没有库表可比」（三个族都可能"可推导"，但图号一律没核）。
+    /// 门两警告与不连通区**不在其中**：它们不依赖库表，照常查、照常报。
+    pub 无图库: bool,
 }
 
 impl MapCheckReport {
@@ -463,23 +504,43 @@ fn mir3_sentinel(csharp_lib: i16) -> LibSource {
 
 // ───────────────────────── 每格：图号 / 门 / 可走 ─────────────────────────
 
-/// 该格式从头部取 XOR 键的偏移（其余格式恒 0）。
-///
-/// 只有两档的逐格图号是**整字 XOR** 过的：
-/// - `AntiHack`（Type4，偏移 33，`LegacyMapReader.cs:335` + `:348-352`）；
-/// - `Wemade2010`（Type1，偏移 23，`:174-181` + `:193-196`）。
+/// 逐格式的**头部常数**（只有两处真要读头部：XOR 键与 CrystalCs 的版本号）。
+#[derive(Clone, Copy, Debug)]
+struct 头部 {
+    /// `AntiHack`（偏移 33）/ `Wemade2010`（偏移 23）的整字 XOR 键；其余格式恒 `0`。
+    xor: i16,
+    /// `CrystalCs` 的版本号（头部 `0..2`，i16 LE）；其余格式恒 `0`。
+    ///
+    /// 为什么要它：装载期只有 `ver > 1` 才把前景 `bit15` 折成 `0x40000000`
+    /// （`LegacyMapReader.cs:598` / `:625`），可走判据要用到这个分支。
+    crystal_ver: i16,
+}
+
+/// 从头部读一个 `i16`（小端）；不足两字节返回 `None`。
+fn read_i16(header: &[u8], off: usize) -> Option<i16> {
+    let b = header.get(off..off + 2)?;
+    Some(i16::from_le_bytes([b[0], b[1]]))
+}
+
+/// 该图的两处**头部常数**：XOR 键（`AntiHack` 偏移 33 / `Wemade2010` 偏移 23）与
+/// `CrystalCs` 的版本号（偏移 0）。其余七档恒 `0/0`。
 ///
 /// 偏移量直接取 `mir2-format` 的**公有常量**（`antihack::XOR_OFFSET` /
-/// `wemade2010::XOR_OFFSET`），不在本 crate 抄第二份数字。
-fn image_xor(format: FormatId, header: &[u8]) -> Option<i16> {
+/// `wemade2010::XOR_OFFSET`），不在本 crate 抄第二份数字；CrystalCs 的版本号在
+/// `crystal_cs.rs` 里没有独立常量（它的 `read` 直接从 0 读），这里按 C# `:563-565` 取 `0..2`。
+fn 取头部(format: FormatId, header: &[u8]) -> Option<头部> {
     use FormatId as F;
-    let off = match format {
-        F::AntiHack => mir2_format::formats::antihack::XOR_OFFSET,
-        F::Wemade2010 => wemade2010::XOR_OFFSET,
-        _ => return Some(0),
+    let xor = match format {
+        F::AntiHack => read_i16(header, mir2_format::formats::antihack::XOR_OFFSET)?,
+        F::Wemade2010 => read_i16(header, wemade2010::XOR_OFFSET)?,
+        _ => 0,
     };
-    let bytes = header.get(off..off + 2)?;
-    Some(i16::from_le_bytes([bytes[0], bytes[1]]))
+    let crystal_ver = if format == F::CrystalCs {
+        read_i16(header, 0)?
+    } else {
+        0
+    };
+    Some(头部 { xor, crystal_ver })
 }
 
 /// 12/14/36 档的 `bk_img` 在磁盘上只有 2 字节；越界（不该发生）按 `u16::MAX` 处理。
@@ -500,14 +561,14 @@ const fn 折叠背景位(format: FormatId) -> bool {
 }
 
 /// 还原后的**背景图号位模式**（含 `bit15` 阻挡位，**未折叠**）。
-fn 还原背景位(format: FormatId, cell: &RawCell, xor: i16) -> u32 {
+fn 还原背景位(format: FormatId, cell: &RawCell, k: 头部) -> u32 {
     use FormatId as F;
     match format {
         // 12/14/36 档：磁盘 u16 原值（`AntiHack` 要先 XOR 还原）
         F::Old12 | F::Shanda14 | F::Shanda2012 => u32::from(低16(cell.bk_img)),
         F::AntiHack => u32::from(mir2_format::formats::antihack::csharp_image(
             低16(cell.bk_img),
-            xor,
+            k.xor,
         )),
         // 15B 档：`Wemade2010` 整字 XOR（常量 `0xAA38AA38`，与头部键无关）
         F::Wemade2010 => wemade2010::csharp_back_image(cell.bk_img),
@@ -521,14 +582,14 @@ fn 还原背景位(format: FormatId, cell: &RawCell, xor: i16) -> u32 {
 }
 
 /// 还原后的**前景图号位模式**（含 `bit15`；Mir3 两支已 `+1`）。
-fn 还原前景位(format: FormatId, cell: &RawCell, xor: i16) -> u32 {
+fn 还原前景位(format: FormatId, cell: &RawCell, k: 头部) -> u32 {
     use FormatId as F;
     match format {
         F::AntiHack => u32::from(mir2_format::formats::antihack::csharp_image(
             cell.fr_img,
-            xor,
+            k.xor,
         )),
-        F::Wemade2010 => u32::from(wemade2010::csharp_front_image(cell.fr_img, xor)),
+        F::Wemade2010 => u32::from(wemade2010::csharp_front_image(cell.fr_img, k.xor)),
         F::Mir3Wemade => u32::from(mir3_wemade::csharp_image(cell.fr_img)),
         F::Mir3Shanda => u32::from(mir3_shanda::csharp_image(cell.fr_img)),
         // `Old12` / `Shanda14` / `Shanda2012` / `Heroes34` / `CrystalCs`：磁盘原值
@@ -540,8 +601,8 @@ fn 还原前景位(format: FormatId, cell: &RawCell, xor: i16) -> u32 {
 
 /// C# 内存里的 `BackImage`（`int`）：折叠位那五档把 `bit15` 搬成 `0x20000000`
 /// （`LegacyMapReader.cs:150/252/308/546`），其余位原样（`Heroes34` 的高 16 位留着）。
-fn 背景内存值(format: FormatId, cell: &RawCell, xor: i16) -> i32 {
-    let bits = 还原背景位(format, cell, xor);
+fn 背景内存值(format: FormatId, cell: &RawCell, k: 头部) -> i32 {
+    let bits = 还原背景位(format, cell, k);
     if 折叠背景位(format) && bits & 0x8000 != 0 {
         ((bits & 0x7FFF) | 0x2000_0000) as i32
     } else {
@@ -553,19 +614,19 @@ fn 背景内存值(format: FormatId, cell: &RawCell, xor: i16) -> i32 {
 ///
 /// 五档折叠位 `bit15` 之后掩码 ⇒ `v & 0x7FFF`；不折的两档（`Wemade2010` / `CrystalCs`）
 /// `bit15` 留在图号里；`Heroes34` 的高 16 位也留着（C# 那边是 `(int)ToInt32`）。
-fn ground_image(format: FormatId, cell: &RawCell, xor: i16) -> u32 {
-    (背景内存值(format, cell, xor) as u32) & 0x1FFF_FFFF
+fn ground_image(format: FormatId, cell: &RawCell, k: 头部) -> u32 {
+    (背景内存值(format, cell, k) as u32) & 0x1FFF_FFFF
 }
 
 /// 中层图号（1 基；`0` = 空；上游 `cell.MiddleImage`，不掩码）。
-fn middle_image(format: FormatId, cell: &RawCell, xor: i16) -> u32 {
+fn middle_image(format: FormatId, cell: &RawCell, k: 头部) -> u32 {
     use FormatId as F;
     match format {
         F::AntiHack => u32::from(mir2_format::formats::antihack::csharp_image(
             cell.mid_img,
-            xor,
+            k.xor,
         )),
-        F::Wemade2010 => u32::from(wemade2010::csharp_middle_image(cell.mid_img, xor)),
+        F::Wemade2010 => u32::from(wemade2010::csharp_middle_image(cell.mid_img, k.xor)),
         // Mir3 两支：`MiddleImage = ToUInt16 + 1`（`:427` / `:480`）
         F::Mir3Wemade => u32::from(mir3_wemade::csharp_image(cell.mid_img)),
         F::Mir3Shanda => u32::from(mir3_shanda::csharp_image(cell.mid_img)),
@@ -574,13 +635,13 @@ fn middle_image(format: FormatId, cell: &RawCell, xor: i16) -> u32 {
 }
 
 /// 物件图号（1 基；`0` = 空）= C# `front.Image & 0x7FFF`。
-fn objects_image(format: FormatId, cell: &RawCell, xor: i16) -> u32 {
-    还原前景位(format, cell, xor) & 0x7FFF
+fn objects_image(format: FormatId, cell: &RawCell, k: 头部) -> u32 {
+    还原前景位(format, cell, k) & 0x7FFF
 }
 
 /// 开门帧图号：`fr != 0 && (door & 0x7F) != 0 ⇒ fr + door_offset`（1 基，同 C# `:52`）。
-fn open_door_image(format: FormatId, cell: &RawCell, xor: i16) -> Option<u32> {
-    let image = objects_image(format, cell, xor);
+fn open_door_image(format: FormatId, cell: &RawCell, k: 头部) -> Option<u32> {
+    let image = objects_image(format, cell, k);
     if image != 0 && (cell.door & 0x7F) != 0 {
         Some(image + u32::from(cell.door_offset))
     } else {
@@ -602,12 +663,24 @@ pub fn has_door(format: FormatId, cell: &RawCell) -> bool {
     door != 0 || cell.door_offset != 0
 }
 
+/// C# 扁平全局库号（**消息文案用**；与 [`csharp_back_lib`] 等同一个真源）。
+///
+/// 六档可查格式上它恒等于「族内页号 + 基址」（Wemade 段 `0/1/2`、Shanda 段 `100/110/120`），
+/// 三档未检查格式上它只是公式值（不用于查库）。上游文案 `Library {n}` 打的就是这个号。
+fn 全局库号(format: FormatId, family: LibFamily, cell: &RawCell) -> i16 {
+    match family {
+        LibFamily::Ground => csharp_back_lib(format, cell),
+        LibFamily::Middle => csharp_middle_lib(format, cell),
+        LibFamily::Objects => csharp_front_lib(format, cell),
+    }
+}
+
 /// 有前景图吗（上游 `Cell.HasForeground`：`Foreground is { } && (Image & 0x7FFF) != 0`）。
 ///
 /// Mir3 两支的前景是**条件式**装进 `Foreground` 的（`LegacyMapReader.cs:441-443/499-501`：
 /// `(frimage & 0x7FFF) > 0 && frindex > 0`）⇒ 哨兵格（`frindex == -1`）即使图号非 0
 /// 也没有前景，必须照此判，否则会**漏报**「门没有前景图」。
-fn has_foreground(format: FormatId, cell: &RawCell, xor: i16) -> bool {
+fn has_foreground(format: FormatId, cell: &RawCell, k: 头部) -> bool {
     use FormatId as F;
     match format {
         F::Mir3Wemade => {
@@ -618,7 +691,7 @@ fn has_foreground(format: FormatId, cell: &RawCell, xor: i16) -> bool {
             mir3_shanda::csharp_lib(cell.area) > 0
                 && (mir3_shanda::csharp_image(cell.fr_img) & 0x7FFF) != 0
         }
-        _ => objects_image(format, cell, xor) != 0,
+        _ => objects_image(format, cell, k) != 0,
     }
 }
 
@@ -630,7 +703,7 @@ fn has_foreground(format: FormatId, cell: &RawCell, xor: i16) -> bool {
 ///
 /// 差异与理由见模块文档第四节（`Wemade2010` / `CrystalCs` 的 bk `bit15` 上游不折 ⇒
 /// 本仓更严格，不会误放行）。
-fn walkable(format: FormatId, cell: &RawCell, xor: i16) -> bool {
+fn walkable(format: FormatId, cell: &RawCell, k: 头部) -> bool {
     use FormatId as F;
     match format {
         F::Mir3Wemade => {
@@ -641,9 +714,18 @@ fn walkable(format: FormatId, cell: &RawCell, xor: i16) -> bool {
             let (back, front) = mir3_shanda::csharp_walk_bits(cell.flag);
             back && front
         }
+        // CrystalCs 的阻挡位是**持久化的** `bit29/bit30`，不是 `bit15`：
+        // `CellCodec.Write` 把 `BackImage` 整字写盘（`Document.cs:92`），
+        // 涂地板时也只替换低 29 位、原样保留 `& 0x60000000`（`MapViewport.cs:505/546`），
+        // 而 `bit15` 只是图号高位 ⇒ 判据必须是 `BackImage & 0x60000000`（`MapCheck.cs:100`）。
+        // 装载期还会按 `ver > 1` 把**前景** `bit15` 折成 `0x40000000`（`:598`/`:625`），
+        // 用 `csharp_back_mark` 一并算上 ⇒ 与 C# 内存里的 `BackImage` 逐位一致。
+        F::CrystalCs => {
+            (crystal_cs::csharp_back_mark(cell.bk_img, cell.fr_img, k.crystal_ver) & 0x6000_0000) == 0
+        }
         _ => {
-            (还原背景位(format, cell, xor) & 0x8000) == 0
-                && (还原前景位(format, cell, xor) & 0x8000) == 0
+            (还原背景位(format, cell, k) & 0x8000) == 0
+                && (还原前景位(format, cell, k) & 0x8000) == 0
         }
     }
 }
@@ -665,6 +747,8 @@ pub fn check_map(raw: &RawMap, probe: &dyn LibProbe) -> MapCheckReport {
         probe,
         cache: HashMap::new(),
     };
+    // 「有没有图库表」先落账（上游 `libraries == null` ⇒ 图号引用整项不查）
+    检查.report.无图库 = !检查.probe.has_libraries();
     // 三族「整层未检查」先落账：即使后面一格都没走，GUI 也能如实显示。
     for family in LibFamily::ALL {
         if let Some(reason) = unchecked_reason(format, family) {
@@ -679,8 +763,8 @@ pub fn check_map(raw: &RawMap, probe: &dyn LibProbe) -> MapCheckReport {
             .collect();
         return 检查.report;
     }
-    // 两种 XOR 档（AntiHack / Wemade2010）的键在头部；键取不到 ⇒ 三层都不可查（不猜 0）
-    let Some(xor) = image_xor(format, &raw.header_raw) else {
+    // 头部常数（AntiHack/Wemade2010 的 XOR 键、CrystalCs 的版本号）取不到 ⇒ 三层都不可查（不猜 0）
+    let Some(k) = 取头部(format, &raw.header_raw) else {
         检查.report.未检查 = LibFamily::ALL
             .iter()
             .map(|f| (*f, UNCHECKED_NO_XOR_KEY))
@@ -697,36 +781,36 @@ pub fn check_map(raw: &RawMap, probe: &dyn LibProbe) -> MapCheckReport {
             format,
             LibFamily::Ground,
             cell,
-            ground_image(format, cell, xor),
+            ground_image(format, cell, k),
             "Ground",
             ux,
             uy,
         );
         // ② 中层
-        let 中图 = middle_image(format, cell, xor);
+        let 中图 = middle_image(format, cell, k);
         if 中图 != 0 {
             检查.查一层(format, LibFamily::Middle, cell, 中图, "Middle", ux, uy);
         }
         // ③ 物件层 + 开门帧（上游 `:47-53`）
-        let 物图 = objects_image(format, cell, xor);
+        let 物图 = objects_image(format, cell, k);
         if 物图 != 0 {
             检查.查一层(format, LibFamily::Objects, cell, 物图, "Objects", ux, uy);
-            if let Some(开门) = open_door_image(format, cell, xor) {
+            if let Some(开门) = open_door_image(format, cell, k) {
                 检查.查一层(format, LibFamily::Objects, cell, 开门, "Open door", ux, uy);
             }
         }
         // ④ 门两警告（上游 `:54-59`）
         if has_door(format, cell) {
-            if !has_foreground(format, cell, xor) {
+            if !has_foreground(format, cell, k) {
                 检查.记(ux, uy, MSG_DOOR_NO_FOREGROUND.to_string());
             }
-            if !任一邻可走(raw, format, xor, x, y) {
+            if !任一邻可走(raw, format, k, x, y) {
                 检查.记(ux, uy, MSG_DOOR_NO_WALKABLE.to_string());
             }
         }
     }
     // ⑤ 断开的可走区域（上游 `:61-95`）
-    check_walkable_blocks(raw, format, xor, &mut 检查);
+    check_walkable_blocks(raw, format, k, &mut 检查);
     检查.report
 }
 
@@ -761,8 +845,12 @@ impl 检查器<'_> {
         x: u16,
         y: u16,
     ) {
-        if image == 0 {
-            // 上游 `:26`：图号 0 = 空，不查（也不算一条）
+        // 上游 `:26`：`if (image == 0 || libraries == null) return;`
+        //
+        // ⚠ **没有图库时一条图号都不报**（连「必然缺库」的 Mir3 哨兵格也不报）：
+        // 上游 `Image()` 在任何库号判断之前就先 `return` 了，而门两警告与不连通区
+        // **不看 `libraries`**（那两段在 `:54-95`，与库表无关）⇒ 照常报。
+        if image == 0 || !self.probe.has_libraries() {
             return;
         }
         let lib = match layer_source(format, family, cell) {
@@ -794,16 +882,21 @@ impl 检查器<'_> {
             ImageState::Empty => MSG_IMAGE_EMPTY,
             ImageState::Unreadable => MSG_IMAGE_UNREADABLE,
         };
+        // 文案里的 `Library` 是 **C# 扁平全局号**（`Wemade` 段 `0/1/2+k`、`Shanda` 段
+        // `100/110/120+k`），与上游 `MapCheck.cs:38` 逐字同形、可与 C# 报告直接对号；
+        // 族内页号在 [`MapLibRef::index`] 里（`_ = lib` 只是为了把两者分开写清）。
+        let 全局 = 全局库号(format, family, cell);
+        let _ = lib;
         self.记(
             x,
             y,
-            format!("{layer}: {原因} · Library {}, Image {image}", lib.index),
+            format!("{layer}: {原因} · Library {全局}, Image {image}"),
         );
     }
 }
 
 /// 3×3 里有没有可走格（不含自身；上游 `MapCheck.cs:56-58` 的双层循环）。
-fn 任一邻可走(raw: &RawMap, format: FormatId, xor: i16, x: usize, y: usize) -> bool {
+fn 任一邻可走(raw: &RawMap, format: FormatId, k: 头部, x: usize, y: usize) -> bool {
     let (w, h) = (usize::from(raw.width), usize::from(raw.height));
     for dy in -1i32..=1 {
         for dx in -1i32..=1 {
@@ -814,7 +907,7 @@ fn 任一邻可走(raw: &RawMap, format: FormatId, xor: i16, x: usize, y: usize)
             if nx < 0 || ny < 0 || nx >= w as i32 || ny >= h as i32 {
                 continue;
             }
-            if walkable(format, &raw.cells[nx as usize * h + ny as usize], xor) {
+            if walkable(format, &raw.cells[nx as usize * h + ny as usize], k) {
                 return true;
             }
         }
@@ -826,7 +919,7 @@ fn 任一邻可走(raw: &RawMap, format: FormatId, xor: i16, x: usize, y: usize)
 ///
 /// 起点顺序照上游的行优先键序（`key = y * Width + x`）：它决定「同样大的两块谁是最大」，
 /// 换成本仓的列优先序会让报出的块换一个（结论一样、行不同）。
-fn check_walkable_blocks(raw: &RawMap, format: FormatId, xor: i16, 检查: &mut 检查器<'_>) {
+fn check_walkable_blocks(raw: &RawMap, format: FormatId, k: 头部, 检查: &mut 检查器<'_>) {
     let (w, h) = (usize::from(raw.width), usize::from(raw.height));
     let mut 见过 = vec![false; w * h];
     let mut 块: Vec<(usize, usize)> = Vec::new(); // (C# 键, 格数)
@@ -836,7 +929,7 @@ fn check_walkable_blocks(raw: &RawMap, format: FormatId, xor: i16, 检查: &mut 
             continue;
         }
         见过[key] = true;
-        if !walkable(format, &raw.cells[(key % w) * h + key / w], xor) {
+        if !walkable(format, &raw.cells[(key % w) * h + key / w], k) {
             continue;
         }
         let mut 数 = 0usize;
@@ -855,7 +948,7 @@ fn check_walkable_blocks(raw: &RawMap, format: FormatId, xor: i16, 检查: &mut 
                         continue;
                     }
                     见过[n] = true;
-                    if walkable(format, &raw.cells[(n % w) * h + n / w], xor) {
+                    if walkable(format, &raw.cells[(n % w) * h + n / w], k) {
                         队列.push_back(n);
                     }
                 }

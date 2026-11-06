@@ -92,6 +92,11 @@ impl WilProbe<'_> {
 }
 
 impl miredit_core::LibProbe for WilProbe<'_> {
+    /// 有没有图库表 = 有没有图源（与 `check_map` 的 `libraries == null` 语义一致）。
+    fn has_libraries(&self) -> bool {
+        self.src.is_some()
+    }
+
     fn frame_state(
         &self,
         lib: miredit_core::MapLibRef,
@@ -519,6 +524,8 @@ pub fn run_check_map(map: Option<&std::path::Path>, show: usize) -> i32 {
     const 无库: miredit_core::NoLibProbe = miredit_core::NoLibProbe;
     let 探针: &dyn miredit_core::LibProbe = if has_libs { &probe } else { &无库 };
     let report = miredit_core::check_map(&raw, 探针);
+    // 「有没有库」以**报告**为唯一真源（`check_map` 从 `probe.has_libraries()` 落的值）
+    let has_libs = !report.无图库;
     eprintln!("{}", summary_text(&report, false));
     for line in hint_lines(&report, has_libs) {
         eprintln!("{line}");
@@ -689,11 +696,16 @@ mod tests {
         );
         assert_eq!(态, miredit_core::ImageState::Ok);
         assert_eq!(源.0.borrow().len(), 1, "图号 0 不该进图源");
-        // 没有图源 ⇒ 缺库
+        // 没有图源 ⇒ 缺库（直接调用时），且 `has_libraries()` 为 false
         let 空 = WilProbe::new(None);
         assert_eq!(
             miredit_core::LibProbe::frame_state(&空, miredit_core::MapLibRef::ground(0), 5),
             miredit_core::ImageState::MissingLibrary
+        );
+        assert!(!miredit_core::LibProbe::has_libraries(&空), "没图源 = 没有库表");
+        assert!(
+            miredit_core::LibProbe::has_libraries(&probe),
+            "有图源 = 有库表（照常查图号）"
         );
     }
     // ───────────────────── 模态输入（真 egui 帧，模拟点击/按键） ─────────────────────
@@ -906,6 +918,31 @@ mod tests {
             两帧点(&ctx, &l, &mut o, 5, 1.2, r.close.center()),
             动作::Close
         );
+    }
+
+    // ───────────────────── `--check-map` 的退出码（R34 复核项 3） ─────────────────────
+
+    /// **没有地图 ⇒ 退出码 2**（`--check-map` 不给 `--map`，或路径不存在）。
+    #[test]
+    fn check_map无图时退出码2() {
+        assert_eq!(run_check_map(None, 3), 2, "不给 --map ⇒ 2");
+        let 不存在 = std::env::temp_dir().join("miredit_check_map_不存在.map");
+        assert_eq!(run_check_map(Some(&不存在), 3), 2, "路径不存在 ⇒ 2");
+    }
+
+    /// **有地图 ⇒ 退出码 0**（有/无问题都算"跑完"），且 summary 打到 stderr。
+    #[test]
+    fn check_map有图时退出码0() {
+        let dir = std::env::temp_dir().join(format!("miredit_check_map_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("建临时目录");
+        let p = dir.join("4x4.map");
+        let mut b = vec![0u8; 52 + 12 * 16];
+        b[0..2].copy_from_slice(&4u16.to_le_bytes());
+        b[2..4].copy_from_slice(&4u16.to_le_bytes());
+        std::fs::write(&p, &b).expect("写合成图");
+        assert_eq!(run_check_map(Some(&p), 3), 0, "能读的图 ⇒ 0");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// `↓` 换选中行，并把选中行滚进可见窗口（选中在窗口下沿之外时）。

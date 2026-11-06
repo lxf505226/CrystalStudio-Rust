@@ -588,6 +588,8 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             const 无库: miredit_core::NoLibProbe = miredit_core::NoLibProbe;
             let 探针: &dyn miredit_core::LibProbe = if has_libs { &probe } else { &无库 };
             let report = miredit_core::check_map(&raw, 探针);
+            // 「有没有库」以**报告**为唯一真源（`check_map` 从 `probe.has_libraries()` 落的值）
+            let has_libs = !report.无图库;
             // 官方：`if (result.Issues.Count > 0) list.SelectedIndex = 0;`
             let selected = if report.issues.is_empty() { None } else { Some(0) };
             let 回执 = tx::fill(

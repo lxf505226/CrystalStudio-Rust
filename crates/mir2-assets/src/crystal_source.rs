@@ -272,7 +272,14 @@ impl SpriteSource for CrystalLibSource {
     fn frame_state(&self, lib: LibRef, index: u32) -> crate::ImageState {
         use crate::ImageState;
         let Some(slot) = self.slot(lib) else {
-            return ImageState::MissingLibrary;
+            // 「没登记」与「登记了但打不开」都让 `slot()` 返回 `None`，但上游是两条不同文案
+            // （`Missing library` / `Unreadable image`，`MapCheck.cs:29-32`）⇒ 用登记表再判一次。
+            // 与 `WilSource::frame_state` 同一条口径（R34 复核项 3）。
+            return if self.paths.resolve(lib).is_some() {
+                ImageState::Unreadable
+            } else {
+                ImageState::MissingLibrary
+            };
         };
         if index >= slot.count() {
             return ImageState::OutOfRange;
@@ -412,6 +419,22 @@ mod tests {
         assert!(
             !src.failures().is_empty(),
             "帧头截断必须留痕（不许静默当成空帧）"
+        );
+
+        // **登记了但打不开**（头部非法）⇒ `Unreadable`，不许冒充「缺库」（R34 复核项 3）
+        std::fs::write(dir.join("Tiles.lib"), vec![0u8; 4]).expect("写坏库");
+        let paths =
+            CrystalLibPaths::discover(&dir, CrystalAssetFormat::Flat).expect("扫描应成功");
+        let src = CrystalLibSource::open(&paths).expect("应能打开");
+        assert_eq!(
+            src.frame_state(LibRef::ground(0), 0),
+            crate::ImageState::Unreadable,
+            "登记了但 .lib 头非法 ⇒ 读不出（与 WilSource 同口径）"
+        );
+        assert_eq!(
+            src.frame_state(LibRef::middle(5), 0),
+            crate::ImageState::MissingLibrary,
+            "压根没登记 ⇒ 缺库"
         );
 
         let _ = std::fs::remove_dir_all(&dir);
