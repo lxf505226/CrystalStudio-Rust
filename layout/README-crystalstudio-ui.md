@@ -1,7 +1,8 @@
 # CrystalStudio 界面真值（Avalonia 11 / .NET 10）— 抽取口径与未解项
 
-> 供 `tools/miredit` 用 Rust 仿制 CrystalStudio 地图编辑器的界面。
-> **源工程全程只读**：`E:\GodM2\CrystalStudio\` 下未改动一字、未编译、未运行（本机也没有 .NET SDK）。
+> 本目录存放从上游 C# 客户端 **CrystalStudio**（提交 `901dbe2f`）**只读**抽取的界面真值，供本仓 Rust 版复刻界面时对照：
+> `crystalstudio-ui.json`（控件树 / 主题色 / 度量 / 代码建控件几何）与 `crystalstudio-strings.json`（界面文案 key → 中文）。
+> 源工程全程只读：未改动、未编译、未运行。
 
 | 项 | 值 |
 |---|---|
@@ -12,7 +13,7 @@
 | 抽取日 | 2026-11-04 |
 | 可重复性 | 同一输入重复运行输出字节完全一致（已连跑两次比 SHA256） |
 
-⚠ **与派单口径有 7 处不同，逐条列在 §4，没有一处被静默改掉。**
+⚠ **与早期抽取清单有 7 处不同，逐条列在 §4，没有一处被静默改掉。**
 
 ---
 
@@ -113,8 +114,8 @@
 
 ### 2.6 `metrics`（51 条，每条带 `metrics_source`）
 
-派单点名的 8 个：`border_thickness=1`、`radius_sm=2`、`radius_md=3`、`radius_lg=5`、`icon_sm=14`、`icon_md=16`、`icon_lg=24`（+ 实存 `radius_row=4`、`radius_xl=6`）。
-**派单写的 `icon_sm=12 / icon_lg=20` 在工程里没有出处**，见 §4 冲突 3。
+早期清单点名的 8 个：`border_thickness=1`、`radius_sm=2`、`radius_md=3`、`radius_lg=5`、`icon_sm=14`、`icon_md=16`、`icon_lg=24`（+ 实存 `radius_row=4`、`radius_xl=6`）。
+**早期清单写的 `icon_sm=12 / icon_lg=20` 在工程里没有出处**，见 §4 冲突 3。
 另有 `tool_button=32`、`tool_button_margin=2`、`tool_item_min_width=36`、`slider_thumb_width=12`、`slider_thumb_height=18`、`slider_track_height=3`、`checkbox_box=14`、`checkbox_gap=7`、`combo_min_height=34`、`tab_item_font_size=11`、`section_title_font_size=10`、`scrollbar_min=9` 等。
 
 ---
@@ -189,11 +190,11 @@
 
 ---
 
-## 4 与派单数字的冲突（7 条，逐条摆出，未静默改）
+## 4 与早期清单数字的差异（7 条，逐条摆出，未静默改）
 
-| # | 派单写的 | 实测 | 处置 |
+| # | 早期清单写的 | 实测 | 处置 |
 |---|---|---|---|
-| 1 | "解析出的窗口数 = **9**" | 9 个 axaml 里只有 **7 个窗口**：`App.axaml` 根是 `Application`、`EditorControls.axaml` 根是 `ResourceDictionary`，**都不是窗口** | `windows` 只有 7 条；9 个文件全在 `xaml_files` 里按 role 标注；验收门按 7 断言并**显式打印派单口径 9**，不硬凑 |
+| 1 | "解析出的窗口数 = **9**" | 9 个 axaml 里只有 **7 个窗口**：`App.axaml` 根是 `Application`、`EditorControls.axaml` 根是 `ResourceDictionary`，**都不是窗口** | `windows` 只有 7 条；9 个文件全在 `xaml_files` 里按 role 标注；校验按 7 断言，并**显式记录早期口径 9** 的差异，不硬凑 |
 | 2 | "主窗列 `72/*/5/360`（**列 4**）" | 根 Grid 只声明 5 行、**无列定义**；这 4 列属于 `MainWindow.axaml:7` 的**嵌套工作区 Grid** | `window.grid_columns=[]`；4 列记在该嵌套 Grid 节点的 `grid_columns` 上；验收门拆成"根行 5"+"嵌套列 4"两条断言 |
 | 3 | `icon_sm=12`、`icon_md=16`、`icon_lg=20` | 工程里**没有 12 也没有 20 的图标尺寸**。实测：工具图标 16×16、墙体图标 18×18、复选框方块 14×14、图层眼睛 16×16、滑块拇指 12（宽）×18（高）、Canvas 设计栅格 24×24 | `icon_sm=14`、`icon_md=16`、`icon_lg=24`，另加 `icon_wall=18`、`icon_eye=16`；12 归到 `slider_thumb_width` |
 | 4 | "FontFamily Segoe UI / FontSize 12" | 对，但**两套来源**：MainWindow 显式写 `Segoe UI`（单字体）；`App.axaml:85` 的 Window 样式是回退链 `Segoe UI, Microsoft YaHei, sans-serif`。6 个对话框里有 4 个写了 Background/Foreground 但没写字体，全部走样式 | `theme.font_family` 与 `font_family_fallback` 分开记，不合并 |
@@ -201,7 +202,7 @@
 | 6 | "行 `36/0/48/*/30`"（当作静态骨架） | 行值对，但**第 2 行 48px 的工具选项条在停靠化后被置 0**（`MainWindow.axaml.cs:319`），内容搬进 Tool Options 面板；`BusyProgress` 从 Row 2 挪到 Row 0（`:321`） | `grid_rows` 记 XAML 声明值（属实），运行期变化写进 `code_built` + `unknowns` |
 | 7 | 统计行格式 `windows=9, ...` | 实际 `windows=7, total_nodes=499, theme_colors=71, code_built=52, unknowns=18` | 原样打印见 §6，格式照抄、数字按实测 |
 
-另有两处无实质影响的小偏差：派单写 `App.axaml` 93 行（实际 **94**）、`MainWindow.axaml` 72 行（实际 **73**），差额是文件末尾换行。
+另有两处无实质影响的小偏差：早期清单写 `App.axaml` 93 行（实际 **94**）、`MainWindow.axaml` 72 行（实际 **73**），差额是文件末尾换行。
 
 ---
 
@@ -228,165 +229,20 @@
 
 ---
 
-## 6 验收门（真跑，原样输出）
+## 6 JSON 的校验口径
 
-脚本逻辑：用 `xml.etree` **独立重解析** 9 个 axaml，再与产出 JSON 交叉校验（不是读自己写过的中间结果）。
+`crystalstudio-ui.json` 不是手抄表，落盘前经过两道机器校验：
 
-```python
-# -*- coding: utf-8 -*-
-"""验收门：独立重解析 9 个 axaml，与产出 JSON 交叉校验（只用标准库）。"""
-import json, os, sys, xml.etree.ElementTree as ET
+1. **抽取结果 vs 源文件**：另写一个独立脚本用 `xml.etree` 重新解析 9 个 `.axaml`，与产出 JSON 交叉校验
+   （窗口数、主窗尺寸、根 Grid 轨道、节点总数），避免「读自己写过的中间结果」式的自证。
+2. **行号可回源**：`code_built` / `metrics` / `semantic` / `inline_colors` 里每一条 `文件:行号`，
+   写盘前都会**回读该行并断言目标片段存在**，一条不符就中止退出。
 
-SRC = r"E:\GodM2\CrystalStudio\CrystalStudio"
-OUT = r"E:\GodM2\tools\miredit\layout\crystalstudio-ui.json"
-AXAML = ["App.axaml", "EditorControls.axaml", "MainWindow.axaml",
-         "ProvinceGeneratorWindow.axaml", "TempleGeneratorWindow.axaml",
-         "TerrainGeneratorWindow.axaml", "TownStampWindow.axaml",
-         "SpecialBrushWindow.axaml", "WallBrushWindow.axaml"]
-SKIP_SUFFIX = {"RowDefinitions", "ColumnDefinitions", "Styles", "Resources"}
-TRANSPARENT = {"ItemsPanelTemplate", "DataTemplate", "ControlTemplate", "HierarchicalDataTemplate"}
-X_NS = "{http://schemas.microsoft.com/winfx/2006/xaml}"
-fails = []
+统计行（该快照的事实）：`windows=7, total_nodes=499, theme_colors=71, code_built=52, unknowns=18`。
 
-def check(cond, msg):
-    print(("  [PASS] " if cond else "  [FAIL] ") + msg)
-    if not cond: fails.append(msg)
-
-def local(t): return t.split("}", 1)[1] if t.startswith("{") else t
-def suffix(t):
-    nm = local(t); return nm.split(".", 1)[1] if "." in nm else nm
-def attr(el, n, d=None):
-    v = el.get(X_NS + n); return v if v is not None else el.get(n, d)
-
-def visible_children(el):
-    for ch in el:
-        nm = local(ch.tag)
-        if "." in nm and suffix(ch.tag) in SKIP_SUFFIX: continue
-        if "." in nm: yield from visible_children(ch); continue
-        if nm in TRANSPARENT: yield from visible_children(ch); continue
-        yield ch
-
-def count_tree(el):
-    n = 0
-    for ch in visible_children(el): n += 1 + count_tree(ch)
-    return n
-
-def first_grid(el):
-    for ch in el:
-        if local(ch.tag) == "Grid": return ch
-    return None
-
-def tracks(grid, which):
-    if grid is None: return []
-    for ch in grid:
-        if suffix(ch.tag) == which:
-            out = []
-            for d in ch:
-                raw = attr(d, "Height") if which == "RowDefinitions" else attr(d, "Width")
-                if raw is None: out.append("*")
-                elif raw.strip() == "Auto": out.append("Auto")
-                elif raw.strip().endswith("*"):
-                    head = raw.strip()[:-1].strip()
-                    out.append("*" if not head or float(head) == 1 else "%g*" % float(head))
-                else:
-                    f = float(raw); out.append(int(f) if f == int(f) else f)
-            return out
-    return []
-
-print("== 1) 解析 9 个 axaml ==")
-roots = {fn: ET.parse(os.path.join(SRC, fn)).getroot() for fn in AXAML}
-check(len(roots) == 9, "解析 axaml 文件数 = %d（期望 9）" % len(roots))
-win_files = [fn for fn in AXAML if local(roots[fn].tag) not in ("Application", "ResourceDictionary")]
-print("  非窗口资源文件：%s" % ", ".join(fn for fn in AXAML if fn not in win_files))
-check(len(win_files) == 7, "工程实际窗口数 = %d（派单写的 9 含 2 个资源字典，见 README §4 冲突 1）" % len(win_files))
-print("== 2) 主窗骨架数字 ==")
-mw = roots["MainWindow.axaml"]
-check(float(attr(mw, "Width")) == 1500 and float(attr(mw, "Height")) == 950, "MainWindow 1500x950")
-check(float(attr(mw, "MinWidth")) == 1100 and float(attr(mw, "MinHeight")) == 720, "MainWindow min 1100x720")
-root_grid = first_grid(mw)
-rows, cols = tracks(root_grid, "RowDefinitions"), tracks(root_grid, "ColumnDefinitions")
-check(rows == [36, 0, 48, "*", 30], "根 Grid 行 = %s（期望 [36,0,48,*,30]）" % rows)
-print("  根 Grid 列 = %s（根 Grid 未声明列；工作区列在嵌套 Grid 上）" % cols)
-workspace = None
-stack = [root_grid]
-while stack and workspace is None:
-    g = stack.pop(0)
-    for ch in visible_children(g):
-        if local(ch.tag) == "Grid":
-            if len(tracks(ch, "ColumnDefinitions")) == 4: workspace = ch
-            stack.append(ch)
-wcols = tracks(workspace, "ColumnDefinitions")
-check(wcols == [72, "*", 5, 360], "嵌套工作区 Grid 列 = %s（期望 [72,*,5,360]）" % wcols)
-check(len(wcols) == 4, "工作区 Grid 列数 = %d（派单要求 4）" % len(wcols))
-
-print("== 3) 与产出 JSON 交叉校验 ==")
-data = json.load(open(OUT, encoding="utf-8"))
-check(True, "json.load 解析成功，文件 %d 字节" % os.path.getsize(OUT))
-print("  顶层键：%s" % list(data.keys()))
-jwins = data["windows"]
-check(len(jwins) == len(win_files), "JSON 窗口数 %d == 重解析 %d" % (len(jwins), len(win_files)))
-jm = [x for x in jwins if x["name"] == "MainWindow"][0]
-check(jm["width"] == 1500 and jm["height"] == 950 and jm["min_width"] == 1100 and jm["min_height"] == 720,
-      "JSON 里主窗 1500x950 / min 1100x720")
-check(jm["grid_rows"] == [36, 0, 48, "*", 30], "JSON 里主窗根 Grid 行 = %s" % jm["grid_rows"])
-def cnt(nodes): return sum(1 + cnt(n["children"]) for n in nodes)
-total_parse = sum(1 + count_tree(first_grid(roots[fn])) for fn in win_files)
-total_json = sum(cnt(w["children"]) for w in jwins) + len(jwins)
-check(total_parse == total_json, "节点总数：重解析 %d == JSON %d" % (total_parse, total_json))
-
-print("== 4) 统计行 ==")
-theme_colors, k, u = len(data["theme"]["colors"]), len(data["code_built"]), len(data["unknowns"])
-print("windows=%d, total_nodes=%d, theme_colors=%d, code_built=%d, unknowns=%d"
-      % (len(jwins), total_json, theme_colors, k, u))
-
-print("== 5) 下限断言 ==")
-check(theme_colors >= 20, "theme_colors=%d >= 20" % theme_colors)
-check(total_json >= 80, "total_nodes=%d >= 80" % total_json)
-check(len(data["theme"]["semantic"]) >= 40, "semantic %d >= 40" % len(data["theme"]["semantic"]))
-check(all(x["line"].split(":")[1] for x in data["code_built"]), "code_built 全部带 file:line")
-
-print()
-if fails:
-    print("验收门 FAILED（%d 项）" % len(fails))
-    for f in fails: print("  - " + f)
-    sys.exit(1)
-print("验收门全部通过")
-```
-
-实跑输出（把上面这段脚本原样存成 `verify_cs_ui.py` 后执行，2026-11-04）：
-
-```
-== 1) 解析 9 个 axaml ==
-  [PASS] 解析 axaml 文件数 = 9（期望 9）
-  非窗口资源文件：App.axaml, EditorControls.axaml
-  [PASS] 工程实际窗口数 = 7（派单写的 9 含 2 个资源字典，见 README §4 冲突 1）
-== 2) 主窗骨架数字 ==
-  [PASS] MainWindow 1500x950
-  [PASS] MainWindow min 1100x720
-  [PASS] 根 Grid 行 = [36, 0, 48, '*', 30]（期望 [36,0,48,*,30]）
-  根 Grid 列 = []（根 Grid 未声明列；工作区列在嵌套 Grid 上）
-  [PASS] 嵌套工作区 Grid 列 = [72, '*', 5, 360]（期望 [72,*,5,360]）
-  [PASS] 工作区 Grid 列数 = 4（派单要求 4）
-== 3) 与产出 JSON 交叉校验 ==
-  [PASS] json.load 解析成功，文件 514877 字节
-  顶层键：['source', 'extracted_at', 'xaml_files', 'theme', 'windows', 'code_built', 'unknowns']
-  [PASS] JSON 窗口数 7 == 重解析 7
-  [PASS] JSON 里主窗 1500x950 / min 1100x720
-  [PASS] JSON 里主窗根 Grid 行 = [36, 0, 48, '*', 30]
-  [PASS] 节点总数：重解析 499 == JSON 499
-== 4) 统计行 ==
-windows=7, total_nodes=499, theme_colors=71, code_built=52, unknowns=18
-== 5) 下限断言 ==
-  [PASS] theme_colors=71 >= 20
-  [PASS] total_nodes=499 >= 80
-  [PASS] semantic 55 >= 40
-  [PASS] code_built 全部带 file:line
-
-验收门全部通过
-```
+> 这些数字是**某一版上游快照**的事实；源工程一变动就必须重新抽取、重新取基线，不要复用本文数字。
 
 ---
-
 ## 7 复现与维护
 
 1. **抽取器**：一个纯函数式的 Python 脚本（标准库 `xml.etree` + `json` + `re`），按 §2 规则把 9 个 axaml 折成树，再拼上 `code_built` / `unknowns` 两张手写表。按"只允许写两个产出文件"的约束，脚本未落在仓库里（跑完即删），但规则在 §2 已完整写明，可直接照此重写。

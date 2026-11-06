@@ -14,22 +14,21 @@
 
 ## 一、跑起来
 
-### 1.1 本地（Windows）
+### 1.1 本地
 
-```powershell
-cd E:\GodM2\tools\miredit
-$env:CARGO_INCREMENTAL=0
-$env:CARGO_TARGET_DIR='I:\miredit-web-target'
+```bash
 cargo build -p miredit-web --release
 
-# 地图白名单根设成仓库根 ⇒ 前端可以直接传 "GodotClient/maps/0.map"
-$env:MIREDIT_MAP_ROOT='E:\GodM2'
-$env:MIREDIT_BIND='127.0.0.1:8080'
-I:\miredit-web-target\release\miredit-web.exe
+export MIREDIT_BIND=127.0.0.1:8080
+export MIREDIT_MAP_ROOT=/path/to/maps          # /api/map/open 的白名单根
+export MIREDIT_CLIENT_ROOT=/path/to/client-root
+export MIREDIT_PALETTE_JSON=/path/to/crystalstudio/catalogue/palette.json
+export MIREDIT_WEB_ROOT=/path/to/repo/web
+cargo run -p miredit-web --release
 ```
 
-```powershell
-curl.exe -s http://127.0.0.1:8080/api/health
+```bash
+curl -s http://127.0.0.1:8080/api/health
 # {"ok":true,"version":"0.1.0"}
 ```
 
@@ -38,18 +37,18 @@ curl.exe -s http://127.0.0.1:8080/api/health
 | 变量 | 缺省 | 说明 |
 |---|---|---|
 | `MIREDIT_BIND` | `0.0.0.0:8080` | 监听地址（Docker 里必须 `0.0.0.0` 才能被 `-p` 映射） |
-| `MIREDIT_MAP_ROOT` | `GodotClient/maps` | **`/api/map/open` 的白名单根**（相对路径按进程 cwd 绝对化） |
+| `MIREDIT_MAP_ROOT` | 迁移前的相对布局 | **`/api/map/open` 的白名单根**（相对路径按进程 cwd 绝对化）—— 换机器请显式设置 |
 | `MIREDIT_CLIENT_ROOT` | `mir2_assets::DEFAULT_CLIENT_ROOT` | 图库根（`.wil/.wzl`）；扫不到 ⇒ 出图端点 503 |
-| `MIREDIT_PALETTE_JSON` | `<仓库根>/CrystalStudio/catalogue/palette.json` | 印章目录索引；不存在 ⇒ `/api/stamps` 503 |
-| `MIREDIT_WEB_ROOT` | `<仓库根>/tools/miredit/web` | 静态前端；不存在 ⇒ `GET /` 404（**不伪造页面**） |
+| `MIREDIT_PALETTE_JSON` | 迁移前的相对布局 | 印章目录索引（须落在 `<dataRoot>/catalogue/palette.json`）；不存在 ⇒ `/api/stamps` 503 |
+| `MIREDIT_WEB_ROOT` | 迁移前的相对布局 | 静态前端（本仓的 `web/`）；不存在 ⇒ `GET /` 404（**不伪造页面**） |
 
-> ⚠ `MIREDIT_MAP_ROOT` 的缺省值是 `GodotClient/maps`，而前端 `js/api.js` 传的是**绝对路径**
-> （`E:\GodM2\GodotClient\maps\0.map`）。绝对路径同样要在白名单根内，所以要让前端直接可用，
-> 就把根设成 `E:\GodM2`（如 §1.1）。
+> ⚠ `MIREDIT_MAP_ROOT` 下发给 `/api/map/open` 的 `path` 必须在白名单根之内：前端一律传**相对路径**
+> （如 `maps/0.map`），绝对路径同样会被这四道闸校验一次。缺省值指向迁移前的布局，
+> 独立/公开部署时请按 §1.1 显式设置全部 `MIREDIT_*`。
 
 ### 1.3 Docker
 
-> ⚠ **Docker 构建请用 `tools/miredit/docker/Dockerfile`，本目录下的 `Dockerfile` 已废弃。**
+> ⚠ **Docker 构建请用仓库根的 `docker/Dockerfile`，本 crate 目录下的 `Dockerfile` 已废弃。**
 >
 > 本目录的 `Dockerfile` 自 2026-11-05 起**只剩注释、故意不含 `FROM`** ⇒ **不可构建**：
 > `docker build` 会直接报「没有构建阶段 / Dockerfile 为空」，一眼就懂「这不是拿来构建的」，
@@ -63,13 +62,17 @@ curl.exe -s http://127.0.0.1:8080/api/health
 > ⚠ 上面的报错文案依 docker 行为推断，本机无 Docker **未实跑**；也**别**改回 `FROM scratch` ——
 > 那是合法空镜像，构建会「成功」出一个不可运行的镜像。
 
-```powershell
-cd E:\GodM2\tools            # ← 上下文必须是 tools/，原因见 tools/miredit/docker/Dockerfile 头注释
-docker build -f miredit/docker/Dockerfile -t miredit-web:0.1.0 .
-docker run --rm -p 8080:8080 `
-  -v E:\GodM2\GodotClient\maps:/data/maps:ro `
-  -v "E:\GodM2\client\热血传奇23周年客户端:/data/client:ro" `
-  -v E:\GodM2\CrystalStudio:/data/crystalstudio:ro `
+```bash
+# 推荐直接用仓库根的 compose（上下文与挂载都已按容器路径写好）
+cd docker && docker compose up -d --build
+
+# 或手工构建（构建上下文必须是仓库根，原因见 docker/Dockerfile 头注释）
+docker build -f docker/Dockerfile -t miredit-web:0.1.0 .
+docker run --rm -p 8080:8080 \
+  -v /path/to/maps:/data/maps:ro \
+  -v /path/to/client-root:/data/client:ro \
+  -v /path/to/crystalstudio/catalogue:/data/crystalstudio/catalogue:ro \
+  -v /path/to/crystalstudio/Objects:/data/crystalstudio/Objects:ro \
   miredit-web:0.1.0
 curl http://127.0.0.1:8080/api/health
 ```
@@ -359,7 +362,7 @@ core: cells_from_stamp / register_stamp / place_stamp_by_id / Command::PlaceStam
 | `src/routes/palette.rs` | 88 | `/api/palette` |
 | `src/routes/stamps.rs` | 369 | `/api/stamps` + `load_stamp_cells`（`.X` 读盘 → 调 core `cells_from_stamp`，本文件不再搬字段） |
 | `src/routes/events.rs` | 91 | `/api/events`（WS） |
-| `Dockerfile` | 12 | **已废弃（2026-11-05）**：只剩注释、故意不含 `FROM`，不可构建。有效文件是 `tools/miredit/docker/Dockerfile`（两阶段 + 非 root + `EXPOSE 8080`） |
+| `Dockerfile` | 12 | **已废弃（2026-11-05）**：只剩注释、故意不含 `FROM`，不可构建。有效文件是仓库根的 `docker/Dockerfile`（多阶段 + 非 root + `EXPOSE 8080`） |
 | `Dockerfile.dockerignore` | 22 | 构建上下文排除（BuildKit 的 `<Dockerfile>.dockerignore`） |
 
 单文件均 ≤ 600 行（最大 `json.rs` 503 行；测试段拆到 `json_tests.rs` / `tiles/lighting_tests.rs` 才压下来的）。

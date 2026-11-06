@@ -1,55 +1,26 @@
-# CrystalStudio-Rust · 资料索引
+# Crystal Studio · 文档索引
 
-> 本项目是独立工程（root `I:\miredit`，独立 `.git`），**与 `E:\GodM2` 是两条不同的工作线**。
-> 2026-11-06 从 `E:\GodM2` 迁入，避免双项目并行时日志/派单/路径互相污染。
+本目录只放**产品文档**（架构、格式规格、接口契约）。构建、运行与资产要求见仓库根 [README.md](../README.md)。
 
-## 一、目录
+## 一、文档
 
-| 路径 | 内容 | 来源 |
-|---|---|---|
-| `_upstream/` | 上游 C# 源码（19,041 文件 / 300.7 MB，**只读参照**） | 原 `E:\GodM2\CrystalStudio`，2026-11-06 **搬移**（E 盘已删） |
-| `crates/` `web/` `docker/` | 8 crate + 网页前端 + Docker 骨架 | 项目本体，已随代码迁到 `I:\miredit` |
-| `layout/` | UI 真值数据（`crystalstudio-ui.json` / `crystalstudio-strings.json`）+ 截图 | 随代码迁入 |
-| `docs/deliverables/` | 18 份移植线交付文档 + 架构蓝图 + 猎手-引用路径核验目录 | 复制自 `E:\GodM2\deliverables\` 与 `E:\GodM2\docs\`（**E 盘原件保留**） |
-| `docs/工作日志/` | 2026-11-05 / 11-06 的**移植线段**（按段落从混写日志拆出） | 复制拆分自 `E:\GodM2\.workbuddy\memory\`（**E 盘原件保留**） |
-| `evidence/上游小地图源码取证/` | `MinimapExporter.cs` 等 7 件 | 原 `I:\cs-new`，已复制 |
-| `evidence/上游核心源码取证/` | `MapDimensions.cs` 等 13 件 | 原 `I:\cs-upstream-new`，已复制 |
-| `evidence/小地图回源订正出图证据/` | 22 文件 / 212.4 MB 出图与日志 | 原 `I:\miredit-minimap-sourceproof`，已复制 |
-
-## 二、主入口
-
-- 移植总账：[`docs/deliverables/移植总账-2026-11-05.md`](deliverables/移植总账-2026-11-05.md)
-- 架构蓝图：[`docs/移植-CrystalStudio-Rust-架构蓝图-2026-11-04.md`](移植-CrystalStudio-Rust-架构蓝图-2026-11-04.md)
-- 9 格式规格：[`docs/deliverables/规格-地图格式全量9种-2026-11-04.md`](deliverables/规格-地图格式全量9种-2026-11-04.md)
-- 上游变更评估：[`docs/deliverables/上游变更-6f2dadde到901dbe2f-2026-11-05.md`](deliverables/上游变更-6f2dadde到901dbe2f-2026-11-05.md)
-
-## 三、路径变更对照（重要）
-
-文档里若出现下列旧路径，**一律按本表映射到新位置**；历史证据里的旧路径保留不改（它们是当时的真值）。
-
-| 旧路径 | 新路径 |
+| 文件 | 内容 |
 |---|---|
-| `E:\GodM2\tools\miredit` | `I:\miredit` |
-| `E:\GodM2\CrystalStudio` | `I:\miredit\_upstream` |
-| `E:\GodM2\deliverables\<移植线文档>` | `I:\miredit\docs\deliverables\<同名>` |
-| `E:\GodM2\docs\移植-CrystalStudio-Rust-架构蓝图-2026-11-04.md` | `I:\miredit\docs\移植-CrystalStudio-Rust-架构蓝图-2026-11-04.md` |
-| `I:\cs-new` | `I:\miredit\evidence\上游小地图源码取证` |
-| `I:\cs-upstream-new` | `I:\miredit\evidence\上游核心源码取证` |
-| `I:\miredit-minimap-sourceproof` | `I:\miredit\evidence\小地图回源订正出图证据` |
+| [架构蓝图.md](架构蓝图.md) | 8 crate 分层与依赖方向、各模块职责、里程碑与验收口径 |
+| [地图格式规格.md](地图格式规格.md) | 9 种地图格式的逐字段字节布局、判别规则、读写往返要求、已作废结论的更正记录 |
 
-## 四、两条线的边界（避免冲突）
+## 二、仓内其它文档
 
-- **`E:\GodM2`** = GodM2 服务端/Godot 客户端那条线，其 `.workbuddy\memory\` 里仍混有移植线的历史段落（**保留不动**，不删别人的记录）。
-- **`I:\miredit`** = 本移植线，日志与交付文档自 2026-11-06 起只在本项目内追加。
-- 派单槽位是平台全局共享的：两条线同时跑时会互相占槽，属预期，按 `multi-agent-dispatch-hygiene` 落档排队，不硬撞。
-- 上游源码 `_upstream/` 是**只读参照**；所有移植结论都要标注它对应的上游提交号（本地基线 `901dbe2f`，线上复核至 `acfbbf8a`）。
-
-## 五、迁移校验记录（2026-11-06）
-
-| 项 | 证据 |
+| 位置 | 内容 |
 |---|---|
-| 上游源码搬移 | 复制后 19,041 文件 / 300.7 MB 与源**文件数+字节数一致**，8 个随机抽样 sha256 一致 ⇒ 才删源 |
-| 18 份文档 | 逐文件 sha256 与 E 盘原件一致 |
-| 证据目录 | 5 个大文件抽样 sha256 一致 |
-| 日志拆分 | 11-05 保留 31 段 / 11-06 保留 13 段，服务端关键词残留 **0** |
-| 凭据 | `.git/config` 与索引文件均无 token |
+| [README.md](../README.md) | 项目简介、能力、构建/测试/运行、资产要求 |
+| [../web/README.md](../web/README.md) | 网页版接口契约：端点、参数、错误码、WebSocket、前端行为 |
+| [../docker/README.md](../docker/README.md) | 容器部署（未在 CI 实跑验证） |
+| [../layout/README-crystalstudio-ui.md](../layout/README-crystalstudio-ui.md) | 上游界面真值 JSON 的字段口径与未解项 |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | 贡献流程与代码风格 |
+
+## 三、约定
+
+- 文档里的上游引用一律带 `文件:行号@提交`，可回源核对。
+- 数值（字节布局、常量、阈值）以源码为唯一真值；文档与代码不一致时先修文档并记录差异。
+- 已被推翻的结论不删除，就地标注「作废 + 原因 + 新结论」，避免同一条错误被子文档二次引用。
