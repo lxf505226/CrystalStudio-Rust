@@ -1,4 +1,4 @@
-//! **菜单项静态表**：5 个菜单 / **41 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
+//! **菜单项静态表**：5 个菜单 / **42 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
 //! 逐项照抄官方（分组 = 官方 `<Separator />` 的位置）。
 //!
 //! # 数据来源（两处互相印证）
@@ -10,15 +10,18 @@
 //! 运行时由代码追加的那几项（语言 / 7 个面板开关 / 锁定 / 重置）见
 //! `ui_text` 里「下拉菜单项」小节的说明与 [`crate::menu::panels`] 的模块文档。
 //!
-//! # 41 项的账
+//! # 42 项的账
 //!
 //! ```text
-//! 文件 10 + 编辑 4 + 视图 19 + 工具 6 + 帮助 2 = 41
-//! 视图 19 = XAML 8 + 语言 1 + 面板开关 8 + 锁定/重置 2
+//! 文件 10 + 编辑 4 + 视图 20 + 工具 6 + 帮助 2 = 42
+//! 视图 20 = XAML 9 + 语言 1 + 面板开关 8 + 锁定/重置 2
 //!
 //! ⚠ **2026-11-05 起是 40 项**（原 39）：上游 `901dbe2f` 新增了第 8 个面板
 //! （`docking.Add("Maps", …)`），而 `DockWorkspace.cs:269 AddSectionMenu` 会为
 //! **每一个**面板生成一条 CheckBox 菜单项 ⇒ 面板开关 7 → 8，视图 18 → 19。
+//! ⚠ **2026-11-07 起是 42 项**（视图 19 → 20）：补了「地砖信息悬浮」
+//! （[`Action::CellHover`]），照官方 `MainWindow.axaml` 的 `CellHoverToggle`
+//! （CheckBox、缺省不勾、**它前面有一条分隔线**）。
 //! ⚠ **2026-11-06 起是 41 项**（帮助 1 → 2）：本仓补了「帮助 → 关于 Crystal Studio」
 //! （[`Action::About`]）。**这一项没有官方 XAML 对应**：上游 `MainWindow.axaml` 的帮助菜单
 //! 只有 `KeyboardShortcuts`，所以它是本仓新增的**原生功能**（只读模态，
@@ -40,8 +43,8 @@
 //! ```
 //!
 //! 静态子项共 **5** 个（[`sub_count`]），另有 1 个动态列表（行数随 `recent` 变：0 条 ⇒ 1 行空态）。
-//! 子项**不进** [`MENUS`] 的 `items`（那是"顶级 41 项"的口径），
-//! 所以 [`item_count`] 仍是 41、`--menu-dump` 的汇总行仍是 41 —— 子项在 dump 里
+//! 子项**不进** [`MENUS`] 的 `items`（那是"顶级 42 项"的口径），
+//! 所以 [`item_count`] 仍是 42、`--menu-dump` 的汇总行仍是 42 —— 子项在 dump 里
 //! 靠 `parent=` 列自证（见 [`crate::menu::dump_lines`]）。
 //!
 //! [`tests::顶级39项与子项5项计数`] 把这两笔账都钉住。
@@ -201,9 +204,10 @@ impl Lang {
 ///
 /// # 为什么需要它
 ///
-/// 顶级 41 项里真正有**运行期真状态**的有五样：深色模式（`app.dark`）、
+/// 顶级 42 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
 /// 单元格网格（`app.grid`）、开启门（`app.doors_open`）、**地图光照（`app.lighting`）**、
-/// 8 个面板显隐（`app.panels`）—— 它们由 [`check`] / [`check_with`] 直接从宿主字段读，
+/// **地砖信息悬浮（`app.cell_hover`）**、8 个面板显隐（`app.panels`）—— 它们由
+/// [`check`] / [`check_with`] / [`check_with_hover`] 直接从宿主字段读，
 /// **不经过本结构**（光照那一档尤其不许再存第二份，见下）。
 ///
 /// 子菜单里还剩两类没有可写真状态的：
@@ -323,6 +327,12 @@ pub enum Action {
     Settings,
     // ── 视图 ──
     DarkMode,
+    /// **地砖信息悬浮**（官方 `CellHoverToggle`，`MainWindow.CellHover.cs`）。
+    ///
+    /// 官方 XAML 把它放在深色模式之后、单元格网格之前，且**它前面有一条分隔线**
+    /// （`DarkModeToggle` / `Separator` / `CellHoverToggle` / `GridToggle`）。
+    /// 缺省**不勾**（官方没写 `IsChecked`），**不持久化**（只活在内存里）。
+    CellHover,
     CellGrid,
     MapLighting,
     OpenDoors,
@@ -384,6 +394,7 @@ impl Action {
             Action::FillSelection => "edit.fill_selection",
             Action::Settings => "edit.settings",
             Action::DarkMode => "view.dark_mode",
+            Action::CellHover => "view.cell_hover",
             Action::CellGrid => "view.cell_grid",
             Action::MapLighting => "view.map_lighting",
             Action::OpenDoors => "view.open_doors",
@@ -436,6 +447,7 @@ impl Action {
             Action::FillSelection => tx::MENU_FILL_SELECTION,
             Action::Settings => tx::MENU_SETTINGS,
             Action::DarkMode => tx::MENU_DARK_MODE,
+            Action::CellHover => tx::MENU_CELL_HOVER,
             Action::CellGrid => tx::MENU_CELL_GRID,
             Action::MapLighting => tx::MENU_MAP_LIGHTING,
             Action::OpenDoors => tx::MENU_OPEN_DOORS,
@@ -615,9 +627,11 @@ pub const EDIT_ITEMS: [Item; 4] = [
 ///
 /// `地图光照`（#3）与 `语言`（#9）是**子菜单**（官方 XAML 里 `MapLightingMenu` 就带 3 个
 /// 子项；`语言` 由 `MainWindow.Localization.cs:15` 追加时也带 2 个）。
-pub const VIEW_ITEMS: [Item; 19] = [
+pub const VIEW_ITEMS: [Item; 20] = [
     it(Action::DarkMode, false),
-    it(Action::CellGrid, true),
+    // 地砖信息悬浮：官方 XAML 里它前面**有一条分隔线**（深色模式｜地砖信息悬浮|单元格网格）
+    it(Action::CellHover, true),
+    it(Action::CellGrid, false),
     it_sub(Action::MapLighting, true, Sub::Static(LIGHT_ITEMS)),
     it(Action::OpenDoors, false),
     it(Action::ZoomIn, true),
@@ -683,7 +697,7 @@ pub const MENUS: [Menu; 5] = [
     },
 ];
 
-/// 全部菜单项总数（= **41**：文件 10 + 编辑 4 + 视图 19 + 工具 6 + 帮助 2）。
+/// 全部菜单项总数（= **42**：文件 10 + 编辑 4 + 视图 20 + 工具 6 + 帮助 2）。
 pub fn item_count() -> usize {
     MENUS.iter().map(|m| m.items.len()).sum()
 }
@@ -691,8 +705,8 @@ pub fn item_count() -> usize {
 /// 静态子项总数（= **5**：地图光照 3 + 语言 2）。
 ///
 /// 「最近打开」的动态列表**不计入**（行数随设置文件里的 `recent` 变：
-/// 0 条 ⇒ 1 行官方空态行）。子项**不进** [`MENUS`] 的 `items`，所以 [`item_count`] 仍是 41
-/// —— 两笔账分开数，免得"加了子项就把顶级 39 撑成 44"。
+/// 0 条 ⇒ 1 行官方空态行）。子项**不进** [`MENUS`] 的 `items`，所以 [`item_count`] 仍是 42
+/// —— 两笔账分开数，免得"加了子项就把顶级 42 撑成 45"。
 pub fn sub_count() -> usize {
     let mut n = 0;
     for m in &MENUS {
@@ -729,7 +743,7 @@ pub fn find_by_id(id: &str) -> Option<(usize, usize, &'static Item)> {
 /// （2026-11-05 地图光照接线时补）。
 ///
 /// 为什么需要它：`--menu-click view.light_night` 里的 `view.light_night` 是**子项** id，
-/// 原来的 [`find_by_id`] 只扫顶级 41 项 ⇒ 判成「没有这个菜单项」并报参数错误，
+/// 原来的 [`find_by_id`] 只扫顶级 42 项 ⇒ 判成「没有这个菜单项」并报参数错误，
 /// 而验收要求「同一会话点一档光照 ⇒ 切档 + 重渲」必须能无人值守复现。
 /// 现在 [`crate::cli::Cli::parse`] 与 [`crate::app::MireditApp`] 的 `pending_menu_clicks`
 /// 都问这一个函数：认得顶级项与静态子项，动态行（最近打开）仍不支持（它们没有稳定 id）。
@@ -773,6 +787,9 @@ pub const fn state(action: Action) -> State {
         // 本仓 2026-11-05 之前默认关，审查缺陷 4 判定为形态偏离后已订正为默认开
         // （判据 `crate::cli::Cli::cell_grid_enabled`，理由见 `crate::grid` 模块文档 §五）。
         Action::CellGrid => State::Ready,
+        // 地砖信息悬浮：**无图也能开**（官方 `RefreshCellHover` 自己判"格在地图内"，
+        // 开关本身不受文档状态限制）⇒ Ready，不是 NeedsMap。
+        Action::CellHover => State::Ready,
         // 「开启门」2026-11-05 起**真实现**：渲染层早已有能力（`miredit-render` 的
         // `RenderOptions::doors_open`：`doors_open && (door_index & 0x7F) != 0` 时
         // `帧号 += door_offset & 0x7F`，**只动前景层**），门态字段就在
@@ -883,6 +900,8 @@ pub const fn state(action: Action) -> State {
 pub const fn default_checked(action: Action) -> Option<bool> {
     match action {
         Action::CellGrid => Some(true),
+        // 地砖信息悬浮：官方 `CellHoverToggle` 没写 `IsChecked` ⇒ 勾选型 + 缺省不勾
+        Action::CellHover => Some(false),
         Action::OpenDoors => Some(false),
         Action::LockLayout => Some(false),
         Action::LightDawnDusk => Some(false),
@@ -946,8 +965,31 @@ pub fn check_with(
     panels: &crate::menu::panels::PanelVis,
     sub: &SubState,
 ) -> Option<bool> {
+    // 「地砖信息悬浮」是第 5 个真开关：既有 7 参入口**保留原签名**（二十多处调用点不动），
+    // 由本函数转调 [`check_with_hover`] 并传「关」；生产绘制路径直接调后者。
+    check_with_hover(action, dark, grid, doors, lighting, false, panels, sub)
+}
+
+/// 该项当前的**勾选态**（带子菜单状态 + **五个**真开关，含「地砖信息悬浮」）。
+///
+/// 与 [`check_with`] 的唯一差别就是多一个 `hover` 参数（`app.cell_hover` 的真值）。
+/// 为什么不把 7 参入口直接改成 8 参：那二十多处测试调用点会跟着改一遍，而它们的语义
+/// 与"浮层开关"无关 —— 多一处机械改动就多一处抄错的机会。
+#[allow(clippy::too_many_arguments)] // 8 个都是"这一帧的开关真值"，与 `check_with` / `popup::draw` 同口径
+pub fn check_with_hover(
+    action: Action,
+    dark: bool,
+    grid: bool,
+    doors: bool,
+    lighting: MapLight,
+    hover: bool,
+    panels: &crate::menu::panels::PanelVis,
+    sub: &SubState,
+) -> Option<bool> {
     match action {
         Action::DarkMode => Some(dark),
+        // 地砖信息悬浮：**真状态**（`app.cell_hover` ⇒ 本帧画没画浮层）。
+        Action::CellHover => Some(hover),
         Action::CellGrid => Some(grid),
         Action::Panel(id) => Some(panels.get(id)),
         // 开启门：**真状态**（`app.doors_open` ⇒ `CanvasView::ensure` 的渲染选项）。
@@ -972,7 +1014,7 @@ mod tests {
     use crate::menu::panels::PanelVis;
     use std::collections::BTreeSet;
 
-    /// **41 项的账**：文件 10 / 编辑 4 / 视图 19 / 工具 6 / 帮助 2（2026-11-06 加「关于」）。
+    /// **42 项的账**：文件 10 / 编辑 4 / 视图 20 / 工具 6 / 帮助 2（2026-11-06 加「关于」；2026-11-07 加「地砖信息悬浮」）。
     ///
     /// 这条是验收门 §四.2 的机器判据：任何人加/删一项，这里先红。
     #[test]
@@ -981,12 +1023,12 @@ mod tests {
         assert_eq!(EDIT_ITEMS.len(), 4, "编辑菜单");
         assert_eq!(
             VIEW_ITEMS.len(),
-            19,
-            "视图菜单（XAML 8 + 语言 1 + 面板 8 + 锁定/重置 2）"
+            20,
+            "视图菜单（XAML 9 + 语言 1 + 面板 8 + 锁定/重置 2）"
         );
         assert_eq!(TOOLS_ITEMS.len(), 6, "工具菜单");
         assert_eq!(HELP_ITEMS.len(), 2, "帮助菜单（键盘快捷键 + 关于）");
-        assert_eq!(item_count(), 41, "5 个菜单合计");
+        assert_eq!(item_count(), 42, "5 个菜单合计");
         assert_eq!(MENUS.len(), 5);
         // 视图里的面板开关正好 8 个，且与 PanelId::ALL 一一对应
         let panels: Vec<_> = VIEW_ITEMS
@@ -1017,8 +1059,92 @@ mod tests {
                 assert_eq!(MENUS[mi].items[ii].action.id(), id);
             }
         }
-        assert_eq!(ids.len(), 41);
+        assert_eq!(ids.len(), 42);
         assert!(find_by_id("no.such_item").is_none());
+    }
+
+    /// **视图 → 地砖信息悬浮已接线**（A-008）：id / 文案 / 缺省不勾 / 无手势 / `Ready` /
+    /// 位置（深色模式之后、单元格网格之前，且**自带前置分隔线**）。
+    ///
+    /// 后半段钉三件事（都是"假勾"事故的防线）：
+    /// ① 勾选态读**宿主真状态**（`check_with_hover` 的 `hover` 参数）；
+    /// ② 旧的 7 参入口仍把它认成**勾选型**（`Some`），只是按"关"算 —— 绝不能返回 `None`
+    ///    （那会让弹层连勾选列都不画，看起来像个不可勾的普通项）；
+    /// ③ `--menu-click view.cell_hover` 的 id 能被反查（派发入口）。
+    #[test]
+    fn 地砖信息悬浮项已接线() {
+        let (mi, ii, item) = find_by_id("view.cell_hover").expect("view.cell_hover 必须存在");
+        assert_eq!(mi, 2, "在视图菜单（第 3 个）里");
+        assert_eq!(MENUS[mi].title, tx::MENU_VIEW);
+        assert_eq!(ii, 1, "视图第 2 项（1 基）");
+        assert_eq!(item.action, Action::CellHover);
+        assert_eq!(item.action.label(), tx::MENU_CELL_HOVER);
+        assert_eq!(item.action.id(), "view.cell_hover");
+        assert_eq!(item.action.shortcut(), None, "官方 `CellHoverToggle` 没有手势");
+        assert_eq!(state(Action::CellHover), State::Ready, "无图也能开（官方同款）");
+        assert!(item.sub.is_none(), "地砖信息悬浮是叶子项");
+        assert!(item.sep_before, "官方 XAML 在它前面有一条分隔线");
+        // 顺序：深色模式 → 地砖信息悬浮 → 单元格网格（官方 XAML 的原文顺序）
+        assert_eq!(
+            VIEW_ITEMS[0..3]
+                .iter()
+                .map(|i| i.action)
+                .collect::<Vec<_>>(),
+            vec![Action::DarkMode, Action::CellHover, Action::CellGrid],
+            "视图菜单前三项的顺序不对"
+        );
+        assert_eq!(
+            find_action_by_id("view.cell_hover"),
+            Some(Action::CellHover),
+            "`--menu-click view.cell_hover` 必须能派发"
+        );
+        // 官方没写 `IsChecked` ⇒ 官方缺省不勾
+        assert_eq!(default_checked(Action::CellHover), Some(false));
+        // ① 勾选态 = 真状态
+        let panels = PanelVis::default();
+        let d = SubState::default();
+        assert_eq!(
+            check_with_hover(
+                Action::CellHover,
+                false,
+                true,
+                false,
+                MapLight::Day,
+                true,
+                &panels,
+                &d
+            ),
+            Some(true),
+            "浮层开着必须画勾"
+        );
+        assert_eq!(
+            check_with_hover(
+                Action::CellHover,
+                false,
+                true,
+                false,
+                MapLight::Day,
+                false,
+                &panels,
+                &d
+            ),
+            Some(false),
+            "浮层关着不许画勾"
+        );
+        // ② 旧 7 参入口仍是"勾选型"，按关算
+        assert_eq!(
+            check_with(
+                Action::CellHover,
+                false,
+                true,
+                false,
+                MapLight::Day,
+                &panels,
+                &d
+            ),
+            Some(false)
+        );
+        assert_eq!(check(Action::CellHover, false, true, &panels), Some(false));
     }
 
     /// **帮助 → 关于**（2026-11-06 新增）在静态表里真的存在，且四项都对：
@@ -1071,7 +1197,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(ready + need_map + todo, 41);
+        assert_eq!(ready + need_map + todo, 42);
         // 任务书 §三.3 点名必须真接上的那一批：逐条钉住，防止有人把它们改回 Todo
         for a in [
             Action::OpenMap,
@@ -1267,9 +1393,12 @@ mod tests {
         assert_eq!(seps(&EDIT_ITEMS), vec![2, 3], "编辑：撤销/重做之后、填充之后");
         // 2026-11-05：面板开关由 7 变 8（新增「地图列表」），分隔线**位置不变**
         // （仍是"面板组之前"一条），下标因此从 16 后移一位到 17。
+        // 2026-11-07：视图第 2 项插入「地砖信息悬浮」（官方 XAML 里它**前面带分隔线**、
+        // 与单元格网格之间**没有**分隔线）⇒ 分隔线下标整体后移一位：
+        // 深色模式后 = 1（新）、网格后 = 3、门后 = 5、适应地图后 = 9、语言后 = 10、面板后 = 18。
         assert_eq!(
             seps(&VIEW_ITEMS),
-            vec![1, 2, 4, 8, 9, 17],
+            vec![1, 3, 5, 9, 10, 18],
             "视图：深色模式后 / 网格后 / 门后 / 适应地图后 / 语言后 / 面板后"
         );
         assert_eq!(seps(&TOOLS_ITEMS), vec![4], "工具：4 个生成器之后");
@@ -1322,18 +1451,18 @@ mod tests {
         }
     }
 
-    /// **41 顶级 + 5 子项**（审查缺陷 1/2 的计数钉子）。
+    /// **42 顶级 + 5 子项**（审查缺陷 1/2 的计数钉子）。
     ///
     /// 两笔账分开数：
-    /// * 顶级 41（[`item_count`] —— `--menu-dump` 汇总行的口径）；
+    /// * 顶级 42（[`item_count`] —— `--menu-dump` 汇总行的口径）；
     /// * 静态子项 5（[`sub_count`] = 地图光照 3 + 语言 2）。
     ///
     /// 再加「最近打开」那个**动态列表**：它没有静态子项，空列表时按官方
     /// `RecentMaps.cs:39` 给一条灰行 —— 这一条也在这里钉住。
     #[test]
-    fn 顶级41项与子项5项计数() {
-        // ① 顶级是 41（帮助菜单 2026-11-06 由 1 项变 2 项），子项不许把它撑大
-        assert_eq!(item_count(), 41);
+    fn 顶级42项与子项5项计数() {
+        // ① 顶级是 42（2026-11-06 帮助 1 → 2；2026-11-07 视图 19 → 20），子项不许把它撑大
+        assert_eq!(item_count(), 42);
         // ② 静态子项 5，且顺序照官方
         assert_eq!(sub_count(), 5, "地图光照 3 + 语言 2");
         assert_eq!(

@@ -61,6 +61,7 @@ use miredit_render::{MapLighting, RenderOptions};
 use crate::banner;
 use crate::canvas::{self, CanvasCtx};
 use crate::canvas_view::CanvasView;
+use crate::cell_hover;
 use crate::cellinfo::{self, CellLines};
 use crate::cli::Cli;
 use crate::dock_left;
@@ -157,6 +158,17 @@ pub struct MireditApp {
     pub hover: Option<(u16, u16)>,
     /// `--hover` 指定的伪造悬停格（截图取证用，优先于真实鼠标）。
     forced_hover: Option<(u16, u16)>,
+    /// **地砖信息悬浮**开关（视图 → 地砖信息悬浮；真源，**不持久化**）。
+    ///
+    /// 与 `grid` / `doors_open` / `lighting` 同一套口径：菜单翻转它、绘制读它
+    /// （`crate::cell_hover`），勾选态由 `menu::model::check_with_hover` 从这里取真值。
+    /// 与它们不同的是**没有启动参数**：上游 `CellHoverToggle` 也只有菜单一条入口。
+    pub cell_hover: bool,
+    /// 悬停浮层的**锚点**（上一帧的指针位置）。
+    ///
+    /// `None` = 这一帧没有真实指针（`--hover` 伪造悬停 / 截图取证）⇒ 浮层改钉在
+    /// 该格的**中心**（否则截图里浮层会跑到 (0,0)）。
+    hover_anchor: Option<egui::Pos2>,
     /// 当前单元格信息（缓存，见 [`Self::refresh_cell_lines`]）。
     lines: CellLines,
     /// 上面那份信息对应的 `(x, y, 地图代号)`；变了才重算（要问图库要帧，不能每帧算）。
@@ -572,6 +584,10 @@ impl MireditApp {
             selected_tool,
             hover: None,
             forced_hover: cli.hover,
+            // 视图 → 地砖信息悬浮：官方 `CellHoverToggle` 没写 `IsChecked` ⇒ **缺省关**；
+            // 不持久化 ⇒ 每次启动都是关（不从设置文件读）。
+            cell_hover: false,
+            hover_anchor: None,
             lines: CellLines::unknown(),
             lines_key: None,
             text,
@@ -721,6 +737,13 @@ impl MireditApp {
             ctx.pointer_hover_pos()
                 .and_then(|p| self.view.screen_to_cell(l.viewport, p))
         };
+        // 浮层锚点 = **真实指针**位置；`--hover` 伪造悬停时没有指针 ⇒ `None`
+        // （画的时候改用该格中心，否则截图里的浮层会跑到窗口左上角）。
+        self.hover_anchor = if self.forced_hover.is_some() {
+            None
+        } else {
+            ctx.pointer_hover_pos()
+        };
         self.hover = cell.and_then(|(x, y)| match self.doc.doc.as_ref() {
             Some(d) => {
                 if x >= 0 && y >= 0 && x < i32::from(d.map.width) && y < i32::from(d.map.height) {
@@ -732,6 +755,27 @@ impl MireditApp {
             None => None,
         });
         self.refresh_cell_lines();
+    }
+
+    /// 悬停浮层的排版结果（`None` = 这一帧不画）。
+    ///
+    /// 三条前提**缺一不可**（官方 `CellHover.cs:31-42`）：开关勾着、指针在一个真格上、
+    /// 该格在地图内。不满足就**一个像素都不画**（不画空框、不画"无数据"）。
+    fn hover_panel(&self, l: &Layout) -> Option<cell_hover::Panel> {
+        if !self.cell_hover {
+            return None;
+        }
+        let (x, y) = self.hover?;
+        let d = self.doc.doc.as_ref()?;
+        let cell = d.map.cell(x, y)?;
+        // 锚点：真实指针优先；没有指针（`--hover` 取证）⇒ 该格中心
+        let anchor = self.hover_anchor.unwrap_or_else(|| {
+            self.view
+                .cell_rect(l.viewport, i32::from(x), i32::from(y))
+                .center()
+        });
+        let text = cellinfo::hover_text(x, y, cell, &self.lines);
+        cell_hover::layout(&text, anchor, l.content)
     }
 
     /// 悬停格变了才重算六行信息（它要问图库要帧尺寸，每帧重算会把鼠标拖卡）。
@@ -993,6 +1037,7 @@ impl MireditApp {
                 panels: &mut self.panels,
                 dark: &mut self.dark,
                 grid: &mut self.grid,
+                cell_hover: &mut self.cell_hover,
                 doors_open: &mut self.doors_open,
                 lighting: &mut self.lighting,
                 canvas,
@@ -1044,6 +1089,7 @@ impl MireditApp {
                 panels: &mut self.panels,
                 dark: &mut self.dark,
                 grid: &mut self.grid,
+                cell_hover: &mut self.cell_hover,
                 doors_open: &mut self.doors_open,
                 lighting: &mut self.lighting,
                 canvas,
@@ -1106,6 +1152,7 @@ impl MireditApp {
                 panels: &mut self.panels,
                 dark: &mut self.dark,
                 grid: &mut self.grid,
+                cell_hover: &mut self.cell_hover,
                 doors_open: &mut self.doors_open,
                 lighting: &mut self.lighting,
                 canvas,
@@ -1134,6 +1181,7 @@ impl MireditApp {
                 panels: &mut self.panels,
                 dark: &mut self.dark,
                 grid: &mut self.grid,
+                cell_hover: &mut self.cell_hover,
                 doors_open: &mut self.doors_open,
                 lighting: &mut self.lighting,
                 canvas,
@@ -1161,6 +1209,7 @@ impl MireditApp {
                 panels: &mut self.panels,
                 dark: &mut self.dark,
                 grid: &mut self.grid,
+                cell_hover: &mut self.cell_hover,
                 doors_open: &mut self.doors_open,
                 lighting: &mut self.lighting,
                 canvas,
@@ -1192,6 +1241,7 @@ impl MireditApp {
                 panels: &mut self.panels,
                 dark: &mut self.dark,
                 grid: &mut self.grid,
+                cell_hover: &mut self.cell_hover,
                 doors_open: &mut self.doors_open,
                 lighting: &mut self.lighting,
                 canvas,
@@ -2271,9 +2321,10 @@ impl eframe::App for MireditApp {
                     self.doc.doc.is_some(),
                     self.dark,
                     // 勾选型项的勾必须反映真状态（网格开着才画勾 / 门开着才画勾 /
-                    // 当前是哪档光照就只勾哪一档）
+                    // 当前是哪档光照就只勾哪一档 / 浮层开着才画「地砖信息悬浮」的勾）
                     self.grid,
                     self.doors_open,
+                    self.cell_hover,
                     self.lighting,
                     &self.panels,
                     &sub,
@@ -2311,6 +2362,13 @@ impl eframe::App for MireditApp {
                 }
                 titlebar::draw(&p, &l, &self.text);
                 statusbar::draw(&p, &l, &self.text);
+                // ⑦e **悬停地砖信息浮层**（视图 → 地砖信息悬浮）：
+                //     官方 `CellHoverOverlay` 是 `ZIndex="100"`、覆盖整窗的叠加层 ⇒
+                //     本仓在**面板/画布/菜单栏/状态栏之后**画，仍然压在两个模态（下面那段）之下。
+                //     开关关着 / 没悬停 / 格在图外 ⇒ `hover_panel` 返回 `None`，一个像素都不画。
+                if let Some(panel) = self.hover_panel(&l) {
+                    cell_hover::draw(&p, &panel);
+                }
                 // 关闭拦截模态压在一切之上（只有真有未保存修改时才会画）
                 self.draw_close_modal(&p, &l);
                 // ⑦d **浮层**：打开地图模态 / 另存为模态 / 快捷键浮层，压在最上层
@@ -3168,6 +3226,93 @@ mod tests {
             ..Default::default()
         });
         assert!(!both.grid, "--no-cell-grid 优先级最高");
+    }
+
+    /// **视图 → 地砖信息悬浮**（A-008）：菜单翻转 / 回执说人话 / 勾跟真状态 /
+    /// 不动地图 / **一次都不写设置文件** / 浮层真的排得出来。
+    ///
+    /// 钉的是"三处同一份真源"：`app.cell_hover`（本帧画不画浮层）、
+    /// 菜单勾（`menu::model::check_with_hover` 的 `hover` 参数）、回执文案。
+    /// 另外单独钉**不持久化**：官方 `CellHoverToggle` 只是运行期勾选态，
+    /// 所以本开关连设置文件都不许碰（判据 = 文件根本没被创建）。
+    #[test]
+    fn 地砖信息悬浮可开可关且不落盘() {
+        let dir = std::env::temp_dir().join("miredit_cell_hover_test");
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("settings.json");
+        let mut app = 有图应用();
+        app.settings_path = path.clone();
+        let canvas = 画布();
+        let l = Layout::compute(Rect::from_min_size(
+            egui::pos2(0.0, 0.0),
+            egui::vec2(m::WINDOW_W, m::WINDOW_H),
+        ));
+
+        // ① 缺省关（官方 `CellHoverToggle` 没写 `IsChecked`）
+        assert!(!app.cell_hover, "官方没写 IsChecked ⇒ 默认必须关");
+        assert!(app.hover_panel(&l).is_none(), "关着时一个像素都不许画");
+
+        // ② 点一次 → 开；回执说清是开；地图一个字节不动
+        let gen = app.doc.map_gen;
+        app.dispatch_menu(menu::model::Action::CellHover, canvas);
+        assert!(app.cell_hover, "菜单项没翻转开关");
+        let (text, warn) = app.op.clone().expect("必须有回执");
+        assert!(!warn, "开浮层不是拒绝");
+        assert!(text.contains('开'), "回执没说清开还是关：{text}");
+        assert_eq!(app.doc.map_gen, gen, "浮层是只读叠加，不许改地图");
+        assert!(
+            !path.exists(),
+            "地砖信息悬浮**不持久化** ⇒ 不许写设置文件（`{}` 不该存在）",
+            path.display()
+        );
+
+        // ③ 菜单勾跟着真状态
+        assert_eq!(
+            menu::model::check_with_hover(
+                menu::model::Action::CellHover,
+                app.dark,
+                app.grid,
+                app.doors_open,
+                app.lighting,
+                app.cell_hover,
+                &app.panels,
+                &app.sub_state()
+            ),
+            Some(true),
+            "浮层开着时菜单必须画勾"
+        );
+
+        // ④ 浮层真的排得出来，且内容来自**真实取数**（坐标行 + 六条明细）
+        app.hover = Some((1, 1));
+        app.refresh_cell_lines();
+        let panel = app.hover_panel(&l).expect("开着 + 有悬停格 ⇒ 必须排版");
+        assert_eq!(panel.rows[0].1, "单元格 1,1", "坐标行必须来自真实格号");
+        assert_eq!(panel.rows.len(), 8, "2 行头 + 6 条明细");
+        assert!(
+            panel.rect.left() >= l.content.left()
+                && panel.rect.top() >= l.content.top()
+                && panel.rect.right() <= l.content.right()
+                && panel.rect.bottom() <= l.content.bottom(),
+            "浮层必须整个落在窗口内：{:?} ⊄ {:?}",
+            panel.rect,
+            l.content
+        );
+
+        // ⑤ 没有悬停格 ⇒ 开着也不画（官方 `CellHover.cs:31-42` 的"不画空框"）
+        app.hover = None;
+        assert!(app.hover_panel(&l).is_none(), "没有悬停格时不许画空框");
+        app.hover = Some((1, 1));
+        assert!(app.hover_panel(&l).is_some(), "恢复悬停后必须重新画");
+
+        // ⑥ 再点一次 → 关；回执说清；地图仍不动
+        app.dispatch_menu(menu::model::Action::CellHover, canvas);
+        assert!(!app.cell_hover, "再点没关掉");
+        let (text, _) = app.op.clone().expect("回执");
+        assert!(text.contains('关'), "{text}");
+        assert_eq!(app.doc.map_gen, gen);
+        assert!(app.hover_panel(&l).is_none(), "关掉后必须立刻不画");
+        assert!(!path.exists(), "关也不许写设置文件");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **开启门**（视图 → 开启门，2026-11-05 接线）：`--open-doors` 置初值、菜单项翻转、

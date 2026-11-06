@@ -190,6 +190,23 @@ pub const MENU_SETTINGS: &str = "设置(S)…"; // EN: _Settings… ｜ 官方: 
 pub const MENU_DARK_MODE: &str = "深色模式(D)"; // EN: _Dark Mode ｜ 官方: DarkMode_15AAE2DB
 /// 视图 → 单元格网格（官方是 CheckBox，默认勾选）。
 pub const MENU_CELL_GRID: &str = "单元格网格(G)"; // EN: Cell _Grid ｜ 官方: CellGrid_1DB84E6F
+
+/// 视图 → **地砖信息悬浮**（官方是 CheckBox，**默认不勾**；`axaml` 里紧跟在深色模式之后、
+/// 单元格网格之前，且它前面有一条分隔线）。
+///
+/// 官方词条 `CellHoverInfo`（`Localization/Strings.json:153`）：
+/// `"Tile information on hover"` / `"地砖信息悬浮"`。
+///
+/// ⚠ **不持久化**：上游 `CellHoverToggle` 只是运行期勾选态（`MainWindow.CellHover.cs:31`
+/// 每帧读 `IsChecked`），既没进 `SettingsStore`，也没有命令行/配置文件入口 ⇒
+/// 本仓同样**只放在内存里**（见 `crate::menu::settings::Settings` 的两个字段：
+/// `dark` + `recent`，没有第三条）。
+pub const MENU_CELL_HOVER: &str = "地砖信息悬浮"; // EN: Tile information on hover ｜ 官方: CellHoverInfo
+
+/// 视图 → 地砖信息悬浮：开。
+pub const MENU_CELL_HOVER_ON: &str = "地砖信息悬浮：开（跟随鼠标显示格信息）"; // EN: Tile hover info: on
+/// 视图 → 地砖信息悬浮：关。
+pub const MENU_CELL_HOVER_OFF: &str = "地砖信息悬浮：关"; // EN: Tile hover info: off
 /// 视图 → 地图光照（官方是子菜单：黎明/白天/夜晚）。
 pub const MENU_MAP_LIGHTING: &str = "地图光照(L)"; // EN: Map _Lighting ｜ 官方: MapLighting_C3B7695B
 /// 视图 → 开启门（官方是 CheckBox）。
@@ -864,6 +881,49 @@ pub const SIZE_TMPL: &str = "{w}×{h}"; // EN: {w} × {h}
 
 /// 动态文案超宽被截断时补的省略号（与搜索框里的 `…` 同一个码位 U+2026）。
 pub const TRUNC_SUFFIX: &str = "…"; // EN: …
+
+// ───────────────────────── 悬停地砖信息浮层（视图 → 地砖信息悬浮）─────────────────────────
+//
+// 上游 `MainWindow.CellHover.cs:56-63` 只拼三样东西（逐条对照，别自己加字段）：
+//   ① 坐标行  `LocalText.Format("Cell {0:N0}, {1:N0}", x, y)`（`Strings.json:949` 的
+//     `"Cell {0:N0}, {1:N0}"`，带千分位）；
+//   ② 可行走行 `LocalText.T(blocked ? "Not walkable" : "Walkable")`
+//     （`Strings.json:154-155` 的 `CellWalkable` / `CellNotWalkable`）；
+//   ③ 明细行  `string.Join("\n", groups.Select(g => $"{T(g.Title)}: {g.Detail}"))`
+//     —— 即常驻检查器那六组的「标题: 值」，**同一个取数**（本仓 [`crate::cellinfo::cell_lines`]）。
+
+/// 悬停浮层的坐标行模板。占位符：`{x}` / `{y}`（`u16` 世界格坐标，从 0 起）。
+///
+/// ⚠ 官方是 `"Cell {0:N0}, {1:N0}"`（**带千分位**，如 `Cell 1,234`）；本仓库内坐标一律是
+/// `u16` 且地图上限 32767，千分位只影响 1000 以上的图 —— 但**照抄官方格式**会让状态栏
+/// （`单元格 265,261`，无千分位）与浮层两套写法并存。这里取**与状态栏一致**的写法，
+/// 差异已登记在 `cell_hover` 模块文档「与上游的差异」一节（口语化格式，不含数值）。
+pub const HOVER_COORD_TMPL: &str = "单元格 {x},{y}"; // EN: Cell {x},{y} ｜ 官方: "Cell {0:N0}, {1:N0}"
+
+/// 悬停浮层：该格**可行走**。
+pub const HOVER_WALKABLE: &str = "可行走"; // EN: Walkable ｜ 官方: CellWalkable
+
+/// 悬停浮层：该格**不可行走**（上游用红色 `Brushes.Red` 显示这一行）。
+pub const HOVER_NOT_WALKABLE: &str = "不可行走"; // EN: Not walkable ｜ 官方: CellNotWalkable
+
+/// 悬停浮层里**一条明细**的模板（官方 `CellHover.cs:62` 的 `$"{T(g.Title)}: {g.Detail}"`）。
+///
+/// 占位符：`{title}` = 常驻检查器的键名（[`INSPECTOR_KEYS`]，已本地化）、
+/// `{value}` = 该组的值（多行值先压成一行，见 [`HOVER_DETAIL_JOIN`]）。
+pub const HOVER_DETAIL_TMPL: &str = "{title}: {value}"; // EN: "{title}: {value}"
+
+/// 悬停浮层里把常驻检查器的**多行值**压成一行时的连接符（如
+/// `图号 2724\n库号 0\n帧 100×100` ⇒ `图号 2724 · 库号 0 · 帧 100×100`）。
+///
+/// 为什么压成一行：上游的明细区是**每格一组一条**（`CellHover.cs:62` 逐组一行），
+/// 而本仓的六组值里有四组自带 `\n`（模板就是这么为**竖向面板**排的）。浮层只有
+/// 350px 宽（`MainWindow.axaml:87` 的 `Width="350"`），照搬多行会让一个悬停框长到
+/// 20 行以上；压成一行后每组仍是一条「标题: 值」，信息一个不少。
+///
+/// ⚠ 拼之前**先剥掉每段的行尾分隔符**（模板里 `低位阻挡{low} ·\n高位阻挡{high}` 的
+/// 第一段以 ` ·` 收尾），否则会拼出 `低位阻挡否 · · 高位阻挡否` 这种双分隔符。
+/// 剥法见 [`crate::cellinfo::hover_detail_text`]（唯一实现处）。
+pub const HOVER_DETAIL_JOIN: &str = " · "; // EN: " · "
 
 // ───────────────────────── 右侧：资源面板 ─────────────────────────
 
@@ -1798,6 +1858,9 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_DARK_OFF", MENU_DARK_OFF),
     ("MENU_CELL_GRID_ON", MENU_CELL_GRID_ON),
     ("MENU_CELL_GRID_OFF", MENU_CELL_GRID_OFF),
+    ("MENU_CELL_HOVER", MENU_CELL_HOVER),
+    ("MENU_CELL_HOVER_ON", MENU_CELL_HOVER_ON),
+    ("MENU_CELL_HOVER_OFF", MENU_CELL_HOVER_OFF),
     ("MENU_OPEN_DOORS_ON", MENU_OPEN_DOORS_ON),
     ("MENU_OPEN_DOORS_OFF", MENU_OPEN_DOORS_OFF),
     ("MENU_LIGHT_DAWN_DUSK", MENU_LIGHT_DAWN_DUSK),
@@ -1939,6 +2002,11 @@ pub const ALL: &[(&str, &str)] = &[
     ("VAL_TILE_ANIMATION_TMPL", VAL_TILE_ANIMATION_TMPL),
     ("SIZE_TMPL", SIZE_TMPL),
     ("TRUNC_SUFFIX", TRUNC_SUFFIX),
+    ("HOVER_COORD_TMPL", HOVER_COORD_TMPL),
+    ("HOVER_WALKABLE", HOVER_WALKABLE),
+    ("HOVER_NOT_WALKABLE", HOVER_NOT_WALKABLE),
+    ("HOVER_DETAIL_TMPL", HOVER_DETAIL_TMPL),
+    ("HOVER_DETAIL_JOIN", HOVER_DETAIL_JOIN),
     ("TAB_LIBRARY", TAB_LIBRARY),
     ("TAB_FAVOURITES", TAB_FAVOURITES),
     ("TAB_RECENT", TAB_RECENT),
@@ -2226,6 +2294,11 @@ mod tests {
             ("VAL_TILE_ANIMATION_TMPL", VAL_TILE_ANIMATION_TMPL),
             ("SIZE_TMPL", SIZE_TMPL),
             ("TRUNC_SUFFIX", TRUNC_SUFFIX),
+            ("HOVER_COORD_TMPL", HOVER_COORD_TMPL),
+            ("HOVER_WALKABLE", HOVER_WALKABLE),
+            ("HOVER_NOT_WALKABLE", HOVER_NOT_WALKABLE),
+            ("HOVER_DETAIL_TMPL", HOVER_DETAIL_TMPL),
+            ("HOVER_DETAIL_JOIN", HOVER_DETAIL_JOIN),
             ("TAB_LIBRARY", TAB_LIBRARY),
             ("TAB_FAVOURITES", TAB_FAVOURITES),
             ("TAB_RECENT", TAB_RECENT),
@@ -2562,10 +2635,26 @@ mod tests {
         assert_eq!(t, "7-7");
     }
 
+    /// **悬停浮层的三条官方词条**（上游 `Localization/Strings.json:153-155`）。
+    ///
+    /// 钉住两件事：① 上游确实有这三个键（`CellHoverInfo` / `CellWalkable` /
+    /// `CellNotWalkable`），本仓用的是它们的**官方中文**；② 坐标行模板能填出与状态栏
+    /// 一致的形态（占位符只有 `{x}`/`{y}`，不许出现别的东西）。
+    #[test]
+    fn 悬停浮层文案用官方词条() {
+        assert_eq!(MENU_CELL_HOVER, "地砖信息悬浮", "官方 CellHoverInfo");
+        assert_eq!(HOVER_WALKABLE, "可行走", "官方 CellWalkable");
+        assert_eq!(HOVER_NOT_WALKABLE, "不可行走", "官方 CellNotWalkable");
+        assert_ne!(HOVER_WALKABLE, HOVER_NOT_WALKABLE, "两个状态词不许同字");
+        assert_eq!(
+            fill(HOVER_COORD_TMPL, &[("x", "265"), ("y", "261")]),
+            "单元格 265,261"
+        );
+    }
+
     /// 所有模板里的 `{...}` 占位符名必须只由小写 ASCII 组成 —— 防止有人手抖写进格式说明符。
     #[test]
-    fn 模板占位符形态合法() {
-        for (key, s) in ALL {
+    fn 模板占位符形态合法() {        for (key, s) in ALL {
             let mut rest = *s;
             while let Some(i) = rest.find('{') {
                 let after = &rest[i + 1..];

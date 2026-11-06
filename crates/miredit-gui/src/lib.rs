@@ -78,6 +78,7 @@ pub mod banner;
 pub mod canvas;
 pub mod canvas_overlay;
 pub mod canvas_view;
+pub mod cell_hover;
 pub mod cellinfo;
 pub mod cli;
 pub mod dock_left;

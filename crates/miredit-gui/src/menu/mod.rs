@@ -678,7 +678,7 @@ pub fn popup_contains(p: &egui::Painter, l: &Layout, state: &MenuState, pos: egu
 /// 生产路径（`app.rs`）用 [`draw_with`] 传真的 `lighting`，本函数只给"不关心档位"的调用方与测试。
 /// **`app.rs` 用的是 [`draw_with`]**（2026-11-05 起「最近打开」的行来自设置文件，
 /// 用这个版本会把子菜单画成空态）；本函数只留给"不关心最近列表"的调用方与测试。
-#[allow(clippy::too_many_arguments)] // 9 个都是"这一帧的输入"，与 `popup::draw` 同口径
+#[allow(clippy::too_many_arguments)] // 10 个都是"这一帧的输入"，与 `popup::draw` 同口径
 pub fn draw(
     p: &egui::Painter,
     l: &Layout,
@@ -687,6 +687,7 @@ pub fn draw(
     dark: bool,
     grid: bool,
     doors: bool,
+    hover: bool,
     panels: &PanelVis,
 ) {
     draw_with(
@@ -697,6 +698,7 @@ pub fn draw(
         dark,
         grid,
         doors,
+        hover,
         model::MapLight::Day,
         panels,
         &SubState::default(),
@@ -704,7 +706,7 @@ pub fn draw(
 }
 
 /// [`draw`] 的**带子菜单状态 + 真光照档位**版本（生产路径：`app.rs` 每帧调它）。
-#[allow(clippy::too_many_arguments)] // 10 个都是"这一帧的输入"，与 `popup::draw` 同口径
+#[allow(clippy::too_many_arguments)] // 11 个都是"这一帧的输入"，与 `popup::draw` 同口径
 pub fn draw_with(
     p: &egui::Painter,
     l: &Layout,
@@ -713,6 +715,7 @@ pub fn draw_with(
     dark: bool,
     grid: bool,
     doors: bool,
+    hover: bool,
     lighting: model::MapLight,
     panels: &PanelVis,
     sub: &SubState,
@@ -761,6 +764,7 @@ pub fn draw_with(
         dark,
         grid,
         doors,
+        hover,
         lighting,
         panels,
         sub,
@@ -988,11 +992,11 @@ mod tests {
     use super::*;
     use crate::menu::model::{find_by_id, item_count};
 
-    /// 41 项、5 菜单（`dump` 的计数与静态表必须一致）。
+    /// 42 项、5 菜单（`dump` 的计数与静态表必须一致）。
     #[test]
     fn 表与常量一致() {
         assert_eq!(MENUS.len(), 5);
-        assert_eq!(item_count(), 41);
+        assert_eq!(item_count(), 42);
         assert!(find_by_id("view.dark_mode").is_some());
     }
 
@@ -1471,12 +1475,12 @@ mod tests {
         let l = Layout::compute(screen);
         let mut s = MenuState::default();
 
-        // 视图菜单（下标 2）→ 地图光照（菜单内下标 2）
+        // 视图菜单（下标 2）→ 地图光照（菜单内下标 3；下文 地图光照 = 第 4 项）
         s.open(2);
-        s.hover = Some(2);
+        s.hover = Some(3);
         let g = popup::geom_with(&p, &l, 2, s.active(), &[]);
         let sg = g.sub.as_ref().expect("地图光照必须展开子面板");
-        assert_eq!(sg.parent, 2);
+        assert_eq!(sg.parent, 3, "父项下标 = 视图第 4 项");
         assert_eq!(sg.rows.len(), 3, "黎明 / 黄昏 · 白天 · 夜晚");
         assert!(
             sg.rect.left() >= g.rect.right() - 0.01,
@@ -1499,8 +1503,8 @@ mod tests {
             );
         }
 
-        // 视图菜单 → 语言（菜单内下标 8）：2 行
-        s.hover = Some(8);
+        // 视图菜单 → 语言（菜单内下标 9）：2 行
+        s.hover = Some(9);
         let g = popup::geom_with(&p, &l, 2, s.active(), &[]);
         let sg = g.sub.as_ref().expect("语言必须展开子面板");
         assert_eq!(sg.rows.len(), 2, "简体中文 · English");
@@ -1518,7 +1522,7 @@ mod tests {
 
         // 叶子项（放大）没有子面板
         s.open(2);
-        s.hover = Some(4);
+        s.hover = Some(5);
         let g = popup::geom_with(&p, &l, 2, s.active(), &[]);
         assert!(g.sub.is_none(), "叶子项不该有子面板");
     }
@@ -1532,14 +1536,14 @@ mod tests {
         // 没展开菜单 ⇒ 设不上（先 open 才谈得上"菜单内下标"）
         assert!(!s.focus(2));
         s.open(2);
-        assert!(s.focus(2), "视图菜单第 3 项（地图光照）应能设上");
-        assert_eq!(s.active(), Some(2));
+        assert!(s.focus(3), "视图菜单第 4 项（地图光照）应能设上");
+        assert_eq!(s.active(), Some(3));
         // 越界 ⇒ 设不上，且不改现有高亮（不静默改状态）
         assert!(!s.focus(99));
-        assert_eq!(s.active(), Some(2));
+        assert_eq!(s.active(), Some(3));
         // 换一项
-        assert!(s.focus(8), "视图菜单第 9 项（语言）应能设上");
-        assert_eq!(s.active(), Some(8));
+        assert!(s.focus(9), "视图菜单第 10 项（语言）应能设上");
+        assert_eq!(s.active(), Some(9));
         // 收起后 ⇒ 设不上
         s.close();
         assert!(!s.focus(0));
@@ -1564,7 +1568,7 @@ mod tests {
         let l = Layout::compute(screen);
         let mut s = MenuState::default();
         s.open(2); // 视图
-        s.hover = Some(2); // 地图光照
+        s.hover = Some(3); // 地图光照
         let probe = egui::Painter::new(ctx.clone(), egui::LayerId::debug(), screen);
         let g = popup::geom_with(&probe, &l, 2, s.active(), &[]);
         let want = g.sub.as_ref().expect("地图光照子面板").rect;
@@ -1581,6 +1585,8 @@ mod tests {
                 true,
                 false,
                 true,
+                false,
+                // hover（地砖信息悬浮）关着：本用例只关心子面板高亮
                 false,
                 model::MapLight::Day,
                 &PanelVis::default(),

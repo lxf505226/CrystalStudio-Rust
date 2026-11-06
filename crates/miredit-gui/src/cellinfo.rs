@@ -218,6 +218,84 @@ fn size_of(
     Some((f.width, f.height))
 }
 
+// ---------------------------------------------------------------------------
+// 悬停地砖信息浮层的取数（视图 → 地砖信息悬浮）
+// ---------------------------------------------------------------------------
+
+/// 悬停浮层的**三块内容**（`MainWindow.CellHover.cs:56-63` 的三行）。
+///
+/// 只给文字，不给几何：排版（宽 350 / 越界翻边 / 四边各夹 8）在
+/// [`crate::cell_hover`] 里算 —— 与本模块「取数 / 绘制分开」的既有分工一致。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HoverText {
+    /// ① 坐标行（[`tx::HOVER_COORD_TMPL`] 已填好，如 `单元格 265,261`）。
+    pub coords: String,
+    /// ② 该格是否可行走（[`Cell::is_walkable`] 的真值）。
+    pub walkable: bool,
+    /// ② 的状态词（[`tx::HOVER_WALKABLE`] / [`tx::HOVER_NOT_WALKABLE`]）。
+    pub walkable_text: &'static str,
+    /// ③ 六组明细，每组一条「标题: 值」（顺序与 [`tx::INSPECTOR_KEYS`] 一致）。
+    pub details: Vec<String>,
+}
+
+/// 取一格的悬停浮层内容。
+///
+/// # 「可行走」的真值 = [`Cell::is_walkable`]，与上游的红色判定**等价**
+///
+/// 上游 `MainWindow.CellHover.cs:59` 判 `(cell.BackImage & 0x60000000) != 0`。
+/// 那两个位不是磁盘字节，而是 C# 读 12/14 B 档时**归一出来的**：
+///
+/// | 磁盘位 | C# 归一 | 出处 |
+/// |---|---|---|
+/// | 背景层 `bk_img & 0x8000` | `BackImage \|= 0x20000000`（并清掉 `0x8000`） | `LegacyMapReader.cs:149-150` |
+/// | 前景层 `fr_img & 0x8000` | `BackImage \|= 0x40000000` | `LegacyMapReader.cs:160-161` |
+///
+/// ⇒ `(BackImage & 0x60000000) != 0` ⇔ 「背景层带 `0x8000` **或** 前景层带 `0x8000`」
+/// ⇔ `!Cell::is_walkable()`（`mir2-map/src/cell.rs`：两层都不带 `0x8000` 才叫可走）。
+/// 所以本函数直接用 `is_walkable()`，**不另造一套阻挡判据**。
+pub fn hover_text(x: u16, y: u16, cell: &Cell, lines: &CellLines) -> HoverText {
+    let walkable = cell.is_walkable();
+    let details = tx::INSPECTOR_KEYS
+        .iter()
+        .zip(lines.values.iter())
+        .map(|(key, value)| {
+            tx::fill(
+                tx::HOVER_DETAIL_TMPL,
+                &[("title", key), ("value", &hover_detail_text(value))],
+            )
+        })
+        .collect();
+    HoverText {
+        coords: tx::fill(
+            tx::HOVER_COORD_TMPL,
+            &[("x", &x.to_string()), ("y", &y.to_string())],
+        ),
+        walkable,
+        walkable_text: if walkable {
+            tx::HOVER_WALKABLE
+        } else {
+            tx::HOVER_NOT_WALKABLE
+        },
+        details,
+    }
+}
+
+/// 把常驻检查器的**多行值**压成一行（供悬停浮层用；理由见 [`tx::HOVER_DETAIL_JOIN`]）。
+///
+/// 规则：按 `\n` 切段 → 每段去尾部空白 → 去段尾的 ` ·`（模板里 `低位阻挡{low} ·\n…`
+/// 就是这么收尾的）→ 去尾部空白 → 丢掉空段 → 用 `" · "` 连起来。
+///
+/// 为什么"去段尾 ` ·`"这一步不能省：省了会拼出 `低位阻挡否 · · 高位阻挡否`（双分隔符），
+/// 单测 `悬停明细不出现双分隔符` 钉住这一条。
+pub fn hover_detail_text(value: &str) -> String {
+    value
+        .split('\n')
+        .map(|seg| seg.trim().trim_end_matches('·').trim())
+        .filter(|seg| !seg.is_empty())
+        .collect::<Vec<_>>()
+        .join(tx::HOVER_DETAIL_JOIN)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -380,5 +458,89 @@ mod tests {
         };
         let l = cell_lines(0, 0, Some(&c), CellFormat::New14, Some(&假源));
         assert_eq!(l.values[1], "图号 1\n库号 0\n帧 —");
+    }
+
+    // -----------------------------------------------------------------------
+    // 悬停浮层取数（视图 → 地砖信息悬浮）
+    // -----------------------------------------------------------------------
+
+    /// **三行内容逐条对照**：坐标行 + 可行走状态词 + 六组「标题: 值」。
+    #[test]
+    fn 悬停内容三块齐全() {
+        let c = Cell {
+            bk_img: 2,
+            mid_img: 3,
+            fr_img: 4,
+            area: 5,
+            light: 1,
+            ..Default::default()
+        };
+        let l = cell_lines(265, 261, Some(&c), CellFormat::New14, Some(&假源));
+        let h = hover_text(265, 261, &c, &l);
+        assert_eq!(h.coords, "单元格 265,261", "坐标行照 `HOVER_COORD_TMPL`");
+        assert!(h.walkable, "三层都没有 0x8000 ⇒ 可走");
+        assert_eq!(h.walkable_text, tx::HOVER_WALKABLE);
+        assert_eq!(h.details.len(), 6, "六组各一条（与 INSPECTOR_KEYS 同数）");
+        for (i, key) in tx::INSPECTOR_KEYS.iter().enumerate() {
+            let prefix = tx::fill(tx::HOVER_DETAIL_TMPL, &[("title", key), ("value", "")]);
+            assert!(
+                h.details[i].starts_with(&prefix),
+                "第 {i} 行必须以「{prefix}」开头，实得 {:?}",
+                h.details[i]
+            );
+            assert!(
+                !h.details[i].contains('\n'),
+                "浮层每组必须压成一行（否则 350px 宽的框会长到十几行）：{:?}",
+                h.details[i]
+            );
+        }
+        // 具体值也要对（不是只看前缀）：地表那组 = 假源的 96×64
+        assert_eq!(h.details[1], "地表: 图号 2 · 库号 0 · 帧 96×64");
+    }
+
+    /// **「可行走」取 `Cell::is_walkable()` 的真值**，两层的高位都要能触发「不可行走」。
+    ///
+    /// 等价性依据见 [`hover_text`] 的文档（C# 把 `bk 0x8000` 归一成 `0x20000000`、
+    /// 把 `fr 0x8000` 或进 `0x40000000`，`CellHover.cs:59` 判的正是这两位）。
+    #[test]
+    fn 悬停可行走取两层高位真值() {
+        let l = CellLines::unknown();
+        // ① 两层都干净 ⇒ 可走
+        let c = Cell::default();
+        let h = hover_text(0, 0, &c, &l);
+        assert!(h.walkable && h.walkable_text == tx::HOVER_WALKABLE);
+        // ② 背景层带 0x8000 ⇒ 不可走
+        let c = Cell {
+            bk_img: 0x8001,
+            ..Default::default()
+        };
+        let h = hover_text(0, 0, &c, &l);
+        assert!(!h.walkable && h.walkable_text == tx::HOVER_NOT_WALKABLE);
+        // ③ 前景层带 0x8000 ⇒ 同样不可走（只判背景层就漏这一半）
+        let c = Cell {
+            fr_img: 0x8002,
+            ..Default::default()
+        };
+        let h = hover_text(0, 0, &c, &l);
+        assert!(!h.walkable, "前景层 0x8000 也必须判成不可行走");
+        // ④ 图号本身（去掉高位）不影响判定
+        let c = Cell {
+            bk_img: 0x0002,
+            fr_img: 0x0003,
+            ..Default::default()
+        };
+        assert!(hover_text(0, 0, &c, &l).walkable);
+    }
+
+    /// 多行值压成一行时**不许出现双分隔符**（`低位阻挡是 · · 高位阻挡否` 那种）。
+    #[test]
+    fn 悬停明细不出现双分隔符() {
+        // 真模板：`低位阻挡{low} ·\n高位阻挡{high}`（第一段以 ` ·` 收尾）
+        assert_eq!(hover_detail_text("低位阻挡是 ·\n高位阻挡否"), "低位阻挡是 · 高位阻挡否");
+        assert_eq!(hover_detail_text("图号 1\n库号 2\n帧 3"), "图号 1 · 库号 2 · 帧 3");
+        // 空段被丢掉、首尾空白被去掉：不产生 `a ·  · b`
+        assert_eq!(hover_detail_text(" a \n\n b "), "a · b");
+        assert_eq!(hover_detail_text(""), "");
+        assert!(!hover_detail_text("低位阻挡是 ·\n高位阻挡否").contains("· ·"));
     }
 }

@@ -107,6 +107,14 @@ pub struct Palette {
     pub accent_button_text: Color32,
     /// 画布上**鼠标所在格**的描边色。
     pub cell_hover_gold: Color32,
+    /// **悬停地砖信息浮层**里「不可行走」那行的字色（红）。
+    ///
+    /// ⚠ 官方 `MainWindow.CellHover.cs:61`
+    /// `CellHoverWalkability.Foreground = blocked ? Brushes.Red : ThemeService.Brush("ThemeE5E9F0")`：
+    /// 「可行走」用主题色 `ThemeE5E9F0`（= 本板的 `text`），**「不可行走」直接写
+    /// `Brushes.Red`、不经 `ThemeService`** ⇒ 主题无关常量，两套板同值（已入 `same_ok`），
+    /// 官方 RGB 由 [`主题无关字段取官方常量`] 逐通道钉住。
+    pub hover_blocked_text: Color32,
     /// 画布上**单元格网格线**的颜色（视图 → 单元格网格，1px 世界格边界线）。
     ///
     /// ⚠ 它压在**地图位图**上，不是压在面板底色上。官方为此**专门**定义了 `CanvasGrid`
@@ -241,6 +249,9 @@ pub const LIGHT: Palette = Palette {
     accent_button_text: Color32::from_rgb(0x00, 0x00, 0x00),
     // 悬停格描边。截图 (607..896,813..911) 金色像素众数 `#D2AA59`（占该掩码 82%）。
     cell_hover_gold: Color32::from_rgb(0xD2, 0xAA, 0x59),
+    // 悬停浮层「不可行走」字色。官方: MainWindow.CellHover.cs:61 `Brushes.Red`（写死常量、
+    //       不经 ThemeService）⇒ 两套板同值；α=255 ⇒ 预乘与原值相同。
+    hover_blocked_text: rgba_pm(255, 0, 0, 255),
     // 网格线。官方: ThemeService.Avalonia.cs:55 `resources["CanvasGrid"] = … : Color.FromArgb(60, 73, 89, 108)`
     //       ⇒ 浅色是 **24% 半透明深灰蓝**（官方**专用**的网格键，不是任何控件的边框色；
     //       旧值 `#D3D8DD` 其实是复选框边框 `Theme586477`（App.axaml:36）的官方浅色变换 —— 抄错了角色）。
@@ -398,6 +409,8 @@ pub const DARK: Palette = Palette {
     //       = (132,152,255)×0.7 + 255×0.3 = (168.9,182.9,255) ⇒ `#A8B6FF`。
     //       （浅色那支同公式是 `Blend(accent, Black, 0.15)`，与截图取样 `#D2AA59` 属同一"强调色描边"角色。）
     cell_hover_gold: Color32::from_rgb(0xA8, 0xB6, 0xFF),
+    // 同上：官方写死的 `Brushes.Red`，深色板同值。
+    hover_blocked_text: rgba_pm(255, 0, 0, 255),
     // 官方: ThemeService.Avalonia.cs:55 `resources["CanvasGrid"] = … : Color.FromArgb(38, 160, 177, 199)`
     //       ⇒ 深色是 **15% 半透明浅蓝灰**（官方**专用**的网格键，不是任何控件的边框色；
     //       旧值 `#353E4C` 是 `Theme353E4C`（App.axaml:22）—— 那是 TextBox 的 BorderBrush，抄错了角色）。
@@ -522,6 +535,7 @@ mod tests {
             "collision_low_mark",
             "collision_high_mark",
             "selection_fill",
+            "hover_blocked_text",
         ];
         let pairs = [
             ("title_bar", LIGHT.title_bar, DARK.title_bar),
@@ -566,7 +580,7 @@ mod tests {
             ("menu_popup_border", LIGHT.menu_popup_border, DARK.menu_popup_border),
             ("menu_popup_hover", LIGHT.menu_popup_hover, DARK.menu_popup_hover),
         ];
-        assert_eq!(pairs.len() + same_ok.len(), 42, "字段清单要覆盖全部 42 项");
+        assert_eq!(pairs.len() + same_ok.len(), 43, "字段清单要覆盖全部 43 项");
         for (name, l, d) in pairs {
             assert_ne!(l, d, "字段 {name} 两套色板相同（深色模式会漏变）");
         }
@@ -613,6 +627,13 @@ mod tests {
                 (30, 110, 150, 255),
                 LIGHT.selection_fill,
                 DARK.selection_fill,
+            ),
+            (
+                // 官方 `MainWindow.CellHover.cs:61` 的 `Brushes.Red` = `#FFFF0000`（不透明）
+                "hover_blocked_text",
+                (255, 255, 0, 0),
+                LIGHT.hover_blocked_text,
+                DARK.hover_blocked_text,
             ),
         ];
         for (name, (a, r, g, b), l, d) in cases {

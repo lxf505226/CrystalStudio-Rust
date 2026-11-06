@@ -355,6 +355,7 @@ pub fn hit_sub(g: &Geom, pos: egui::Pos2) -> Option<usize> {
 /// `active` = 当前高亮项（鼠标 hover 或键盘选中，菜单内下标）；`None` = 不高亮。
 /// `grid` = 画布当前的单元格网格开关（勾选型项要画**真**勾，见 [`model::check_with`]）。
 /// `doors` = 画布当前的**开启门**开关（同上，也是勾选型项的真状态）。
+/// `hover` = 画布当前的**地砖信息悬浮**开关（同上；见 [`model::check_with_hover`]）。
 /// `sub` = 子菜单里"本仓没有真状态"的档位（语言 / 最近列表，官方缺省，见 [`SubState`]）。
 ///
 /// ⚠ 这个包装按**缺省白天**画光照三档的勾；生产路径走 [`draw_with_focus`]
@@ -362,7 +363,7 @@ pub fn hit_sub(g: &Geom, pos: egui::Pos2) -> Option<usize> {
 ///
 /// ⚠ 这个版本**不画子行的键盘焦点**（没有 `focus` 参数）。要画请用 [`draw_with_focus`]：
 /// 生产路径（`menu::draw_with`）走的就是它，`focus` 取 `MenuState::sub_focus()`。
-#[allow(clippy::too_many_arguments)] // 10 个参数都是"这一帧的输入"，打包成结构体反而更绕
+#[allow(clippy::too_many_arguments)] // 11 个参数都是"这一帧的输入"，打包成结构体反而更绕
 pub fn draw(
     p: &Painter,
     l: &Layout,
@@ -372,6 +373,7 @@ pub fn draw(
     dark: bool,
     grid: bool,
     doors: bool,
+    hover: bool,
     panels: &PanelVis,
     sub: &SubState,
 ) {
@@ -385,6 +387,7 @@ pub fn draw(
         dark,
         grid,
         doors,
+        hover,
         model::MapLight::Day,
         panels,
         sub,
@@ -410,6 +413,7 @@ pub fn draw_with_focus(
     dark: bool,
     grid: bool,
     doors: bool,
+    hover: bool,
     lighting: model::MapLight,
     panels: &PanelVis,
     sub: &SubState,
@@ -454,7 +458,7 @@ pub fn draw_with_focus(
         let color = if enabled { pal.text } else { pal.text_muted };
 
         // 勾选列（只有勾选型菜单项才画勾；勾的是**真状态** —— 网格关着就不画）
-        let check = model::check_with(item.action, dark, grid, doors, lighting, panels, sub);
+        let check = model::check_with_hover(item.action, dark, grid, doors, lighting, hover, panels, sub);
         let check_x = row.rect.left() + m::MENU_POPUP_PAD_X + m::MENU_POPUP_CHECK_W * 0.5;
         if check == Some(true) {
             draw_check(p, egui::pos2(check_x, row.rect.center().y), color);
@@ -524,6 +528,7 @@ pub fn draw_with_focus(
                 grid,
                 doors,
                 lighting,
+                hover,
                 panels,
                 sub,
             },
@@ -555,6 +560,8 @@ struct SubCtx<'a> {
     doors: bool,
     /// 地图光照档位（宿主真源，三档互斥的勾由它决定）。
     lighting: model::MapLight,
+    /// 「地砖信息悬浮」开关（宿主真源，见 [`model::check_with_hover`]）。
+    hover: bool,
     /// 8 个面板的可见性。
     panels: &'a PanelVis,
     /// 子菜单那几项"本仓还没有真状态"的档位（语言 / 最近列表）。
@@ -571,6 +578,7 @@ fn draw_sub(p: &Painter, sg: &SubGeom, ctx: SubCtx<'_>, pal: &t::Palette) {
         grid,
         doors,
         lighting,
+        hover,
         panels,
         sub,
     } = ctx;
@@ -589,7 +597,7 @@ fn draw_sub(p: &Painter, sg: &SubGeom, ctx: SubCtx<'_>, pal: &t::Palette) {
         // 动态行不是勾选型 ⇒ `None` ⇒ 不画勾。
         let check = row
             .action
-            .and_then(|a| model::check_with(a, dark, grid, doors, lighting, panels, sub));
+            .and_then(|a| model::check_with_hover(a, dark, grid, doors, lighting, hover, panels, sub));
         let color = if enabled { pal.text } else { pal.text_muted };
 
         // **子行的键盘焦点**：`focus == Some((父项, 子行))` ⇒ 这一行铺高亮底色。
@@ -772,27 +780,27 @@ mod tests {
         let l = Layout::compute(screen);
         let sub_state = SubState::default();
 
-        // ① 造状态：视图(菜单 2) → 第 3 项「地图光照」(项 2) → `→` 进子菜单 → `↓` 到第 1 行
+        // ① 造状态：视图(菜单 2) → 第 4 项「地图光照」(项 3) → `→` 进子菜单 → `↓` 到第 1 行
         let mut s = MenuState::default();
         s.open(2);
-        assert!(s.focus(2), "视图菜单第 3 项（地图光照）应能设成高亮项");
+        assert!(s.focus(3), "视图菜单第 4 项（地图光照）应能设成高亮项");
         assert_eq!(
             handle_key_with(&mut s, MenuKey::Right, &sub_state),
             KeyResult::Changed
         );
-        assert_eq!(s.sub_focus(), Some((2, 0)), "→ 应把焦点送进子菜单第 0 行");
+        assert_eq!(s.sub_focus(), Some((3, 0)), "→ 应把焦点送进子菜单第 0 行");
         assert_eq!(
             handle_key_with(&mut s, MenuKey::Down, &sub_state),
             KeyResult::Changed
         );
-        assert_eq!(s.sub_focus(), Some((2, 1)), "↓ 应落到第 1 行");
+        assert_eq!(s.sub_focus(), Some((3, 1)), "↓ 应落到第 1 行");
 
         // ② 几何：子面板的行矩形就是绘制/命中矩形（同一份 `sub_geom`）
         let probe = Painter::new(ctx.clone(), egui::LayerId::debug(), screen);
         let g = geom_with(&probe, &l, 2, s.active(), &[]);
         let sg = g.sub.as_ref().expect("地图光照的子面板");
         assert_eq!(sg.rows.len(), 3, "地图光照有 3 个子项（黎明/白天/夜晚）");
-        assert_eq!(sg.parent, 2, "子面板的父项就是地图光照那一项");
+        assert_eq!(sg.parent, 3, "子面板的父项就是地图光照那一项（视图第 4 项）");
 
         // ③ 真跑一次绘制，收图元
         let out = ctx.run(egui::RawInput::default(), |ctx| {
@@ -809,6 +817,8 @@ mod tests {
                 true,
                 false,
                 true,
+                false,
+                // hover（地砖信息悬浮）关着：本用例只关心子行高亮
                 false,
                 model::MapLight::Day,
                 &PanelVis::default(),
@@ -844,7 +854,7 @@ mod tests {
         let parent_row = g
             .rows
             .iter()
-            .find(|r| !r.sep && r.index == 2)
+            .find(|r| !r.sep && r.index == 3)
             .expect("父项行");
         assert!(
             该矩形有高亮(parent_row.rect),
@@ -866,7 +876,7 @@ mod tests {
 
         let mut s = MenuState::default();
         s.open(2);
-        assert!(s.focus(2));
+        assert!(s.focus(3));
         assert_eq!(s.sub_focus(), None, "只设了高亮项，焦点还在父层");
 
         let probe = Painter::new(ctx.clone(), egui::LayerId::debug(), screen);
@@ -887,6 +897,7 @@ mod tests {
                 true,
                 false,
                 true,
+                false,
                 false,
                 &PanelVis::default(),
                 &sub_state,

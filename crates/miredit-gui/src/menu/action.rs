@@ -47,6 +47,13 @@ pub struct Ctx<'a> {
     pub panels: &'a mut PanelVis,
     /// 深色模式开关（真源在 app，菜单只翻转它）。
     pub dark: &'a mut bool,
+    /// **地砖信息悬浮开关**（真源在 app，菜单只翻转它；每帧的浮层读同一个字段）。
+    ///
+    /// ⚠ **不持久化**：上游 `CellHoverToggle` 只是运行期勾选态（`CellHover.cs:31` 每帧读
+    /// `IsChecked`），`SettingsStore` 里没有它 ⇒ 本仓也**不写设置文件**
+    /// （与 `grid` / `doors_open` / `lighting` 同口径，但更彻底：那两个至少还有
+    /// `--cell-grid` / `--open-doors` 这类启动参数，浮层只有菜单一条入口）。
+    pub cell_hover: &'a mut bool,
     /// **单元格网格开关**（真源在 app，菜单只翻转它；画布取的是同一个字段）。
     ///
     /// 为什么不放在 `view` 里：`CanvasView` 管的是"地图怎么贴"（平移/缩放/图层/纹理缓存），
@@ -385,6 +392,21 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         // 三条入口（菜单点击 / `G` / `--menu-click view.cell_grid`）都落到这里，
         // 翻转的是**画布真正读的那个字段**（`crate::app::MireditApp::grid`），
         // 所以"命令行能开"= "菜单能开"= "G 能开"，不存在第三条假路径。
+        // ───────────── 视图：地砖信息悬浮 ─────────────
+        //
+        // 只有**一条**入口（菜单项；官方也没有快捷键/命令行），翻转的是
+        // `crate::app::MireditApp::cell_hover` —— 每帧的浮层读同一个字段，
+        // 所以"点了没反应"是不可能的；**不落盘**（见 `Ctx::cell_hover` 的文档）。
+        Action::CellHover => {
+            let on = !*cx.cell_hover;
+            *cx.cell_hover = on;
+            Outcome::ok(if on {
+                tx::MENU_CELL_HOVER_ON
+            } else {
+                tx::MENU_CELL_HOVER_OFF
+            }
+            .to_owned())
+        }
         Action::CellGrid => {
             let on = !*cx.grid;
             *cx.grid = on;
@@ -822,6 +844,8 @@ mod tests {
         doors_open: bool,
         /// 地图光照档位（`Ctx::lighting` 的宿主侧真源；缺省白天）。
         lighting: MapLighting,
+        /// 地砖信息悬浮开关（`Ctx::cell_hover` 的宿主侧真源；缺省关、不持久化）。
+        cell_hover: bool,
         overlay: Overlay,
         settings: PathBuf,
         recent: Vec<String>,
@@ -846,6 +870,7 @@ mod tests {
                 panels: PanelVis::default(),
                 dark: false,
                 grid: false,
+                cell_hover: false,
                 doors_open: false,
                 lighting: MapLighting::Day,
                 overlay: Overlay::None,
@@ -873,6 +898,7 @@ mod tests {
                 panels: &mut self.panels,
                 dark: &mut self.dark,
                 grid: &mut self.grid,
+                cell_hover: &mut self.cell_hover,
                 doors_open: &mut self.doors_open,
                 lighting: &mut self.lighting,
                 canvas,
@@ -1011,6 +1037,7 @@ mod tests {
             panels: PanelVis::default(),
             dark: false,
             grid: false,
+            cell_hover: false,
             doors_open: false,
             lighting: MapLighting::Day,
             overlay: Overlay::None,
@@ -1081,6 +1108,7 @@ mod tests {
             panels: PanelVis::default(),
             dark: false,
             grid: false,
+            cell_hover: false,
             doors_open: false,
             lighting: MapLighting::Day,
             overlay: Overlay::None,
@@ -1214,6 +1242,7 @@ mod tests {
             panels: PanelVis::default(),
             dark: false,
             grid: false,
+            cell_hover: false,
             doors_open: false,
             lighting: MapLighting::Day,
             overlay: Overlay::None,

@@ -953,6 +953,49 @@ pub const BANNER_PAD_Y: f32 = 8.0;
 /// 只有"画布被压成一条"时才会触发（那时才允许在最后一行加省略号）。
 pub const BANNER_MAX_VIEWPORT_RATIO: f32 = 0.45;
 
+// ───────────────────────── 悬停地砖信息浮层（视图 → 地砖信息悬浮） ─────────────────────────
+//
+// 这一组**几乎全是官方真值**（不是推导）：上游 `MainWindow.axaml:86-91` 把浮层写成
+// `<Border x:Name="CellHoverInfo" Width="350" Padding="12" CornerRadius="6" …>`，
+// 位置算式在 `MainWindow.CellHover.cs:47-53`（+16 右 / +8 下、越界翻左、四边各夹 8），
+// 最大高在 `:45`（`Bounds.Height - 16`）。逐条注在下面。
+
+/// 浮层宽度 **350**（官方 `MainWindow.axaml:87` `Width="350"`）。
+///
+/// 屏幕比它窄时由 [`crate::cell_hover`] 收到「屏宽 − 2×8」为止 —— 官方那侧有
+/// `ClipToBounds="True"` 的 Canvas 兜着，本仓没有裁剪盒，只能自己收窄。
+pub const HOVER_W: f32 = 350.0;
+
+/// 浮层内边距 **12**（官方 `Padding="12"`）。
+pub const HOVER_PAD: f32 = 12.0;
+
+/// 浮层圆角 **6**（官方 `CornerRadius="6"`）。
+pub const HOVER_RADIUS: f32 = 6.0;
+
+/// 光标 → 浮层左边缘的水平偏移 **16**（官方 `CellHover.cs:49` `left = position.X + 16`）。
+pub const HOVER_OFFSET_X: f32 = 16.0;
+
+/// 光标 → 浮层上边缘的垂直偏移 **8**（官方 `CellHover.cs:53` `position.Y + 8`）。
+pub const HOVER_OFFSET_Y: f32 = 8.0;
+
+/// 浮层与窗口四边的最小距离 **8**（官方 `:51-53` 的 `Math.Clamp(…, 8, …)`）。
+pub const HOVER_EDGE_PAD: f32 = 8.0;
+
+/// 浮层可用最大高 = 窗口高 − **16**（官方 `:45` `MaxHeight = Bounds.Height - 16`）。
+pub const HOVER_MAX_H_MARGIN: f32 = 16.0;
+
+/// 坐标 / 可行走两行（官方 `FontWeight="SemiBold"`、字号取正文档）的字号 **12**。
+pub const HOVER_HEAD_FONT: f32 = 12.0;
+
+/// 明细行字号 **11**（官方 `MainWindow.axaml:91` `FontSize="11"`）。
+pub const HOVER_DETAIL_FONT: f32 = 11.0;
+
+/// 坐标 / 可行走两行的行高 **18**（12px 字 + 上下 3 呼吸，与 [`BANNER_LINE_H`] 同档）。
+pub const HOVER_HEAD_LINE_H: f32 = 18.0;
+
+/// 明细行行高 **16**（官方 `MainWindow.axaml:91` `LineHeight="16"`）。
+pub const HOVER_DETAIL_LINE_H: f32 = 16.0;
+
 // ───────────────────────── 菜单下拉弹层（2026-11-05 新增） ─────────────────────────
 //
 // ⚠ **这一组没有官方截图真值**：参考截图（`crystalstudio-main-runtime-1500x950.png` /
