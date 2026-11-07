@@ -110,20 +110,92 @@ pub fn rects(l: &Layout, n: usize) -> Vec<Rect> {
 /// 单标签态（`len == 1` 且 `active == 0`，也是 CLI / `--shot` 的常态）⇒ 返回空表
 /// ⇒ **本模块一个像素都不动**，`--shot` 哈希与 A 段逐字节相同。
 ///
-/// ⚠ **残余偏差（如实登记，见回执）**：单标签态那张由 `canvas.rs` 画，它有两处用的是旧值：
-/// ① 关闭符前景 `canvas.rs:137` 取 `text_muted`（浅色 `#9EA4AB` / 深色 `#929CAB`），
-///    上游 `close.Theme = QuietButton`（`MapTabs.cs:58`）⇒ `Button` 前景 `ThemeE5E9F0`
-///    （`EditorControls.axaml:4`）= `ui.text`（浅色 `#434D5A` / 深色 `#E5E9F0`）；
-/// ② 选中下划线 `canvas.rs:243` 取 `accent_dark`（深色 `#8498FF`），上游 `Theme8CA1FF` = `#8CA1FF`
-///    （浅色两者同值 `#AD7F22`，只有深色分得出来）。
-/// 这两处在 `canvas.rs`（**不在本单写域**），本模块不改。后果：同一张标签在
-/// 「只有 1 张」与「有 2 张」时这两笔颜色不同（多标签态由本模块按上游真值画）。
-/// 已知偏差，不是 bug；修法是在后续单把 `canvas.rs:137` / `:243` 换成 `ui.text` /
-/// `ui.tab_selected_underline`（浅色像素不变 ⇒ `--shot` 仍不会动，深色才修正）。
+/// ⚠ **B2 单已修掉的两处旧值**（`canvas.rs`，同一写域）：单标签态那张由 `canvas.rs` 画，
+/// 原先 ① 关闭符前景取 `text_muted`、② 选中下划线取 `accent_dark`；现在按上游换成
+/// `ui.text`（`QuietButton` ⇒ `Button` 前景 `ThemeE5E9F0`，`EditorControls.axaml:4`）与
+/// `ui.tab_selected_underline`（`Theme8CA1FF`，`:64`）。
+/// ⇒ 同一张标签在「只有 1 张」与「有 2 张」时这两笔**同色**了。
+/// ⚠ 其中**关闭符那一笔在浅色下会变像素**（`text` `#434D5A` ≠ `text_muted` `#9EA4AB`），
+/// 所以 `--shot` 基线随之更新（见回执「--shot」段）；下划线那一笔浅色同值、像素不变。
 pub fn 要画的标签(tabs: &Tabs) -> Vec<usize> {
     (0..tabs.len())
         .filter(|&i| !(i == 0 && i == tabs.active()))
         .collect()
+}
+
+/// 标签矩形 `r` 上**关闭符的命中盒**（`r` 取自 [`rects`] 的某一项）。
+///
+/// # 横向：上游 `MainWindow.MapTabs.cs:57` 的按钮盒
+///
+/// ```csharp
+/// var close = new Button { Content = ("\u00d7"), Padding = new Thickness(4, 0, 4, 0), … };
+/// ```
+/// ⇒ 按钮盒 = 字形盒左右各加 **4**（上下 0）。字形在本仓是 `Align2::RIGHT_CENTER`
+/// 锚在 `r.right() - TAB_TITLE_INSET`（[`draw`] 与 `canvas::labels` 同一处几何），
+/// 所以按钮盒的**左边界** = `r.right() - TAB_TITLE_INSET - TAB_CLOSE_GLYPH_W - TAB_CLOSE_PAD`。
+///
+/// # 纵向：**整格高**（本仓放大的命中盒，见下）
+///
+/// 上游上下 padding 是 0 ⇒ 按钮高 = 字形行高 11（`TAB_CLOSE_GLYPH_H`）。
+/// 但命中盒取**整格高** `r.top()..r.bottom()`，理由是上游**点标签右上角会选中该标签**
+/// （那一块属于 `TabItem` 的 header），若命中盒只有 11 高，右上/右下两个角会变成
+/// **既不开也不关的死区** —— 那是本仓几何带来的新行为，不是上游行为。
+/// 放大命中盒只影响可点性，**不改变任何绘制像素**（悬停底另见 [`close_button_rect`]）。
+///
+/// 右边界取到标签右沿 ⇒ 与 [`body_rect`] **恰好拼满整张标签、互不重叠**。
+///
+/// ⚠ **待拍板**：命中盒比上游按钮高（30 vs 11）是本仓的**产品取舍**，已登记在回执
+/// 「待用户拍板」；若要严格照抄上游 11 高，把本函数改成返回 [`close_button_rect`] 即可。
+pub fn close_rect(r: Rect) -> Rect {
+    let 左 = r.right() - m::TAB_TITLE_INSET - m::TAB_CLOSE_GLYPH_W - m::TAB_CLOSE_PAD;
+    Rect::from_min_max(pos2(左.max(r.left()), r.top()), r.max)
+}
+
+/// **上游那个关闭按钮的绘制盒**（悬停底就画这么大）：15.34375 × 11，垂直居中。
+///
+/// = `TAB_CLOSE_PAD*2 + TAB_CLOSE_GLYPH_W` 宽、`TAB_CLOSE_GLYPH_H` 高，右边界落在
+/// `r.right() - TAB_TITLE_INSET + TAB_CLOSE_PAD`（= 字形右边界 + 4，与 [`close_rect`] 同一处横向基准）。
+pub fn close_button_rect(r: Rect) -> Rect {
+    let 右 = r.right() - m::TAB_TITLE_INSET + m::TAB_CLOSE_PAD;
+    let 左 = 右 - (m::TAB_CLOSE_PAD * 2.0 + m::TAB_CLOSE_GLYPH_W);
+    let 半高 = m::TAB_CLOSE_GLYPH_H / 2.0;
+    let cy = r.center().y;
+    Rect::from_min_max(pos2(左, cy - 半高), pos2(右, cy + 半高))
+}
+
+/// 标签**主体**的命中盒 = 整张标签减去 [`close_rect`] 那一竖条（两者恰好拼满、不重叠）。
+pub fn body_rect(r: Rect) -> Rect {
+    Rect::from_min_max(r.min, pos2(close_rect(r).left(), r.bottom()))
+}
+
+/// **关闭符的悬停底**（上游 `QuietButton` 继承的 `:pointerover` 底）。
+///
+/// 上游真值：`EditorControls.axaml:17` 的 `QuietButton` 是
+/// `BasedOn="{StaticResource {x:Type Button}}"`、只把 `Background`/`BorderBrush`
+/// 覆盖成 `Transparent` ⇒ 基模板 `:pointerover /template/ Border#Chrome` 的
+/// `Background = Theme394354`（`:12`，`App.axaml:26` = `#394354`）**照样生效**，
+/// 圆角取同一个模板的 `CornerRadius="5"`（`:9`）。
+///
+/// 只在指针**压住这张标签的关闭符命中盒**时画，画在 [`close_button_rect`] 里
+/// （上游按钮原尺寸，不是放大的命中盒）。
+/// 返回 `true` = 画了（调用方据此可以在别处做提示，但**前景色不变**：
+/// `:pointerover` 只设 `Background`/`BorderBrush`，`Foreground` 仍是 `ThemeE5E9F0`）。
+pub fn paint_close_hover(p: &Painter, r: Rect) -> bool {
+    let 层 = p.layer_id();
+    let 区 = p.clip_rect();
+    if !p
+        .ctx()
+        .rect_contains_pointer(层, 区.intersect(close_rect(r)))
+    {
+        return false;
+    }
+    pt::fill_round(
+        p,
+        close_button_rect(r),
+        m::TAB_CLOSE_RADIUS,
+        t::ui().close_hover_bg,
+    );
+    true
 }
 
 /// 画整条标签栏（顺序 = [`rects`] 顺序）。
@@ -140,6 +212,7 @@ pub fn 要画的标签(tabs: &Tabs) -> Vec<usize> {
 /// | 选中标题 | `ui.text` `#E5E9F0` | `:selected Foreground`（`EditorControls.axaml:65` / `App.axaml:67`）|
 /// | 未选中标题 | `ui.text_muted` `#929CAB` | `Foreground={DynamicResource Muted}`（`EditorControls.axaml:59` / `App.axaml:70`）|
 /// | 关闭符 `×` | `ui.text` `#E5E9F0` | `close.Theme = QuietButton`（`MainWindow.MapTabs.cs:58`）⇒ `Button` 默认前景 `ThemeE5E9F0`（`EditorControls.axaml:4`）|
+/// | 关闭符悬停底 | `ui.close_hover_bg` `#394354` | `QuietButton` 继承基模板 `:pointerover /template/ Border#Chrome` 的 `Background` = `Theme394354`（`EditorControls.axaml:17` + `:12` / `App.axaml:26`）；圆角 5 取同一模板的 `CornerRadius`（`:9`）|
 pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
     let rects = rects(l, tabs.len());
     let ps = p.with_clip_rect(l.tab_strip);
@@ -152,6 +225,12 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
     // （含"指针所在图层必须是本图层"这一条，弹层压住时不会误亮）。
     let 悬停层 = ps.layer_id();
     let 悬停区 = ps.clip_rect();
+    // ⓪ **关闭符悬停底的分工**（本函数只负责它亲自画的那几张）：
+    // 「第 0 张且它就是活跃标签」那一张由 `canvas::draw` 画，而 `canvas::draw` 在本函数
+    // **之前**跑（`app.rs` 的 ⑥ 画布 / ⑦a3 标签条）⇒ 若在这里再盖一块底色，会把
+    // `canvas` 已经画好的 `×` 字形盖掉。所以那一张的悬停底由 `canvas.rs` 在**字形之前**
+    // 调同一个 [`paint_close_hover`]；本函数只在本循环里给**自己画的那几张**画悬停底
+    // （见循环内的 `paint_close_hover(&ps, *r)`）。实现只有一份，绘制顺序各随其主。
     for i in 要画的标签(tabs) {
         let Some(r) = rects.get(i) else { continue };
         let 活跃 = i == tabs.active();
@@ -206,8 +285,11 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
         lab.truncate_to_fit(&ps);
         lab.draw(&ps);
 
-        // 关闭符（**装饰**，与 `canvas.tab_close` 同位置同字号；关闭动作属后续单）。
-        // 上游 `close.Theme = QuietButton` ⇒ 前景 `ThemeE5E9F0` = `ui.text`。
+        // 关闭符（与 `canvas.tab_close` 同位置同字号；**命中盒与关闭动作在 [`interact`]**）。
+        // 上游 `close.Theme = QuietButton` ⇒ 前景 `ThemeE5E9F0` = `ui.text`（`EditorControls.axaml:4`）。
+        // 悬停底先画、字形后画（底在字下面）：上游 `:pointerover` 只换 `Border#Chrome` 的
+        // `Background`，前景不变（`EditorControls.axaml:12` 只设 Background/BorderBrush）。
+        paint_close_hover(&ps, *r);
         pt::text(
             &ps,
             pos2(r.right() - m::TAB_TITLE_INSET, r.center().y),
@@ -230,17 +312,51 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
     }
 }
 
-/// 标签条的点击命中：返回**被点中的非活跃标签下标**（点活跃标签返回 `None`）。
+/// 标签条的一次点击**落在哪**（三态：主体 / 关闭符 / 不响应）。
 ///
-/// 返回 `None` 的两种情况都成立且都该如此：
-/// ① 没点任何标签；② 点的就是当前活跃标签（[`Tabs::activate`] 本身也是 no-op，
-/// 这里提前拦下是为了"点活跃标签不产生任何副作用"这条能被单测直接读到）。
-pub fn interact(ui: &mut egui::Ui, l: &Layout, tabs: &Tabs) -> Option<usize> {
+/// 上游只有两个控件：`TabItem` 的 header（点它由 `SelectionChanged` 切图，
+/// `MainWindow.MapTabs.cs:38-42`）与它里面的关闭 `Button`（`:57-61`）。
+/// 本仓是**每帧派生式**、结构上没有 `SelectionChanged` 事件 ⇒ 这里把
+/// "点哪儿"如实回报给宿主，由宿主按 [`Tabs::dirty_of`] 决定要不要进确认态
+/// （上游靠"先选中再判脏"，本仓**不许照抄那个时序**，见 `app::request_close_tab`）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Click {
+    /// 点**标签主体** ⇒ 请求切换到这张（活跃那张由宿主忽略，见 [`interact`]）。
+    Switch(usize),
+    /// 点**关闭符** ⇒ 请求关闭这张（是否真关由宿主按脏判据决定）。
+    Close(usize),
+}
+
+/// 标签条的点击命中（三态，见 [`Click`]）。
+///
+/// 命中盒：主体 = [`body_rect`]、关闭符 = [`close_rect`]，两者**互不重叠**且拼满整张标签。
+/// 返回 `None` 的两种情况：① 没点任何标签；② 点的是**当前活跃标签的主体**
+/// （[`Tabs::activate`] 本身也是 no-op，这里提前拦下是为了"点活跃标签不产生任何副作用"
+/// 这条能被单测直接读到）。
+///
+/// ⚠ 点**活跃标签的关闭符**照样返回 [`Click::Close`] —— 关掉活跃那张是最常见的关闭路径。
+pub fn interact(ui: &mut egui::Ui, l: &Layout, tabs: &Tabs) -> Option<Click> {
     let rects = rects(l, tabs.len());
     for (i, r) in rects.iter().enumerate() {
-        let resp = ui.interact(*r, ui.id().with(("tab_strip", i)), Sense::click());
-        if resp.clicked() && i != tabs.active() {
-            return Some(i);
+        // ① 关闭符（先判，与上游"按钮压在 header 之上"的层次一致；两个盒子不重叠，
+        //    所以先后只影响"谁能先吃到"，不影响语义）。
+        if ui
+            .interact(
+                close_rect(*r),
+                ui.id().with(("tab_close", i)),
+                Sense::click(),
+            )
+            .clicked()
+        {
+            return Some(Click::Close(i));
+        }
+        // ② 主体：点活跃标签不产生副作用。
+        if ui
+            .interact(body_rect(*r), ui.id().with(("tab_body", i)), Sense::click())
+            .clicked()
+            && i != tabs.active()
+        {
+            return Some(Click::Switch(i));
         }
     }
     None
@@ -875,6 +991,191 @@ mod tests {
         清临时图(&图乙);
     }
 
+    /// ③c **关闭符命中盒 = 上游按钮盒（字形 advance + 上下左右 padding）**，且与主体不重叠。
+    ///
+    /// 上游: `MainWindow.MapTabs.cs:57`
+    /// `new Button { Content = "\u00d7", Padding = new Thickness(4, 0, 4, 0), … }`
+    /// ⇒ 按钮盒宽 = 4 + 字形宽 + 4、高 = 字形行高（上下 padding 0）。
+    /// 字形宽/行高**上游不可得**（Avalonia + Segoe UI 的度量），本仓取**实际上屏字体**的实测值，
+    /// 这条用例把它钉在 0.01 容差内 ⇒ 换字体或改 `TAB_FONT` 立刻红。
+    #[test]
+    fn 关闭符命中盒按字形advance加上游内边距() {
+        // ① 两个字形常量必须等于本仓字体在 TAB_FONT 下的实测值
+        let ctx = crate::fonts::measure_ctx();
+        let mut 实测 = egui::Vec2::ZERO;
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE)
+                .show(ctx, |ui| {
+                    实测 = ui
+                        .painter()
+                        .layout_no_wrap(
+                            tx::TAB_CLOSE.to_owned(),
+                            egui::FontId::proportional(m::TAB_FONT),
+                            egui::Color32::WHITE,
+                        )
+                        .size();
+                });
+        });
+        assert!(
+            (实测.x - m::TAB_CLOSE_GLYPH_W).abs() < 0.01,
+            "TAB_CLOSE_GLYPH_W 与实测 advance 不符：常量 {}，实测 {}",
+            m::TAB_CLOSE_GLYPH_W,
+            实测.x
+        );
+        assert!(
+            (实测.y - m::TAB_CLOSE_GLYPH_H).abs() < 0.01,
+            "TAB_CLOSE_GLYPH_H 与实测行高不符：常量 {}，实测 {}",
+            m::TAB_CLOSE_GLYPH_H,
+            实测.y
+        );
+
+        let l = Layout::compute(窗());
+        let r = rects(&l, 1)[0];
+
+        // ② 上游按钮盒：宽 = 2×padding + 字形宽，高 = 字形行高，垂直居中
+        let 按 = close_button_rect(r);
+        assert!(
+            (按.width() - (m::TAB_CLOSE_PAD * 2.0 + m::TAB_CLOSE_GLYPH_W)).abs() < 0.01,
+            "按钮盒宽必须是 4+字形+4，实得 {}",
+            按.width()
+        );
+        assert!(
+            (按.height() - m::TAB_CLOSE_GLYPH_H).abs() < 0.01,
+            "按钮盒高必须是字形行高（上下 padding = 0），实得 {}",
+            按.height()
+        );
+        assert!(
+            (按.center().y - r.center().y).abs() < 0.01,
+            "上游 VerticalContentAlignment=Center ⇒ 按钮必须垂直居中"
+        );
+        assert!(
+            (按.right() - (r.right() - m::TAB_TITLE_INSET + m::TAB_CLOSE_PAD)).abs() < 0.01,
+            "按钮右边界 = 字形右边界 + padding 右 4，实得 {}",
+            按.right()
+        );
+
+        // ③ 命中盒（close_rect）与主体（body_rect）：两个不同的 rect、互不重叠、拼满整张标签
+        let 关 = close_rect(r);
+        let 体 = body_rect(r);
+        assert_ne!(关, 体, "关闭符与主体必须是两个不同的命中盒");
+        assert!(
+            (体.right() - 关.left()).abs() < 0.01,
+            "主体右边界 {} 必须等于关闭符左边界 {}（拼满、无死区）",
+            体.right(),
+            关.left()
+        );
+        assert!(
+            !体.shrink(0.5).intersects(关.shrink(0.5)),
+            "主体与关闭符内部重叠：{:?} / {:?}",
+            体,
+            关
+        );
+        for (名, x) in [("主体", 体), ("关闭符", 关)] {
+            assert!(
+                x.left() >= r.left() - 0.01 && x.right() <= r.right() + 0.01,
+                "{名} {x:?} 越出标签 {r:?}"
+            );
+            assert!(
+                (x.top() - r.top()).abs() < 0.01 && (x.bottom() - r.bottom()).abs() < 0.01,
+                "{名} {x:?} 必须占满标签高度 {r:?}"
+            );
+        }
+        // 命中盒必须盖住**看得见的**按钮盒（点得到它）
+        assert!(
+            关.left() <= 按.left() + 0.01 && 关.right() >= 按.right() - 0.01,
+            "关闭符命中盒 {关:?} 没横向盖住按钮盒 {按:?}"
+        );
+    }
+
+    /// ④b **点关闭符 ⇒ 关闭请求；点主体 ⇒ 切换**（三态互不串）。
+    ///
+    /// egui 的 `clicked()` 要求"按下前已经 hover" ⇒ 每次点击都要**两帧**且复用同一个 `Context`。
+    #[test]
+    fn 点关闭符返回关闭请求且不切换标签() {
+        let l = Layout::compute(窗());
+        let 图乙 = 临时图("closehit_b");
+        let 乙 = 造槽(&图乙, false, "closehit_b");
+        let mut tabs = Tabs::new(TabState::占位());
+        tabs.push(乙);
+        let rs = rects(&l, 2);
+
+        // ① 点第 1 张（非活跃）的**关闭符** ⇒ Close(1)，不是 Switch(1)
+        let ctx = egui::Context::default();
+        let p = close_rect(rs[1]).center();
+        assert_eq!(
+            一帧三态(&ctx, &l, &tabs, vec![egui::Event::PointerMoved(p)]),
+            None,
+            "只悬停不该算点击"
+        );
+        assert_eq!(
+            一帧三态(
+                &ctx,
+                &l,
+                &tabs,
+                vec![egui::Event::PointerMoved(p), 按钮(p, true), 按钮(p, false)],
+            ),
+            Some(Click::Close(1)),
+            "点关闭符必须返回关闭请求（不是切换）"
+        );
+
+        // ② 点同一张的**主体** ⇒ Switch(1)，不许是 Close
+        let ctx2 = egui::Context::default();
+        let q = body_rect(rs[1]).center();
+        assert_eq!(
+            一帧三态(&ctx2, &l, &tabs, vec![egui::Event::PointerMoved(q)]),
+            None
+        );
+        assert_eq!(
+            一帧三态(
+                &ctx2,
+                &l,
+                &tabs,
+                vec![egui::Event::PointerMoved(q), 按钮(q, true), 按钮(q, false)],
+            ),
+            Some(Click::Switch(1)),
+            "点主体必须返回切换"
+        );
+
+        // ③ 点**活跃**标签的关闭符 ⇒ 照样是关闭请求（关活跃那张是最常见的关闭路径）
+        let ctx3 = egui::Context::default();
+        let w = close_rect(rs[0]).center();
+        assert_eq!(
+            一帧三态(&ctx3, &l, &tabs, vec![egui::Event::PointerMoved(w)]),
+            None
+        );
+        assert_eq!(
+            一帧三态(
+                &ctx3,
+                &l,
+                &tabs,
+                vec![egui::Event::PointerMoved(w), 按钮(w, true), 按钮(w, false)],
+            ),
+            Some(Click::Close(0)),
+            "点活跃标签的关闭符必须能关（不许因为是活跃就吞掉）"
+        );
+
+        // ④ 点**活跃**标签的主体 ⇒ 不响应（no-op，`activate` 自身也是 no-op）
+        let ctx4 = egui::Context::default();
+        let e = body_rect(rs[0]).center();
+        assert_eq!(
+            一帧三态(&ctx4, &l, &tabs, vec![egui::Event::PointerMoved(e)]),
+            None
+        );
+        assert_eq!(
+            一帧三态(
+                &ctx4,
+                &l,
+                &tabs,
+                vec![egui::Event::PointerMoved(e), 按钮(e, true), 按钮(e, false)],
+            ),
+            None,
+            "点活跃标签主体不该有任何响应"
+        );
+
+        清临时图(&图乙);
+    }
+
     fn 按钮(pos: egui::Pos2, pressed: bool) -> egui::Event {
         egui::Event::PointerButton {
             pos,
@@ -884,7 +1185,12 @@ mod tests {
         }
     }
 
-    /// 跑一帧 [`interact`]，把命中的下标写回 `out`。
+    /// 跑一帧 [`interact`]，把命中的**主体切换**下标写回 `out`。
+    ///
+    /// ⚠ B2 单：`interact` 的返回值从 `Option<usize>` 变成三态 [`Click`]（多了"关闭符"这一态）。
+    /// 本辅助函数只服务"点标签主体"的用例 ⇒ 只映射 [`Click::Switch`]；万一命中的是关闭符，
+    /// 写一个**不可能的下标** `usize::MAX` 进去，让调用方的 `assert_eq!(点中, Some(1))` 当场红
+    /// （而不是被静默忽略）。既有断言的文字与判据一字未改。
     fn 一帧(
         ctx: &egui::Context,
         l: &Layout,
@@ -903,11 +1209,35 @@ mod tests {
         let _ = ctx.run(input, |ctx| {
             egui::CentralPanel::default()
                 .frame(egui::Frame::NONE)
-                .show(ctx, |ui| {
-                    if let Some(i) = interact(ui, l, tabs) {
-                        *out = Some(i);
-                    }
+                .show(ctx, |ui| match interact(ui, l, tabs) {
+                    Some(Click::Switch(i)) => *out = Some(i),
+                    Some(Click::Close(_)) => *out = Some(usize::MAX),
+                    None => {}
                 });
         });
+    }
+
+    /// 跑一帧 [`interact`]，返回**三态原值**（关闭符用例用，要区分 `Switch` / `Close`）。
+    fn 一帧三态(
+        ctx: &egui::Context,
+        l: &Layout,
+        tabs: &Tabs,
+        events: Vec<egui::Event>,
+    ) -> Option<Click> {
+        let input = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(
+                pos2(0.0, 0.0),
+                vec2(m::WINDOW_W, m::WINDOW_H),
+            )),
+            events,
+            ..Default::default()
+        };
+        let mut out = None;
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE)
+                .show(ctx, |ui| out = interact(ui, l, tabs));
+        });
+        out
     }
 }

@@ -54,7 +54,7 @@
 use std::path::PathBuf;
 use std::time::Instant;
 
-use egui::{Align2, Rect, Sense, Vec2};
+use egui::{pos2, Align2, Rect, Sense, Vec2};
 use mir2_assets::SpriteSource;
 use miredit_render::{MapLighting, RenderOptions};
 
@@ -274,7 +274,19 @@ pub struct MireditApp {
     /// `--preview-alt`：把「按住 Alt」伪造成常真（**只服务取证截图**）。
     preview_alt: bool,
     /// 关闭拦截模态是否已经弹出（有未保存修改时点第一次 × 变成 `true`）。
+    ///
+    /// 语义 = **整窗关闭**的确认态（`guard_close_request` / 标题栏 × 都会置它）。
+    /// 单张标签的关闭确认走 [`Self::pending_close`]，两者共用同一个模态框但文案不同。
     confirm_close: bool,
+    /// **单张标签关闭的待确认下标**（`None` = 没有待确认的标签关闭）。
+    ///
+    /// 上游没有这个字段：它是靠 `CloseMapTab` 先 `mapTabs.SelectedItem = tab`
+    /// （`MainWindow.MapTabs.cs:99`）再让 `SelectionChanged` 把 `activeMap` 换过去，
+    /// 于是 `ConfirmDiscard()`（`:419`）判的正是"刚要关的那张"。
+    /// **本仓结构上没有 `SelectionChanged`**（每帧派生式）⇒ 不许照抄那个时序
+    /// （"先选中再判脏"会先把用户眼里的活跃标签换掉，取消后状态已经变了）。
+    /// 本仓改成「**先 `dirty_of(idx)` 判、脏则记下 `idx` 进确认态、净则直接关**」。
+    pending_close: Option<usize>,
     /// 已发给窗口系统的标题（变了才发 `ViewportCommand::Title`，避免每帧发指令）。
     shown_title: String,
     /// 自动化状态机。
@@ -745,6 +757,7 @@ impl MireditApp {
             preview_alt: cli.preview_alt,
             last_overlay: Rect::NOTHING,
             confirm_close: false,
+            pending_close: None,
             shown_title: String::new(),
             auto: Auto {
                 shot: cli.shot.clone(),
@@ -1495,6 +1508,10 @@ impl MireditApp {
         self.handle_arm_keys(ctx);
         if esc {
             self.confirm_close = false;
+            // B2 单：Esc 同时退出「关闭脏标签」的确认态（**不关任何标签**，改动全留着）。
+            // 与上游 `MessageBoxResult.Cancel`（`MainWindow.axaml.cs:419` `if (answer == Cancel) return false;`）
+            // 同一条语义：取消 = 什么都不做。
+            self.pending_close = None;
             // `Esc` 的第三层语义：取消选区（官方 `Deselect`，`MapViewport.cs:103-108`）。
             // 顺序：先关模态 → 再退待放置态 → 最后才清选区（越"重"的越先撤）。
             if self.armed.is_none() && self.edit.selection().is_some() {
@@ -2561,7 +2578,27 @@ impl MireditApp {
         Some((x as u16, y as u16))
     }
 
-    /// 系统关窗请求的拦截：有未保存修改时取消关窗、弹出模态（第二次才放行）。
+    /// 系统关窗请求的拦截：**任一标签**有未保存修改时取消关窗、弹出模态（第二次才放行）。
+    ///
+    /// # ★ P1 数据丢失的修复点（B2 单，2026-11-08）
+    ///
+    /// 旧实现判的是 `self.edit.dirty()` —— **只有活跃那一张**一份。用户切到净标签 A、
+    /// 在别的标签 B 上改了东西、直接关窗 ⇒ B 的未保存改动静默丢失
+    /// （B 的编辑会话只活在 `tabs.items[B]` 的快照里，关窗路径上没有任何人看它）。
+    ///
+    /// 上游真值 `MainWindow.axaml.cs:424-430`（`OnClosing`）**遍历全部标签**、任一脏就拦：
+    /// ```csharp
+    /// foreach (var tab in mapTabs.Items.Cast<TabItem>().ToArray())
+    /// {
+    ///     var map = (OpenMapTab)tab.Tag;
+    ///     if (!map.CategoryDirty && !(ReferenceEquals(map, activeMap) ? Viewport.History.Dirty : map.State.History.Dirty)) continue;
+    ///     mapTabs.SelectedItem = tab;
+    ///     if (!ConfirmDiscard()) { e.Cancel = true; return; }
+    /// }
+    /// ```
+    /// ⇒ 本仓判据 = [`Tabs::any_dirty`]（活跃那张读 `app.edit`、其余读各自快照）。
+    /// ⚠ 上游的 `map.CategoryDirty`（分类脏）本仓无对应物，见 [`Tabs::dirty_of`] 的登记。
+    /// ⚠ 上游"逐张选中 + 逐张确认"的**逐个排队**不在本单（见回执「待用户拍板」）。
     ///
     /// ⚠ **自动化取证运行例外**：带 `--shot` / `--autodrag` 时程序自己会发
     /// `ViewportCommand::Close` 收尾，若也拦下来，无人值守的截图/拖动实测就永远退不出去。
@@ -2576,7 +2613,9 @@ impl MireditApp {
         if !ctx.input(|i| i.viewport().close_requested()) {
             return;
         }
-        if self.edit.dirty() && !self.confirm_close {
+        // ★ 核心修复：从「只看活跃那一份 `self.edit.dirty()`」改成「遍历全部标签」。
+        let 任一脏 = self.tabs.any_dirty(self);
+        if 任一脏 && !self.confirm_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.confirm_close = true;
             ctx.request_repaint();
@@ -2593,28 +2632,129 @@ impl MireditApp {
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.shown_title.clone()));
     }
 
-    /// 关闭拦截模态（简单居中提示框 + 半透明遮罩）。
+    /// 关闭确认模态的矩形（居中在视口上）。
     ///
-    /// **不加可交互矩形**：右上角 `×` 的命中测试在 [`Self::interact`] 里按矩形算，
-    /// 与绘制先后无关，所以"再点关闭"照样点得到 —— 这正是提示文案说的操作。
+    /// 尺寸沿用本仓既有 `metrics::MODAL_W/H`（官方用系统 `MessageBox`，本仓自绘 ⇒ 这两项
+    /// 本来就是"推导"值，见 `metrics` 的说明）。绘制与命中**共用这一个函数**，
+    /// 不许两处各算一份（否则画出来的按钮与能点的按钮会错位）。
+    fn close_modal_rect(l: &Layout) -> Rect {
+        Rect::from_center_size(l.viewport.center(), Vec2::new(m::MODAL_W, m::MODAL_H))
+    }
+
+    /// 关闭确认模态里**两个选项的可点带**：`(继续关闭, 取消)`。
+    ///
+    /// ⚠ **上游无对应物（如实登记）**：上游用系统 `MessageBox.Show(… YesNoCancel …)`
+    /// （`MainWindow.axaml.cs:419`），按钮文字/位置/间距全由系统提供，仓里没有对应真值。
+    /// 这里是本仓自绘模态的**派生量**，刻意**不引入任何新的间距常量**：
+    /// - 纵向：以模态框中心**下移一个字高**（`MODAL_FONT`）为带中心，带高 = 两个字高；
+    /// - 横向：左半 = 继续关闭、右半 = 取消（顺序照上游 `YesNoCancel` 的 Yes→Cancel）；
+    /// - 两个文字各在自己那半里居中（`Align2::CENTER_CENTER`）。
+    ///
+    /// ⇒ 已列入回执「待用户拍板」（两态 vs 三键）。
+    fn close_modal_choice_rects(l: &Layout) -> (Rect, Rect) {
+        let c = Self::close_modal_rect(l);
+        let 带 = Rect::from_center_size(
+            pos2(c.center().x, c.center().y + m::MODAL_FONT),
+            Vec2::new(c.width(), m::MODAL_FONT * 2.0),
+        );
+        let 左 = Rect::from_min_max(带.min, pos2(c.center().x, 带.max.y));
+        let 右 = Rect::from_min_max(pos2(c.center().x, 带.min.y), 带.max);
+        (左, 右)
+    }
+
+    /// 关闭确认模态的点击处理。返回 `true` = 这次点击被模态吃掉（调用方必须 return）。
+    ///
+    /// 只有「关闭**脏标签**」那一档有可点区（[`Self::close_modal_choice_rects`]）；
+    /// 整窗关闭那一档保持原样（**不加可交互矩形**，靠"再点一次标题栏 ×"确认）。
+    fn handle_close_modal(&mut self, ui: &mut egui::Ui, l: &Layout) -> bool {
+        let Some(idx) = self.pending_close else {
+            return false;
+        };
+        let (继续, 取消) = Self::close_modal_choice_rects(l);
+        if ui
+            .interact(继续, ui.id().with("close_modal_ok"), Sense::click())
+            .clicked()
+        {
+            self.close_tab_now(idx);
+            ui.ctx().request_repaint();
+            return true;
+        }
+        if ui
+            .interact(取消, ui.id().with("close_modal_cancel"), Sense::click())
+            .clicked()
+        {
+            // 取消：标签与改动都留着，`active` 一个字节没动过（本单从没为判脏切过标签）。
+            self.pending_close = None;
+            ui.ctx().request_repaint();
+            return true;
+        }
+        // 模态语义：遮罩挡着，点别处不穿透、也不当作取消（与整窗那一档的"再点一次才放弃"一致）
+        ui.input(|i| i.pointer.any_click())
+    }
+
+    /// 关闭拦截模态（居中提示框 + 半透明遮罩），**两档文案**：
+    ///
+    /// | 触发 | 判据 | 文案 |
+    /// |---|---|---|
+    /// | 关闭**单张脏标签** | `pending_close.is_some()` | [`tx::TAB_CLOSE_CONFIRM_TMPL`]（带标签名）+ 两个选项 |
+    /// | **整窗**关闭（任一标签脏） | `confirm_close` | [`tx::CLOSE_CONFIRM`]（原样，未改） |
+    ///
+    /// 整窗那一档**不加可交互矩形**：右上角 `×` 的命中测试在 [`Self::interact`] 里按矩形算，
+    /// 与绘制先后无关，所以"再点关闭"照样点得到 —— 这正是它文案说的操作。
     fn draw_close_modal(&self, p: &egui::Painter, l: &Layout) {
+        let 板 = t::ui();
+        // ── 档 ①：关闭单张脏标签（两态 + 带标签名）──
+        if let Some(idx) = self.pending_close {
+            pt::fill(p, l.content, 板.modal_scrim);
+            let c = Self::close_modal_rect(l);
+            pt::fill_round(p, c, m::MODAL_RADIUS, 板.panel_bg);
+            pt::border(p, c, 板.accent_dark);
+            let 名 = self
+                .tabs
+                .name_of(self, idx)
+                .unwrap_or_else(|| tx::VAL_UNKNOWN.to_owned());
+            pt::text(
+                p,
+                pos2(c.center().x, c.center().y - m::MODAL_FONT),
+                Align2::CENTER_CENTER,
+                &tx::fill(tx::TAB_CLOSE_CONFIRM_TMPL, &[("name", &名)]),
+                m::MODAL_FONT,
+                板.text,
+            );
+            let (继续, 取消) = Self::close_modal_choice_rects(l);
+            pt::text(
+                p,
+                继续.center(),
+                Align2::CENTER_CENTER,
+                tx::TAB_CLOSE_CONFIRM_OK,
+                m::MODAL_FONT,
+                板.text,
+            );
+            pt::text(
+                p,
+                取消.center(),
+                Align2::CENTER_CENTER,
+                tx::TAB_CLOSE_CONFIRM_CANCEL,
+                m::MODAL_FONT,
+                板.text_muted,
+            );
+            return;
+        }
+        // ── 档 ②：整窗关闭（原样保留）──
         if !self.confirm_close {
             return;
         }
-        pt::fill(p, l.content, t::ui().modal_scrim);
-        let c = Rect::from_center_size(
-            l.viewport.center(),
-            Vec2::new(m::MODAL_W, m::MODAL_H),
-        );
-        pt::fill_round(p, c, m::MODAL_RADIUS, t::ui().panel_bg);
-        pt::border(p, c, t::ui().accent_dark);
+        pt::fill(p, l.content, 板.modal_scrim);
+        let c = Self::close_modal_rect(l);
+        pt::fill_round(p, c, m::MODAL_RADIUS, 板.panel_bg);
+        pt::border(p, c, 板.accent_dark);
         pt::text(
             p,
             c.center(),
             Align2::CENTER_CENTER,
             tx::CLOSE_CONFIRM,
             m::MODAL_FONT,
-            t::ui().text,
+            板.text,
         );
     }
 
@@ -3536,9 +3676,81 @@ impl MireditApp {
         r
     }
 
+    /// **关闭请求**（B2 单，2026-11-08）：标签条的关闭符点下去的唯一落点。
+    ///
+    /// # 两段式（**不许照抄上游时序**）
+    ///
+    /// 上游 `CloseMapTab`（`MainWindow.MapTabs.cs:96-112`）是
+    /// `mapTabs.SelectedItem = tab;` → `if (!ConfirmDiscard()) return false;`
+    /// —— 它靠 `SelectionChanged` 事件把 `activeMap` 换成"正要关的那张"，
+    /// 于是 `ConfirmDiscard()`（`MainWindow.axaml.cs:419`）判的正好是它。
+    ///
+    /// 本仓是**每帧派生式、结构上没有 `SelectionChanged`** ⇒ 照抄会变成
+    /// "先把用户的活跃标签换掉、再问要不要关"（取消之后界面已经跳走了）。
+    /// 所以这里显式改成：**先 `dirty_of(idx)` 判，再决定关不关**：
+    /// - 越界 / 没有文档 ⇒ 不响应（不 panic、不编一个假状态）；
+    /// - **脏** ⇒ 进确认态（记 `pending_close = Some(idx)`），**一张标签都不动**；
+    /// - **净** ⇒ 直接 [`Self::close_tab_now`]。
+    ///
+    /// ⚠ 上游 `ForgetRecovery(...)`（`MapTabs.cs:101`）本仓**无对应物**（没有崩溃恢复台账），
+    /// 不实现、不造空函数（见回执「上游有本仓无」）。
+    pub(crate) fn request_close_tab(&mut self, idx: usize) {
+        match self.tabs.dirty_of(self, idx) {
+            // 越界：标签集合在"算矩形"与"这次点击"之间被改小了。如实打诊断，不改任何状态。
+            None => eprintln!(
+                "{}",
+                tx::fill(tx::DIAG_TAB_ACTIVATE_FAIL, &[("err", "关闭请求越界")])
+            ),
+            Some(true) => {
+                self.pending_close = Some(idx);
+                self.confirm_close = false;
+            }
+            Some(false) => self.close_tab_now(idx),
+        }
+    }
+
+    /// **真的关掉第 `idx` 张标签**（跳过确认；调用方必须已经判过脏）。
+    ///
+    /// 上游 `MainWindow.MapTabs.cs:102-110` 的对应段：
+    /// ```csharp
+    /// switchingMap = true;
+    /// try { activeMap = null; mapTabs.Items.Remove(tab); } finally { switchingMap = false; }
+    /// if (mapTabs.Items.Count == 0) AddMapTab(new(256, 256));   // ← 本单不做
+    /// else { if (mapTabs.SelectedItem is not TabItem) mapTabs.SelectedIndex = 0; SwitchMap(...); }
+    /// ```
+    /// - `activeMap = null` + `Items.Remove` + 换图 ⇒ 本仓 [`Tabs::close`]（它自己收敛 `active`
+    ///   并把新活跃标签的真值换进 `app.*`，稳态契约不破）；
+    /// - **`AddMapTab(new(256, 256))` 本单不做**：它依赖 core 的 `Document::blank`
+    ///   （另一写手在做）+ `path: Option` 改造，属后续单；本仓此刻对"关唯一标签"的处理是
+    ///   **拒绝 + 把中文错误如实显示**（`Tabs::close` 返回 `不能关闭唯一标签…`）。
+    ///
+    /// 失败（唯一标签 / 越界）⇒ 错误写进 [`Self::op`]（状态栏回执，警示色），
+    /// **不 panic、不静默**。
+    pub(crate) fn close_tab_now(&mut self, idx: usize) {
+        let mut tabs = std::mem::replace(&mut self.tabs, Tabs::new(TabState::占位()));
+        let r = tabs.close(self, idx);
+        self.tabs = tabs;
+        match r {
+            Ok(_被关) => {
+                self.pending_close = None;
+                self.confirm_close = false;
+            }
+            Err(e) => {
+                // 关不掉 ⇒ 退出确认态（否则模态会挂在那儿、而它描述的操作已经失败）
+                self.pending_close = None;
+                self.op = Some((e, true));
+            }
+        }
+    }
+
     /// 处理全部点击/拖拽。
     fn interact(&mut self, ui: &mut egui::Ui, l: &Layout) {
         if self.input_locked() {
+            return;
+        }
+        // ⓪−1 **关闭确认模态（关闭脏标签那一档）是模态**：它压住一切交互。
+        //    排在 `handle_overlay` 之前 —— 关标签确认比"打开地图浮层"更贴脸。
+        if self.handle_close_modal(ui, l) {
             return;
         }
         // ⓪ **浮层是模态**：打开地图 / 快捷键浮层在的时候，其它一切交互让位
@@ -3580,8 +3792,10 @@ impl MireditApp {
 
         // ② 三个窗口按钮：只有最右的 × 真正关闭窗口（最小化/最大化仍是装饰）
         //
-        // ⚠ **关闭拦截**：有未保存修改时第一次点 × 只弹模态（不关窗），
+        // ⚠ **关闭拦截**：**任一标签**有未保存修改时第一次点 × 只弹模态（不关窗），
         //    再点一次才真放弃 —— 与 `ui_text::CLOSE_CONFIRM` 的文案一字对应。
+        //    判据与 [`Self::guard_close_request`] **同一条**（`Tabs::any_dirty`）：
+        //    窗口按钮与系统关窗是同一个"整窗关闭"意图，不许一个遍历、一个只看活跃。
         if ui
             .interact(
                 titlebar::close_rect(l),
@@ -3590,7 +3804,8 @@ impl MireditApp {
             )
             .clicked()
         {
-            if self.edit.dirty() && !self.confirm_close {
+            let 任一脏 = self.tabs.any_dirty(self);
+            if 任一脏 && !self.confirm_close {
                 self.confirm_close = true;
                 ui.ctx().request_repaint();
             } else {
@@ -3770,18 +3985,29 @@ impl MireditApp {
             }
         }
 
-        // ⑤b **多标签标签条**（R12-F3 B 段）：点非活跃标签 ⇒ `activate` 切过去。
+        // ⑤b **多标签标签条**（R12-F3 B 段 / B2 单）：三态 —— 点主体切过去、点关闭符发关闭请求。
         //
         // 位置有因果：它在页签条里（画布**之上**、不与 `l.viewport` 相交），
         // 必须排在 ⑥ 画布之前 —— 否则同一次点击会被画布那条 `Sense::click_and_drag`
         // 先吃掉（页签条与画布不重叠，但"先登记谁"决定 hover/click 的归属）。
-        if let Some(i) = tab_strip::interact(ui, l, &self.tabs) {
-            match self.activate_tab(i) {
-                Ok(()) => ui.ctx().request_repaint(),
-                // 越界/其它失败 ⇒ 如实打诊断，不假装切过去了
-                Err(e) => eprintln!("{}", tx::fill(tx::DIAG_TAB_ACTIVATE_FAIL, &[("err", &e)])),
+        match tab_strip::interact(ui, l, &self.tabs) {
+            Some(tab_strip::Click::Switch(i)) => {
+                match self.activate_tab(i) {
+                    Ok(()) => ui.ctx().request_repaint(),
+                    // 越界/其它失败 ⇒ 如实打诊断，不假装切过去了
+                    Err(e) => {
+                        eprintln!("{}", tx::fill(tx::DIAG_TAB_ACTIVATE_FAIL, &[("err", &e)]))
+                    }
+                }
+                return;
             }
-            return;
+            Some(tab_strip::Click::Close(i)) => {
+                // 关闭请求：脏 ⇒ 进确认态（一张标签都不动）；净 ⇒ 直接关。见 `request_close_tab`。
+                self.request_close_tab(i);
+                ui.ctx().request_repaint();
+                return;
+            }
+            None => {}
         }
 
         // ⑥ 画布：中键拖动 / 空格+左键拖动 → 平移；否则左键 = 工具落格；滚轮 → 以鼠标为中心缩放
@@ -7926,4 +8152,290 @@ mod tests {
         )));
     }
 
+    // ───────────────── 多标签关闭（B2 单，2026-11-08） ─────────────────
+
+    /// 双标签夹具的临时目录唯一化计数器（`cargo test` 的用例是**并行线程**，
+    /// 只按 tag + 进程 id 命名会让两条用例共用同一目录 ⇒ 先跑完的删了，后跑的 `os error 3`）。
+    static 标签NEXT_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+    /// 临时地图目录守卫（`Drop` 删 ⇒ 断言 panic 也不留垃圾）。
+    struct 临时图目录(PathBuf);
+    impl Drop for 临时图目录 {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    /// 造一张 1×1 Old12 图：`(0,0)` 的 `bk_img = 7`，好让 `--edit-erase` 真能改掉它
+    /// （全 0 的图落笔不改任何字节 ⇒ 造不出脏态）。
+    fn 标签临时图(tag: &str) -> (临时图目录, PathBuf) {
+        let id = 标签NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "miredit_gui_tabclose_{tag}_{}_{id}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).expect("测试目录必须能建");
+        let mut bytes = vec![0u8; mir2_map::HEADER_LEN + 12];
+        bytes[0..2].copy_from_slice(&1u16.to_le_bytes());
+        bytes[2..4].copy_from_slice(&1u16.to_le_bytes());
+        let base = mir2_map::HEADER_LEN;
+        bytes[base..base + 2].copy_from_slice(&7u16.to_le_bytes());
+        let p = dir.join(format!("{tag}.map"));
+        std::fs::write(&p, &bytes).expect("测试合成图必须能写");
+        (临时图目录(dir), p)
+    }
+
+    /// 打开 `图` 的宿主；`编辑 = true` 走 `--edit-erase 0,0` 的**生产路径** ⇒ 有撤销步 + 脏标记。
+    fn 标签应用(图: &std::path::Path, 编辑: bool, tag: &str) -> MireditApp {
+        let mut cli = Cli {
+            map: Some(图.to_path_buf()),
+            settings: Some(用例设置路径(tag)),
+            ..Default::default()
+        };
+        if 编辑 {
+            cli.edits.push(crate::edit::EditCmd::Erase(0, 0));
+        }
+        MireditApp::new(&cli)
+    }
+
+    /// 双标签夹具：`app.*` = A（活跃，**净**）、`tabs.items[1]` = B（真快照，按参数决定脏/净）。
+    ///
+    /// 严格照稳态契约摆位：`items[0]` 是占位槽，B 只 `capture` 一次（`capture` 是 `mem::swap`，
+    /// 对活跃那份 capture 会把它的文档换成占位 —— `tab_strip` 的双标签夹具踩过这个坑）。
+    fn 双标签夹具(非活跃脏: bool) -> (MireditApp, 临时图目录, 临时图目录) {
+        let (dira, 图a) = 标签临时图("clean_a");
+        let (dirb, 图b) = 标签临时图("b");
+        let mut 甲 = 标签应用(&图a, false, "tabclose_a");
+        assert!(!甲.edit.dirty(), "夹具：活跃标签 A 必须干净");
+        let mut 乙 = 标签应用(&图b, 非活跃脏, "tabclose_b");
+        assert_eq!(乙.edit.dirty(), 非活跃脏, "夹具：B 的脏标记要按参数来");
+        let mut b槽 = TabState::占位();
+        capture(&mut 乙, &mut b槽);
+        let mut t = Tabs::new(TabState::占位());
+        t.push(b槽);
+        甲.tabs = t;
+        (甲, dira, dirb)
+    }
+
+    /// 跑一帧 [`MireditApp::guard_close_request`]，喂一个**系统关窗请求**，
+    /// 返回"是否发出了 `ViewportCommand::CancelClose`"。
+    ///
+    /// 判据取 `FullOutput::viewport_output` 里的**真实命令**（egui 侧"关窗被取消"的唯一
+    /// 可观测结果），不是我们自己的中间变量 ⇒ "算了没发"会红。
+    fn 关窗一帧(ctx: &egui::Context, app: &mut MireditApp) -> bool {
+        let mut 输入 = egui::RawInput::default();
+        输入.viewports.insert(
+            egui::ViewportId::ROOT,
+            egui::ViewportInfo {
+                events: vec![egui::ViewportEvent::Close],
+                ..Default::default()
+            },
+        );
+        let out = ctx.run(输入, |ctx| app.guard_close_request(ctx));
+        out.viewport_output
+            .get(&egui::ViewportId::ROOT)
+            .map(|o| {
+                o.commands
+                    .iter()
+                    .any(|c| matches!(c, egui::ViewportCommand::CancelClose))
+            })
+            .unwrap_or(false)
+    }
+
+    /// ★ **P1 回归钉子（本单最重要的一条）**：活跃标签净、**非活跃标签脏** ⇒ 整窗关闭必须被拦。
+    ///
+    /// # 缺陷（修复前必红）
+    ///
+    /// `guard_close_request` 旧判据是 `self.edit.dirty()` —— **只有活跃那一份**。
+    /// 用户切到净标签 A、在 B 上改了东西、直接关窗 ⇒ B 的未保存改动静默丢失。
+    /// 本用例正是那个场景：`active == 0`（A 净）、`items[1]`（B 脏）。
+    ///
+    /// # 上游真值
+    ///
+    /// `MainWindow.axaml.cs:424-430` 的 `OnClosing` **遍历全部标签**、任一脏就 `e.Cancel = true`。
+    ///
+    /// # 变异自证
+    ///
+    /// 把 `any_dirty` 临时改回"只看活跃"（`self.dirty_of(app, self.active)`），
+    /// 本用例第一行 `关窗一帧` 立刻返回 `false` ⇒ 红。见回执。
+    #[test]
+    fn 整窗关闭_活跃净而非活跃脏_必须拦截() {
+        let (mut app, _da, _db) = 双标签夹具(true);
+        // 前提三条：活跃净 / 非活跃脏 / 遍历判据为真（缺一条这条用例就没测到 P1）
+        assert!(!app.edit.dirty(), "夹具：活跃标签必须干净（否则测不到非活跃那一支）");
+        assert_eq!(app.tabs.active(), 0);
+        assert_eq!(app.tabs.dirty_of(&app, 1), Some(true), "夹具：非活跃标签必须脏");
+        assert!(app.tabs.any_dirty(&app), "遍历判据必须看到非活跃那张");
+
+        let ctx = egui::Context::default();
+        assert!(
+            关窗一帧(&ctx, &mut app),
+            "非活跃标签脏时关窗必须被拦下（旧实现只看活跃 ⇒ 这里会放行、丢改动）"
+        );
+        assert!(app.confirm_close, "拦截后必须进确认态");
+        assert_eq!(app.pending_close, None, "整窗关闭走 confirm_close，不占用单标签的确认态");
+    }
+
+    /// 反例（**阴性对照**）：全净 ⇒ 关窗必须**放行**（不许变成"永远拦着"）。
+    ///
+    /// 没有这条，把 `guard_close_request` 改成无条件 `CancelClose` 也能让上一条变绿。
+    #[test]
+    fn 整窗关闭_全净必须放行() {
+        let (mut app, _da, _db) = 双标签夹具(false);
+        assert!(!app.edit.dirty());
+        assert_eq!(app.tabs.dirty_of(&app, 1), Some(false), "夹具：两张都净");
+        assert!(!app.tabs.any_dirty(&app));
+
+        let ctx = egui::Context::default();
+        assert!(!关窗一帧(&ctx, &mut app), "全净时不许拦关窗");
+        assert!(!app.confirm_close, "全净时不许进确认态");
+    }
+
+    /// 两段式 ①：**脏 ⇒ 进确认态且一张标签都没关、`active` 一个字节没动**。
+    ///
+    /// 这一条同时钉住「**不许照抄上游时序**」：上游 `CloseMapTab` 先 `mapTabs.SelectedItem = tab`
+    /// （`MainWindow.MapTabs.cs:99`）再判脏；本仓结构上没有 `SelectionChanged`，
+    /// 若照抄就会在"取消"之后留下一个被换掉的活跃标签。
+    #[test]
+    fn 关闭脏标签_进确认态但一张都不关() {
+        let (mut app, _da, _db) = 双标签夹具(true);
+        let 活跃前 = app.tabs.active();
+        let pan前 = app.view.pan_x;
+
+        app.request_close_tab(1);
+
+        assert_eq!(app.pending_close, Some(1), "脏 ⇒ 必须进确认态并记住是哪一张");
+        assert_eq!(app.tabs.len(), 2, "确认态下**一张标签都不许关**");
+        assert_eq!(app.tabs.active(), 活跃前, "判脏不许切活跃标签（上游时序不许照抄）");
+        assert_eq!(app.view.pan_x, pan前, "活跃标签的视口也不许动");
+        assert_eq!(
+            app.tabs.dirty_of(&app, 1),
+            Some(true),
+            "确认态下 B 的未保存改动必须还在（这就是本单要保的东西）"
+        );
+    }
+
+    /// 两段式 ②：**取消 ⇒ 标签仍在、`active` 不变、改动仍在**。
+    #[test]
+    fn 关闭脏标签_取消后一切照旧() {
+        let (mut app, _da, _db) = 双标签夹具(true);
+        let l = 测试布局();
+        app.request_close_tab(1);
+        assert_eq!(app.pending_close, Some(1));
+
+        // 点模态上的「取消」（右半区）
+        let (_, 取消) = MireditApp::close_modal_choice_rects(&l);
+        let ctx = egui::Context::default();
+        assert!(点关闭模态(&ctx, &mut app, &l, 取消.center()), "点取消必须被模态吃掉");
+
+        assert_eq!(app.pending_close, None, "取消后必须退出确认态");
+        assert_eq!(app.tabs.len(), 2, "取消后标签必须都还在");
+        assert_eq!(app.tabs.active(), 0, "取消后活跃标签不许变");
+        assert_eq!(app.tabs.dirty_of(&app, 1), Some(true), "取消后 B 的改动必须还在");
+    }
+
+    /// 两段式 ③：**确认（继续关闭）⇒ 真关**（脏的那张消失，净的那张留下且仍是活跃）。
+    #[test]
+    fn 关闭脏标签_确认后真关() {
+        let (mut app, _da, _db) = 双标签夹具(true);
+        let l = 测试布局();
+        app.request_close_tab(1);
+        assert_eq!(app.tabs.len(), 2);
+
+        let (继续, _) = MireditApp::close_modal_choice_rects(&l);
+        let ctx = egui::Context::default();
+        assert!(点关闭模态(&ctx, &mut app, &l, 继续.center()), "点继续关闭必须被模态吃掉");
+
+        assert_eq!(app.tabs.len(), 1, "确认后必须真的关掉一张");
+        assert_eq!(app.tabs.active(), 0);
+        assert_eq!(app.pending_close, None);
+        assert_eq!(app.tabs.dirty_of(&app, 0), Some(false), "剩下的 A 是净的");
+        assert_eq!(app.tabs.dirty_of(&app, 1), None, "被关的那张必须已经不在集合里");
+    }
+
+    /// 关闭**唯一**标签 ⇒ **拒绝 + 中文回执**（不 panic、不静默）。
+    ///
+    /// 上游此时是 `AddMapTab(new(256, 256))`（`MainWindow.MapTabs.cs:105`）——
+    /// 那依赖 core 的 `Document::blank`（另一写手在做）+ `path: Option` 改造，**属后续单**。
+    /// 本单的处理是「拒绝 + 如实显示」：`Tabs::close` 的中文错误进状态栏回执（警示色）。
+    #[test]
+    fn 关闭唯一标签_拒绝并给中文回执() {
+        let (dir, 图) = 标签临时图("only");
+        let mut app = 标签应用(&图, true, "tabclose_only");
+        assert!(app.edit.dirty(), "夹具：唯一标签必须脏（走确认路径）");
+        assert_eq!(app.tabs.len(), 1);
+
+        app.request_close_tab(0);
+        assert_eq!(app.pending_close, Some(0), "脏 ⇒ 先确认");
+
+        app.close_tab_now(0); // 相当于点了「继续关闭」
+
+        let (text, warn) = app.op.as_ref().expect("关不掉必须给回执，不许静默");
+        assert!(text.contains("唯一标签"), "回执要说清原因，实得：{text}");
+        assert!(*warn, "拒绝回执必须是警示色");
+        assert_eq!(app.tabs.len(), 1, "唯一标签不许被关掉");
+        assert_eq!(app.pending_close, None, "失败后必须退出确认态（模态不许挂着）");
+        drop(dir);
+    }
+
+    /// 净标签的关闭请求 ⇒ **不问、直接关**（两段式的"净"那一支）。
+    #[test]
+    fn 关闭净标签_直接关不确认() {
+        let (mut app, _da, _db) = 双标签夹具(false);
+        assert_eq!(app.tabs.len(), 2);
+        app.request_close_tab(1);
+        assert_eq!(app.pending_close, None, "净标签不许进确认态");
+        assert_eq!(app.tabs.len(), 1, "净标签必须直接关掉");
+        assert_eq!(app.tabs.active(), 0);
+    }
+
+    /// 在关闭确认模态上点一下（两帧：先 hover 再按下抬起），返回 `handle_close_modal` 的结果。
+    fn 点关闭模态(
+        ctx: &egui::Context,
+        app: &mut MireditApp,
+        l: &crate::layout::Layout,
+        pos: egui::Pos2,
+    ) -> bool {
+        fn 一帧(
+            ctx: &egui::Context,
+            app: &mut MireditApp,
+            l: &crate::layout::Layout,
+            events: Vec<egui::Event>,
+        ) -> bool {
+            let input = egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::pos2(0.0, 0.0),
+                    egui::vec2(crate::metrics::WINDOW_W, crate::metrics::WINDOW_H),
+                )),
+                events,
+                ..Default::default()
+            };
+            let mut 吃掉 = false;
+            let _ = ctx.run(input, |ctx| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::NONE)
+                    .show(ctx, |ui| 吃掉 = app.handle_close_modal(ui, l));
+            });
+            吃掉
+        }
+        let _ = 一帧(ctx, app, l, vec![egui::Event::PointerMoved(pos)]);
+        let 按下 = egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Default::default(),
+        };
+        let 抬起 = egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Default::default(),
+        };
+        一帧(
+            ctx,
+            app,
+            l,
+            vec![egui::Event::PointerMoved(pos), 按下, 抬起],
+        )
+    }
 }

@@ -104,6 +104,18 @@ pub struct Palette {
     ///   （`ThemeService.Avalonia.cs:51` 用 accent 覆盖了 `Theme6378DF`，与 `Theme8CA1FF` 无关）；
     ///   上游这一条是**独立的键**，照抄才不丢 `#8CA1FF` 与 `#8498FF` 的色差。
     pub tab_selected_underline: Color32,
+    /// **关闭符悬停底**（标签条上那个 `×` 被指针压住时的底色）。
+    ///
+    /// 官方: 关闭钮用的是 `QuietButton`（`MainWindow.MapTabs.cs:58` `close.Theme =
+    ///       (Style)this.FindResource("QuietButton")`），而 `QuietButton`
+    ///       （`EditorControls.axaml:17`）是 `BasedOn="{StaticResource {x:Type Button}}"`
+    ///       **只覆盖 `Background` / `BorderBrush` 为 `Transparent`** ⇒ 基模板那条
+    ///       `^:pointerover /template/ Border#Chrome` 的 `Background`
+    ///       （`EditorControls.axaml:12`）= `Theme394354`（`App.axaml:26` = `#394354`）
+    ///       **照样生效** ⇒ 上游**有** hover 底，不是"无 hover"。
+    /// ⚠ 它**不是** `tab_hover_bg`（那个是 `PaletteTabItem` 的 `Theme29313E`，
+    ///   `EditorControls.axaml:63`）：两个键不同色（`#394354` vs `#29313E`），不许互相顶替。
+    pub close_hover_bg: Color32,
 
     // ── 文字 ──
     /// 正文/常规文字色。
@@ -287,6 +299,16 @@ pub const LIGHT: Palette = Palette {
     //   旁证（闭环）：参考截图页签下划线 y=103..104 直方图 = `#AD7F22`（`metrics::TAB_W` 的来源），
     //   与本字段**逐字节相同** ⇒ 源键无疑（同 `LIGHT.accent_dark` 的算式，两者同值、语义不同）。
     tab_selected_underline: Color32::from_rgb(0xAD, 0x7F, 0x22),
+    // 关闭符悬停底。官方: `EditorControls.axaml:17` `QuietButton` 继承基模板的
+    //   `:pointerover /template/ Border#Chrome` 底（`EditorControls.axaml:12`）= `Theme394354`
+    //   （`App.axaml:26` = `#394354`），浅色按 `:47` 现算（**非蓝键** B−R = 84−57 = 27 ≤ 35、
+    //   lum < 0.4 那一支）：
+    //     lum    = (57×.2126 + 67×.7152 + 84×.0722)/255 = 66.1014/255 = 0.259221
+    //     amount = clamp(0.362910 − 0.07) = 0.292910
+    //       R: 255 − 92×0.292910 = 228.052 → 228 = 0xE4
+    //       G: 255 − 82×0.292910 = 230.981 → 230 = 0xE6
+    //       B: 255 − 70×0.292910 = 234.496 → 234 = 0xEA   ⇒ **#E4E6EA**
+    close_hover_bg: Color32::from_rgb(0xE4, 0xE6, 0xEA),
 
     // 正文。左面板正文 (94,596)、层列表 (52,353)、状态栏 (104,924)、面板标题 (28,70)-(120,86) 均 `#434D5A`。
     text: Color32::from_rgb(0x43, 0x4D, 0x5A),
@@ -453,6 +475,12 @@ pub const DARK: Palette = Palette {
     //       键定义 `App.axaml:47` = `#8CA1FF`。
     //       ⚠ 别改成 `accent_dark`（= `#8498FF`）：两者在深色下**不同色**，见字段文档。
     tab_selected_underline: Color32::from_rgb(0x8C, 0xA1, 0xFF),
+    // 官方: `EditorControls.axaml:12` `^:pointerover /template/ Border#Chrome` 的
+    //       `Background` = `Theme394354`；键定义 `App.axaml:26` = `#394354`。
+    //       `QuietButton`（`:17`）只把常态 `Background` 覆盖成 `Transparent`，
+    //       `:pointerover` 那条**没被覆盖** ⇒ 关闭符悬停时就是它。
+    //       浅色侧按 `:47` 现算 = `#E4E6EA`，与参考截图无关（截图里没有悬停态）。
+    close_hover_bg: Color32::from_rgb(0x39, 0x43, 0x54),
 
     // 官方: App.axaml:83 Window Foreground `#E5E9F0`。
     text: Color32::from_rgb(0xE5, 0xE9, 0xF0),
@@ -639,6 +667,9 @@ mod tests {
                 LIGHT.tab_selected_underline,
                 DARK.tab_selected_underline,
             ),
+            // B2 新增字段：关闭符悬停底（`QuietButton` 继承的 `:pointerover` 底，
+            // `EditorControls.axaml:12` 的 `Theme394354`）。
+            ("close_hover_bg", LIGHT.close_hover_bg, DARK.close_hover_bg),
             ("text", LIGHT.text, DARK.text),
             ("text_muted", LIGHT.text_muted, DARK.text_muted),
             ("status_bar_text", LIGHT.status_bar_text, DARK.status_bar_text),
@@ -675,8 +706,8 @@ mod tests {
         ];
         assert_eq!(
             pairs.len() + same_ok.len(),
-            48,
-            "字段清单要覆盖全部 48 项（A-011 加了两条诊断色；B1-FIX 加了标签条三色：容器底/悬停底/选中下划线）"
+            49,
+            "字段清单要覆盖全部 49 项（A-011 加了两条诊断色；B1-FIX 加了标签条三色：容器底/悬停底/选中下划线；B2 加了关闭符悬停底 close_hover_bg）"
         );
         for (name, l, d) in pairs {
             assert_ne!(l, d, "字段 {name} 两套色板相同（深色模式会漏变）");
@@ -899,6 +930,14 @@ mod tests {
                 DARK.tab_hover_bg,
                 LIGHT.tab_hover_bg,
                 "tab_hover_bg",
+            ),
+            // B2 新增：关闭符悬停底 = `QuietButton` 继承的基模板 `:pointerover` 底
+            // （`EditorControls.axaml:12` 的 `Theme394354`，`App.axaml:26`）。
+            (
+                [0x39_u8, 0x43, 0x54],
+                DARK.close_hover_bg,
+                LIGHT.close_hover_bg,
+                "close_hover_bg",
             ),
         ] {
             assert_eq!(c(got_dark), src, "{name} 深色必须逐字节等于官方键");

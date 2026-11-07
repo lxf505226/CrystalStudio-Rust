@@ -134,7 +134,12 @@ pub fn labels(l: &Layout) -> Vec<Label> {
             pos2(tab.right() - m::TAB_TITLE_INSET - 13.0, tab.top()),
             tab.max,
         ),
-        color: t::ui().text_muted,
+        // 上游 `close.Theme = QuietButton`（`MainWindow.MapTabs.cs:58`）⇒ 继承 `Button`
+        // 模板的 `Foreground = ThemeE5E9F0`（`EditorControls.axaml:4`，`App.axaml:67`）
+        // = 本板 `ui.text`。**旧值 `text_muted` 是错的**（B2 单订正）：
+        // 浅色 `text` `#434D5A` ≠ `text_muted` `#9EA4AB` ⇒ 这一笔在浅色下会变像素，
+        // `--shot` 基线随之更新（见回执）；深色 `#E5E9F0` vs `#929CAB` 同样不同。
+        color: t::ui().text,
     });
 
     // ② 缩放浮层：减号 / + / 适应窗口（百分比如见 dyn_labels）
@@ -229,6 +234,12 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
     // ── 页签条 ──
     let ps = p.with_clip_rect(l.tab_strip);
     pt::fill(&ps, l.tab_strip, t::ui().menu_bar);
+    // 关闭符悬停底（上游 `QuietButton` 继承的 `:pointerover` 底 = `Theme394354`）：
+    // 单标签态那张标签由本函数画，而 `tab_strip::draw` 在它**之后**跑、只补画
+    // 「不由 canvas 画」的那几张 ⇒ 这里的悬停底必须由本函数画在**字形之前**
+    // （否则 `tab_strip` 补画时会把已经画好的 `×` 盖掉）。实现只有一份：
+    // [`crate::tab_strip::paint_close_hover`]。
+    crate::tab_strip::paint_close_hover(&ps, l.tab_rect());
     for lab in labels(l) {
         if lab.name.starts_with("canvas.tab") {
             lab.draw(&ps);
@@ -239,8 +250,11 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
             lab.draw(&ps);
         }
     }
-    // 选中页签下划线（截图 y=103..104 的 `#AD7F22`）
-    pt::fill(&ps, l.tab_underline(), t::ui().accent_dark);
+    // 选中页签下划线（上游 `EditorControls.axaml:64` 的 `:selected Border#Chrome`
+    // `BorderBrush = Theme8CA1FF`，`App.axaml:47`）= `ui.tab_selected_underline`。
+    // ⚠ **旧值 `accent_dark` 是错的**（B2 单订正）：浅色两者同值 `#AD7F22`（像素不变），
+    // 深色 `#8CA1FF` vs `#8498FF` 才分得出来。
+    pt::fill(&ps, l.tab_underline(), t::ui().tab_selected_underline);
 
     // ── 画布（以下全部裁剪到画布矩形） ──
     let pv = p.with_clip_rect(l.viewport);

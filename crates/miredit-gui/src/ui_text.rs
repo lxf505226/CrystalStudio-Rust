@@ -1764,6 +1764,29 @@ pub const TAB_TITLE_UNTITLED_TMPL: &str = "Untitled {n}"; // EN: Untitled {n} �
 /// 不是字母 `x`、也不是 `✕`(U+2715)。
 pub const TAB_CLOSE: &str = "×"; // EN: ×
 
+/// **关闭脏标签的确认文案（第一行，带标签名）** —— B2 单，2026-11-08。
+///
+/// ⚠ **上游无对应物（如实登记，不冒充照抄）**：上游用的是
+/// `MainWindow.axaml.cs:419` 的 `MessageBox.Show(this, "Save your changes before continuing?",
+/// activeMap?.IsStamp == true ? "Unsaved stamp" : "Unsaved map", YesNoCancel, …)` ——
+/// ① 那是**系统模态框**（本仓自绘模态，见 `app::draw_close_modal`）；
+/// ② 文案里**不带标签名**（用户看不出是哪一张脏）。
+/// 本仓这两句是按用户「两态 + 带标签名」的口径新写的**宿主文案**，
+/// 已列入回执「上游有本仓无 / 待拍板」，**等用户拍板后才算定稿**。
+pub const TAB_CLOSE_CONFIRM_TMPL: &str = "{name} 有未保存的修改"; // EN: {name} has unsaved changes
+
+/// 关闭脏标签确认态的两个选项之一：**继续关闭**（放弃该标签的未保存改动）。
+///
+/// ⚠ 上游无对应物：上游 `MessageBoxButton.YesNoCancel`（`MainWindow.axaml.cs:419`）的
+/// 按钮文字由系统本地化提供，仓里没有这两个词条；且上游是**三键**（存/不存/取消），
+/// 本仓按 B2 审计倾向先做**两态**（本键 + [`TAB_CLOSE_CONFIRM_CANCEL`]），**待用户拍板**。
+pub const TAB_CLOSE_CONFIRM_OK: &str = "继续关闭"; // EN: Close anyway
+
+/// 关闭脏标签确认态的两个选项之二：**取消**（不关，标签与改动都留着）。
+///
+/// ⚠ 上游无对应物（同 [`TAB_CLOSE_CONFIRM_OK`] 的登记）。
+pub const TAB_CLOSE_CONFIRM_CANCEL: &str = "取消"; // EN: Cancel
+
 /// 切换标签失败（越界等）时的 stderr 诊断（R12-F3 B 段）。
 ///
 /// 为什么会有这条：标签条的命中下标来自**本帧刚算出的**矩形，
@@ -2584,6 +2607,9 @@ pub const ALL: &[(&str, &str)] = &[
     // `清单覆盖所有常量` 都会一起扫到，等入口落地时不必再补一条。
     ("TAB_TITLE_UNTITLED_TMPL", TAB_TITLE_UNTITLED_TMPL),
     ("TAB_CLOSE", TAB_CLOSE),
+    ("TAB_CLOSE_CONFIRM_TMPL", TAB_CLOSE_CONFIRM_TMPL),
+    ("TAB_CLOSE_CONFIRM_OK", TAB_CLOSE_CONFIRM_OK),
+    ("TAB_CLOSE_CONFIRM_CANCEL", TAB_CLOSE_CONFIRM_CANCEL),
     ("DIAG_TAB_ACTIVATE_FAIL", DIAG_TAB_ACTIVATE_FAIL),
     ("ZOOM_MINUS", ZOOM_MINUS),
     ("ZOOM_PCT_TMPL", ZOOM_PCT_TMPL),
@@ -2887,6 +2913,9 @@ mod tests {
             ("TAB_TITLE_DIRTY_TMPL", TAB_TITLE_DIRTY_TMPL),
             ("TAB_TITLE_UNTITLED_TMPL", TAB_TITLE_UNTITLED_TMPL),
             ("TAB_CLOSE", TAB_CLOSE),
+            ("TAB_CLOSE_CONFIRM_TMPL", TAB_CLOSE_CONFIRM_TMPL),
+            ("TAB_CLOSE_CONFIRM_OK", TAB_CLOSE_CONFIRM_OK),
+            ("TAB_CLOSE_CONFIRM_CANCEL", TAB_CLOSE_CONFIRM_CANCEL),
             ("DIAG_TAB_ACTIVATE_FAIL", DIAG_TAB_ACTIVATE_FAIL),
             ("ZOOM_MINUS", ZOOM_MINUS),
             ("ZOOM_PCT_TMPL", ZOOM_PCT_TMPL),

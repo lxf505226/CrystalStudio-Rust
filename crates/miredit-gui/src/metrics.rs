@@ -508,6 +508,38 @@ pub const ZOOM_SIGN_FONT: f32 = 13.0;
 /// 页签标题距页签左边 11（截图 `Untitled 1` 文字起 x=175，页签左 x=164）。
 pub const TAB_TITLE_INSET: f32 = 11.0;
 
+/// 关闭符命中盒的**左右内边距 4** —— 上游 `MainWindow.MapTabs.cs:57`
+/// `new Button { Content = "\u00d7", Padding = new Thickness(4, 0, 4, 0), … }`
+/// ⇒ 左 4 / 上 0 / **右 4** / 下 0（B2 单，2026-11-08）。
+///
+/// 上下为 0 ⇒ 上游按钮的**高度 = 字形行高**（垂直方向靠默认模板的
+/// `VerticalContentAlignment=Center`，`EditorControls.axaml:8`，在 30px 标签内居中）。
+pub const TAB_CLOSE_PAD: f32 = 4.0;
+
+/// 关闭符 `×` 在 [`TAB_FONT`]（11）下的**排版 advance = 7.34375**。
+///
+/// ⚠ **上游不可得**：上游是 Avalonia + `Segoe UI`（`App.axaml:83` 的 `FontFamily`），
+/// 字形宽由那套字体决定，仓里没有它的度量表 ⇒ 无法逐字抄。
+/// 本值取**本仓实际上屏字体**（`fonts::FONT_CANDIDATES[0]` = 等线 `Deng.ttf`）
+/// 在 11px 下的 `layout_no_wrap("×")` 实测值（2026-11-08 实测输出 `GLYPH_W=7.34375`；
+/// 用例 `关闭符命中盒宽度按字形advance加上游内边距` 把它钉死在 0.01 容差内，
+/// 换字体或改 [`TAB_FONT`] 会立刻变红）。
+///
+/// 7.34375 = 7 + 11/32，二进制可精确表示，不是截断值。
+pub const TAB_CLOSE_GLYPH_W: f32 = 7.343_75;
+
+/// 关闭符 `×` 在 [`TAB_FONT`]（11）下的**字形行高 = 11**（= 字号本身）。
+///
+/// 与 [`TAB_CLOSE_GLYPH_W`] 同一次实测（`layout_no_wrap("×")` 的 `size().y = 11.0`）。
+/// 上游 `Padding=(4,0,4,0)` 的上下是 0 ⇒ 上游那个 `Button` 的**高度就是它**（11），
+/// 再靠默认模板的 `VerticalContentAlignment=Center`（`EditorControls.axaml:8`）
+/// 在 30px 标签内垂直居中 ⇒ 悬停底的绘制盒 = 15.34375 × 11。
+pub const TAB_CLOSE_GLYPH_H: f32 = 11.0;
+
+/// 关闭符悬停底的圆角 **5** —— 上游 `EditorControls.axaml:9` 的 `Border#Chrome`
+/// `CornerRadius="5"`（`QuietButton` 经 `BasedOn` 继承同一个模板，见 `:17`）。
+pub const TAB_CLOSE_RADIUS: f32 = 5.0;
+
 // ───────────────────────── 中列：地图列表面板（2026-11-05，上游 901dbe2f 移植） ─────────
 //
 // 为什么这一组不在截图里：`crystalstudio-main-runtime-1500x950.png` 是 `901dbe2f` **之前**

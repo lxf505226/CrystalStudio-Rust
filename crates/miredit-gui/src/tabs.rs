@@ -384,17 +384,8 @@ impl Tabs {
     ///   所有文档都从 `.map` 文件装载 ⇒ 恒有 `Path`。文案真值已备在
     ///   [`crate::ui_text::TAB_TITLE_UNTITLED_TMPL`]，等入口落地时直接用，别另写格式。
     pub fn 显示信息(&self, app: &MireditApp, i: usize) -> Option<TabInfo> {
-        if i >= self.items.len() {
-            return None;
-        }
-        let (name, dirty) = if i == self.active {
-            let d = app.doc.doc.as_ref()?;
-            (d.file_name.clone(), app.edit.dirty())
-        } else {
-            let t = &self.items[i];
-            let d = t.doc.doc.as_ref()?;
-            (d.file_name.clone(), t.edit.dirty())
-        };
+        let name = self.name_of(app, i)?;
+        let dirty = self.dirty_of(app, i)?;
         let tmpl = if dirty {
             crate::ui_text::TAB_TITLE_DIRTY_TMPL
         } else {
@@ -405,6 +396,85 @@ impl Tabs {
             tmpl,
             dirty,
         })
+    }
+
+    /// **第 `i` 张标签的文件名**（**不带**脏标记）。
+    ///
+    /// 取值口径与 [`Self::显示信息`] **同一处**（活跃读 `app.doc`、非活跃读快照，
+    /// 越界/无文档 ⇒ `None`），只是不拼 `" *"` —— 关闭确认框里已经写了
+    /// 「有未保存的修改」（[`crate::ui_text::TAB_CLOSE_CONFIRM_TMPL`]），再带星号是重复。
+    pub fn name_of(&self, app: &MireditApp, i: usize) -> Option<String> {
+        if i >= self.items.len() {
+            return None;
+        }
+        if i == self.active {
+            Some(app.doc.doc.as_ref()?.file_name.clone())
+        } else {
+            Some(self.items[i].doc.doc.as_ref()?.file_name.clone())
+        }
+    }
+
+    /// **第 `i` 张标签有没有未保存修改** —— 只读，不写任何业务逻辑。
+    ///
+    /// # 上游真值（逐条，2026-11-08 实读 `_upstream/CrystalStudio/`）
+    ///
+    /// `MainWindow.MapTabs.cs:119`
+    /// ```csharp
+    /// bool dirty = map.CategoryDirty || (ReferenceEquals(map, activeMap) ? Viewport.History.Dirty : map.State.History.Dirty);
+    /// ```
+    /// ⇒ 判据是「**活跃那张**读 `Viewport.History.Dirty`（= 本仓 `app.edit`），
+    /// **非活跃那张**读它自己快照里的 `State.History.Dirty`（= 本仓 `items[i].edit`）」。
+    /// 这与本模块的**稳态契约**逐字对应（活跃槽是占位、真值常驻 `app.*`）。
+    ///
+    /// ⚠ **上游有本仓无**：`map.CategoryDirty`（印章分类被改脏）在本仓**没有对应物**
+    /// （没有"印章分类编辑"这条链）⇒ 本函数**只算 `History.Dirty` 那一支**，
+    /// 不造空字段冒充（见回执「上游有本仓无」）。
+    ///
+    /// `i` 越界 ⇒ `None`（**不 panic、不编一个 `false` 出来**；调用方必须自己决定
+    /// 越界时怎么办，不许被一个假 `false` 骗成"这张干净"）。
+    pub fn dirty_of(&self, app: &MireditApp, i: usize) -> Option<bool> {
+        if i >= self.items.len() {
+            return None;
+        }
+        Some(if i == self.active {
+            // 活跃标签的真值常驻宿主（稳态契约）——绝不读 `items[active]` 占位槽。
+            app.edit.dirty()
+        } else {
+            self.items[i].edit.dirty()
+        })
+    }
+
+    /// **全部标签里有没有任何一张脏**（含活跃那张）。
+    ///
+    /// # 上游真值：整窗关闭必须遍历**所有**标签
+    ///
+    /// `MainWindow.axaml.cs:424-430`（`OnClosing`）
+    /// ```csharp
+    /// foreach (var tab in mapTabs.Items.Cast<TabItem>().ToArray())
+    /// {
+    ///     var map = (OpenMapTab)tab.Tag;
+    ///     if (!map.CategoryDirty && !(ReferenceEquals(map, activeMap) ? Viewport.History.Dirty : map.State.History.Dirty)) continue;
+    ///     mapTabs.SelectedItem = tab;
+    ///     if (!ConfirmDiscard()) { e.Cancel = true; return; }
+    /// }
+    /// ```
+    /// ⇒ 上游**逐张**判脏、任一脏就拦；本仓的判据就是本函数（P1 数据丢失的修复点：
+    /// 旧实现只看 `app.edit.dirty()` 一份，切到净标签 A 再改脏 B、直接关窗 ⇒ B 静默丢改动）。
+    ///
+    /// ⚠ 上游那段"逐张选中 + 逐张确认"的**逐个排队**不在本单：本仓先做"任一张脏就拦一次"，
+    /// 见回执「待用户拍板」。
+    pub fn any_dirty(&self, app: &MireditApp) -> bool {
+        (0..self.items.len()).any(|i| self.dirty_of(app, i) == Some(true))
+    }
+
+    /// **脏标签的下标（升序）** —— 供后续单做「逐个确认」排队。
+    ///
+    /// 与 [`Self::any_dirty`] **同一条判据**（都走 [`Self::dirty_of`]），不另立一套；
+    /// 越界项不可能出现（下标来自 `0..len`）。
+    pub fn dirty_indices(&self, app: &MireditApp) -> Vec<usize> {
+        (0..self.items.len())
+            .filter(|&i| self.dirty_of(app, i) == Some(true))
+            .collect()
     }
 }
 
@@ -930,6 +1000,51 @@ mod tests {
         };
         assert!(e2.contains("越界"), "实得：{e2}");
         let _ = std::fs::remove_file(&图);
+    }
+
+    /// ⑩ `dirty_of` 三态：活跃读 `app.edit`、非活跃读快照、越界 `None`；
+    /// `any_dirty` / `dirty_indices` 与它**同一条判据**（整窗关闭的 P1 修复就靠这一处）。
+    #[test]
+    fn dirty_of_活跃非活跃越界三态() {
+        let 图a = 临时图("dirty_a");
+        let 图b = 临时图("dirty_b");
+        // 摆位故意"两个来源相反"：活跃 A **净**、快照 B **脏**。
+        let mut app = 建应用(&图a, false, "dirty_host");
+        assert!(!app.edit.dirty(), "夹具：活跃标签 A 必须净");
+        let b = 造槽(&图b, true, "dirty_b");
+        assert!(b.edit.dirty(), "夹具：快照 B 必须脏");
+        let mut tabs = Tabs::new(TabState::占位());
+        tabs.push(b);
+
+        assert_eq!(tabs.dirty_of(&app, 0), Some(false), "活跃标签读 app.edit");
+        assert_eq!(tabs.dirty_of(&app, 1), Some(true), "非活跃标签读 items[i].edit");
+        assert_eq!(
+            tabs.dirty_of(&app, 2),
+            None,
+            "越界必须 None（不许编一个假 false 出来骗调用方）"
+        );
+        assert_eq!(tabs.dirty_of(&app, usize::MAX), None);
+        assert!(tabs.any_dirty(&app), "有一张脏 ⇒ any_dirty 必须为真");
+        assert_eq!(tabs.dirty_indices(&app), vec![1], "脏下标必须是 [1]");
+
+        // 切到 B 之后两个来源对调：判据必须跟着换（活跃读 app.*，快照读 items[i]）
+        assert!(tabs.activate(&mut app, 1).is_ok());
+        assert_eq!(tabs.dirty_of(&app, 1), Some(true), "切换后 B 是活跃 ⇒ 读 app.edit");
+        assert_eq!(tabs.dirty_of(&app, 0), Some(false), "切换后 A 是快照 ⇒ 读 items[0].edit");
+        assert!(tabs.any_dirty(&app), "切换不改变「有一张脏」这个事实");
+        assert_eq!(tabs.dirty_indices(&app), vec![1], "切换不改变脏下标");
+
+        // 全净（只有活跃那一张、且它干净）⇒ any_dirty 假、dirty_indices 空
+        let 图c = 临时图("dirty_c");
+        let app2 = 建应用(&图c, false, "dirty_host2");
+        let tabs2 = Tabs::new(TabState::占位());
+        assert_eq!(tabs2.dirty_of(&app2, 0), Some(false));
+        assert!(!tabs2.any_dirty(&app2), "全净 ⇒ any_dirty 必须为假");
+        assert!(tabs2.dirty_indices(&app2).is_empty());
+
+        let _ = std::fs::remove_file(&图a);
+        let _ = std::fs::remove_file(&图b);
+        let _ = std::fs::remove_file(&图c);
     }
 
     /// ⑨ `find_by_path` 命中（含活跃标签）/ 未命中 None。
