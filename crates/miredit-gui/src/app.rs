@@ -206,6 +206,15 @@ pub struct MireditApp {
     /// 区别只有一处：它的合成在**工作线程**里跑（整图三层合成动辄几百毫秒，
     /// 放 UI 线程就是卡死 —— 见 [`crate::minimap_job`] 模块文档）。
     pub minimap: MinimapJob,
+    /// 小地图**拖拽中**的抓取偏移（世界像素坐标系，上游 `MapMinimap.Avalonia.cs:81-83`）。
+    ///
+    /// `Some` = 已在小地图上按下、正在拖；`None` = 没在拖。
+    /// 偏移在**按下瞬间**算一次：落在视口框内 ⇒ 记「该点 − 视口中心」，否则记 `(0,0)`
+    /// （= 让该点直接居中）。之后拖动每帧都用**同一个**偏移 ⇒ 视口不会跳到指针下。
+    ///
+    /// ⚠ 为什么必须存状态、不能每帧重判 `Contains`：否则「在地图区外按下、拖进区里」
+    /// 会被半路接管；上游是**捕获**语义（按下就归它，直到释放）。
+    minimap_drag: Option<(f32, f32)>,
     /// 编辑会话（工具 / 笔刷 / 撤销重做 / 脏标记）。
     pub edit: EditSession,
     /// 素材面板（真图库枚举 / 缩略图缓存 / 虚拟滚动 / 搜索）。
@@ -654,6 +663,7 @@ impl MireditApp {
             view,
             // 小地图总览纹理的后台任务：缺省 Idle（第一帧 `ensure_minimap` 才发起）
             minimap: MinimapJob::default(),
+            minimap_drag: None,
             edit,
             palette,
             stamps: StampPanel::new(),
@@ -888,6 +898,109 @@ impl MireditApp {
         //    「缩略图生成中…」（与 `stamp_panel` 装载期、`maplist` 扫描期同一条纪律）。
         if self.minimap.pending() {
             ctx.request_repaint();
+        }
+    }
+
+    /// **小地图交互**：点击居中 / 拖拽 / 滚轮缩放（F-R13-1 **C 段**，2026-11-07）。
+    ///
+    /// # 上游语义（`MapMinimap.Avalonia.cs:78-92`，逐条对）
+    ///
+    /// | 行为 | 上游 | 本实现 |
+    /// |---|---|---|
+    /// | 按下接管 | 忽略四项：`!IsEnabled` / 无 `Viewport` / `!MapBounds.Contains` / 非左键 | `--shot` 等自动化模式已被 [`Self::interact`] 开头的 `input_locked()` 拦掉；无图/无地图区 ⇒ 整段跳过；`primary_pressed` + `map_rect.contains` |
+    /// | 抓取偏移 | `Visible.Contains(world) ? world − Visible.Center : (0,0)` | [`Self::minimap_drag`]；「视口框」按**世界**矩形算（`mini.view` × 48/32），与上游 `VisibleWorldBounds` 同义 |
+    /// | 拖动 | `CenterOnWorld(WorldAt(当前) − grab)` | 同（同一个 `grab`，**不每帧重判 Contains**） |
+    /// | 释放 | 停止 | `primary_released` 或 `!primary_down` ⇒ 清 `minimap_drag` |
+    /// | 滚轮 | `Zoom × 1.15 / ÷1.15`，绕**画布中心** | [`CanvasView::zoom_at`]（锚点 = `l.viewport.center()`） |
+    ///
+    /// # 与上游的差异（如实登记，不静默）
+    ///
+    /// 缩放夹取：上游 `Clamp(zoom, FitZoom, 1)` —— **下限是动态 `FitZoom`**（可低到 0.0x），
+    /// 上限 1；本仓固定 `[0.25, 4]`（`metrics::CANVAS_MIN_SCALE/MAX_SCALE`，由 `zoom_at`
+    /// 内部夹取）。这是**语义差异**、不只是数值差异；滚轮沿用本仓域，**不改缩放下限**。
+    ///
+    /// 只动视口：**不改选区、不改工具、不改 `armed`、不碰地图**（上游此处也只 `CenterOnWorld`）。
+    fn minimap_interact(&mut self, ui: &mut egui::Ui, l: &Layout) {
+        // 无图 ⇒ 一律不响应（上游 `Viewport == null` 的同义）
+        let Some((mw, mh)) = self.doc.doc.as_ref().map(|d| d.size()) else {
+            self.minimap_drag = None;
+            return;
+        };
+        let mini = dock_right::MiniMap::new(Some((mw, mh)), self.view.visible_cells(l.viewport));
+        let Some((map_rect, _vb)) =
+            dock_right::minimap_rects(dock_right::minimap_block_rect(l), &mini)
+        else {
+            self.minimap_drag = None;
+            return;
+        };
+        let world = (
+            f32::from(mw) * m::CELL_W,
+            f32::from(mh) * m::CELL_H,
+        );
+        // 视口框的**世界**矩形：上游判 `Visible.Contains(world)` 用的是世界坐标，
+        // 不是屏幕矩形（屏幕矩形只用于画）。两者别混。
+        let vis = egui::Rect::from_min_size(
+            egui::pos2(
+                mini.view.0 as f32 * m::CELL_W,
+                mini.view.1 as f32 * m::CELL_H,
+            ),
+            egui::vec2(
+                mini.view.2 as f32 * m::CELL_W,
+                mini.view.3 as f32 * m::CELL_H,
+            ),
+        );
+        let (pos, pressed, down, released, scroll) = ui.input(|i| {
+            (
+                i.pointer.hover_pos(),
+                i.pointer.primary_pressed(),
+                i.pointer.primary_down(),
+                i.pointer.primary_released(),
+                // 滚轮用 **raw**（不是 `smooth_scroll_delta`）：缩放是**离散步进**
+                // （上游 `×1.15` 一次一格），要的就是"这一帧滚了几格"；`smooth` 是给
+                // 列表滚动做惯性用的，拿来缩放会让一次滚轮被摊到多帧 ⇒ 缩放量随帧率变
+                // （也就不用想「怎么在无头测试里等它摊完」）。
+                i.raw_scroll_delta.y,
+            )
+        });
+        // ① 按下：只在地图区内接管；框内按下 ⇒ 记住「该点 − 视口中心」，拖动时视口不跳
+        if pressed {
+            if let Some(p) = pos {
+                if map_rect.contains(p) {
+                    let w = dock_right::minimap_world_at(p, map_rect, world);
+                    let grab = if vis.contains(egui::pos2(w.0, w.1)) {
+                        (w.0 - vis.center().x, w.1 - vis.center().y)
+                    } else {
+                        (0.0, 0.0)
+                    };
+                    self.minimap_drag = Some(grab);
+                    self.view
+                        .center_on_world(l.viewport, (w.0 - grab.0, w.1 - grab.1), world);
+                    ui.ctx().request_repaint();
+                    return;
+                }
+            }
+        }
+        // ② 拖拽：只要还按着，就用**同一个** grab 跟随（捕获语义，不重判 `Contains`）
+        if let Some(grab) = self.minimap_drag {
+            if released || !down {
+                self.minimap_drag = None;
+            } else if let Some(p) = pos {
+                let w = dock_right::minimap_world_at(p, map_rect, world);
+                self.view
+                    .center_on_world(l.viewport, (w.0 - grab.0, w.1 - grab.1), world);
+                ui.ctx().request_repaint();
+                return;
+            }
+        }
+        // ③ 滚轮：只在地图区内；绕**画布中心**缩放（上游 `:89-92` + `MapViewport.cs:180-187`）
+        if scroll != 0.0 {
+            if let Some(p) = pos {
+                if map_rect.contains(p) {
+                    let factor = if scroll > 0.0 { 1.15 } else { 1.0 / 1.15 };
+                    self.view.zoom_at(l.viewport, l.viewport.center(), factor);
+                    ui.ctx().request_repaint();
+                }
+            }
         }
     }
 
@@ -3468,6 +3581,12 @@ impl MireditApp {
             }
         }
 
+        // ③d **小地图交互**（F-R13-1 C 段）：点击居中 / 拖拽 / 滚轮缩放。
+        //     面板隐藏时整段跳过（看不见的小地图不该还能点）。
+        if self.panels.get(PanelId::Minimap) {
+            self.minimap_interact(ui, l);
+        }
+
         // ④ 10 个工具按钮（点哪个就切哪个；未接线的工具照样能选，只是落格无效果）
         //    ⚠ 工具面板隐藏时整段跳过（看不见的按钮不该还能点）。
         if self.panels.get(PanelId::Tools) {
@@ -4160,6 +4279,168 @@ mod tests {
         assert!(
             app.minimap.pending(),
             "夹具失效：后台在这一帧里就落定了（那就测不到「生成中」这条路径）"
+        );
+    }
+
+    // ───────────────────── 小地图交互（F-R13-1 C 段，2026-11-07） ─────────────────────
+
+    /// 世界点 → 小地图**地图区**里的屏幕坐标（[`dock_right::minimap_world_at`] 的反算）。
+    ///
+    /// 必须走 `minimap_rects`（与**绘制**、与**交互**同一份几何），否则测的就不是
+    /// 运行时那条路径 —— 自己另算一份矩形＝自测自。
+    fn 小地图屏幕点(l: &crate::layout::Layout, app: &MireditApp, 世界: (f32, f32)) -> egui::Pos2 {
+        let (mw, mh) = app.doc.doc.as_ref().expect("夹具要有图").size();
+        let mini = dock_right::MiniMap::new(Some((mw, mh)), app.view.visible_cells(l.viewport));
+        let (map_rect, _) = dock_right::minimap_rects(dock_right::minimap_block_rect(l), &mini)
+            .expect("夹具：有地图就该有地图区");
+        let world = (f32::from(mw) * m::CELL_W, f32::from(mh) * m::CELL_H);
+        egui::pos2(
+            map_rect.left() + 世界.0 / world.0 * map_rect.width(),
+            map_rect.top() + 世界.1 / world.1 * map_rect.height(),
+        )
+    }
+
+    /// 夹具：200×200 格 + `scale=0.25` ⇒ 视口（约 3948×3260 世界像素）**小于**整图
+    /// （9600×6400）⇒ 走 clamp 分支。**刻意不选小图**：图比视口小时 `center_on_world`
+    /// 恒把图居中，点哪都一样，用例就没有分辨力了。
+    fn 小地图交互夹具() -> (MireditApp, crate::layout::Layout) {
+        let mut app = 尺寸应用(200, 200);
+        app.view.scale = 0.25;
+        app.view.pan_x = 1000.0;
+        app.view.pan_y = 800.0;
+        app.panels.set(PanelId::Minimap, true);
+        let l = 测试布局();
+        (app, l)
+    }
+
+    /// **框内按下 ⇒ 保持抓取偏移，视口不跳**（上游 `:81-83` 的 grab 语义）。
+    ///
+    /// 判据选在「点视口中心」：grab = 0 ⇒ 目标点就是视口中心 ⇒ 视口原地不动。
+    /// 若实现漏了 grab（直接居中到指针下），`pan` 会立刻变 ⇒ 本条红。
+    #[test]
+    fn 小地图点击视口框内不跳() {
+        let (mut app, l) = 小地图交互夹具();
+        let ctx = egui::Context::default();
+        let half = (
+            l.viewport.width() / 2.0 / app.view.scale,
+            l.viewport.height() / 2.0 / app.view.scale,
+        );
+        let 视口中心 = (app.view.pan_x + half.0, app.view.pan_y + half.1);
+        let 前 = (app.view.pan_x, app.view.pan_y);
+        let 前代号 = app.doc.map_gen;
+
+        let p = 小地图屏幕点(&l, &app, 视口中心);
+        点一下(&ctx, &mut app, &l, p);
+
+        // `snap()` 把 `pan*scale` 取整 ⇒ 世界量化步长 = `1/scale`
+        let 容差 = 1.0 / app.view.scale + 0.01;
+        assert!(
+            (app.view.pan_x - 前.0).abs() <= 容差,
+            "框内按下要保持抓取偏移：pan_x {前:?} → {}",
+            app.view.pan_x
+        );
+        assert!(
+            (app.view.pan_y - 前.1).abs() <= 容差,
+            "框内按下要保持抓取偏移：pan_y {前:?} → {}",
+            app.view.pan_y
+        );
+        assert_eq!(app.doc.map_gen, 前代号, "交互只动视口，不许碰地图");
+    }
+
+    /// **框外按下 ⇒ 该点直接居中，并被 clamp 夹到边界**（上游 `:84-86` + `Minimap.cs:36-42`）。
+    ///
+    /// 取世界 `(100,100)`：远在视口框左侧（框 x 从 1000 起）⇒ grab = 0 ⇒ 该点居中；
+    /// 而 `x < half` ⇒ 夹到 `half` ⇒ `pan_x = 0`。若 clamp 漏了会变成**负** `pan`（越界留白）。
+    #[test]
+    fn 小地图点击框外让该点居中并被夹到边界() {
+        let (mut app, l) = 小地图交互夹具();
+        let ctx = egui::Context::default();
+        let 前代号 = app.doc.map_gen;
+
+        let p = 小地图屏幕点(&l, &app, (100.0, 100.0));
+        点一下(&ctx, &mut app, &l, p);
+
+        let 容差 = 1.0 / app.view.scale + 0.01;
+        assert!(
+            app.view.pan_x.abs() <= 容差,
+            "贴左边点击必须夹到 half ⇒ pan_x≈0（漏 clamp 会是负数），实得 {}",
+            app.view.pan_x
+        );
+        assert!(
+            app.view.pan_y.abs() <= 容差,
+            "贴顶部点击必须夹到 half ⇒ pan_y≈0，实得 {}",
+            app.view.pan_y
+        );
+        assert_eq!(app.doc.map_gen, 前代号, "交互只动视口，不许碰地图");
+    }
+
+    /// **滚轮绕中心缩放 ×1.15 / ÷1.15，且夹在本仓缩放域**。
+    ///
+    /// 域差异要记牢：上游是 `Clamp(zoom, FitZoom, 1)`（**动态**下限），本仓固定
+    /// `[0.25, 4]` —— 语义不同、不只是数值不同（模块文档已写）。
+    #[test]
+    fn 小地图滚轮缩放并夹在本仓缩放域() {
+        let (mut app, l) = 小地图交互夹具();
+        let ctx = egui::Context::default();
+        let 图中心 = 小地图屏幕点(&l, &app, (4800.0, 3200.0));
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(图中心)]);
+
+        let 前 = app.view.scale;
+        let 滚 = |d: f32| {
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, d),
+                modifiers: Default::default(),
+            }
+        };
+        互动一帧(&ctx, &mut app, &l, vec![滚(10.0)]);
+        assert!(
+            (app.view.scale - 前 * 1.15).abs() < 1e-4,
+            "上滚应 ×1.15：{前} → {}",
+            app.view.scale
+        );
+
+        互动一帧(&ctx, &mut app, &l, vec![滚(-10.0)]);
+        assert!(
+            (app.view.scale - 前).abs() < 1e-4,
+            "下滚应 ÷1.15 回到原位：{} → {}",
+            前 * 1.15,
+            app.view.scale
+        );
+
+        // 上限：4.0 再上滚仍 4.0（不是 4.6、不是不响应）
+        app.view.scale = m::CANVAS_MAX_SCALE;
+        互动一帧(&ctx, &mut app, &l, vec![滚(10.0)]);
+        assert!(
+            (app.view.scale - m::CANVAS_MAX_SCALE).abs() < 1e-6,
+            "上限必须夹住：{}",
+            app.view.scale
+        );
+        // 下限：0.25 再下滚仍 0.25
+        app.view.scale = m::CANVAS_MIN_SCALE;
+        互动一帧(&ctx, &mut app, &l, vec![滚(-10.0)]);
+        assert!(
+            (app.view.scale - m::CANVAS_MIN_SCALE).abs() < 1e-6,
+            "下限必须夹住：{}",
+            app.view.scale
+        );
+    }
+
+    /// **`--shot`（锁输入）下小地图一律不响应** —— 与 `interact` 开头的
+    /// `input_locked()` 同一条闸门；截图取证不该被"上一次运行残留的指针"改变结果。
+    #[test]
+    fn 截图模式小地图不响应交互() {
+        let (mut app, l) = 小地图交互夹具();
+        app.auto.shot = Some(std::env::temp_dir().join("miredit-shot-minimap-nointeract.png"));
+        let ctx = egui::Context::default();
+        let 前 = (app.view.pan_x, app.view.pan_y, app.view.scale);
+
+        let p = 小地图屏幕点(&l, &app, (100.0, 100.0));
+        点一下(&ctx, &mut app, &l, p);
+        assert_eq!(
+            (app.view.pan_x, app.view.pan_y, app.view.scale),
+            前,
+            "--shot 下小地图不许响应（否则截图依赖「鼠标在哪」）"
         );
     }
 
