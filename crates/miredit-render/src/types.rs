@@ -392,7 +392,7 @@ impl Default for LayerMask {
 ///
 /// 1. 不自己生成衰减曲线 —— 只解码官方 `assets/lights/*.png`；
 /// 2. 不微调 `205 / 0 / 255` —— 官方字面量 + 注释双证自洽；
-/// 3. 不给三档加过渡动画 —— 官方是三个互斥 `CheckBox`（`MainWindow.axaml.cs:626-633`）。
+/// 3. 不给三档加过渡动画 —— 官方是三个互斥 `CheckBox`（`MainWindow.axaml.cs:676-683`）。
 ///
 /// 缓存键：与 `doors_open` 同理，**`lighting` 也必须并进调用方的视口缓存键**
 /// （官方把 `Lighting` 放进 `darknessKey`，`Presentation.cs:65`）。

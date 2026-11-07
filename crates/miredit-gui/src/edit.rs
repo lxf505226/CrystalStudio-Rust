@@ -686,12 +686,16 @@ impl EditSession {
     /// 切层会立刻重算「族不匹配」提示：上一层的笔刷很可能配不上新层，
     /// 那种情况下状态栏应当**马上**说出来，而不是等用户点下去才发现没反应。
     ///
-    /// ⚠ **工具纠正不在这里做**：判据要同时看「槽位」与「层」，而槽位（`selected_tool`）
-    /// 的真源在宿主 [`crate::app::MireditApp`]（`EditSession` 只认内核 `Tool`，看不见
-    /// 选择/印章这两个宿主工具）。所以纠正由 [`纠正工具`] 给判据、由宿主的单一入口
-    /// `MireditApp::换层并纠正` 施加（CLI `--layer` 与左侧面板点行都走它）。
-    /// 返回 `Some(槽位)` ⇒ 这次换层**纠正了工具**（判据见 [`纠正工具`]），调用方要据此
-    /// 同步自己的镜像（`selected_tool`）并可以说一句回执；`None` ⇒ 工具没动。
+    /// **工具纠正就在本函数里完成**（判据见 [`纠正工具`]，上游 `MainWindow.axaml.cs:648-657`）：
+    /// 槽位真源是 `self.slot`（[`Self::slot`]），所以这里既拿得到"当前工具是谁"，
+    /// 也知道"新层允不允许它"—— `--layer`、左侧面板点行、`Command::SetLayer` 三条入口
+    /// 因此天然同一判据（后两者见 `apply_cmd_in` 的拦截）。
+    ///
+    /// 宿主 [`crate::app::MireditApp`] 只负责两件"看得见的"事：**回填**它的
+    /// `selected_tool` 镜像（画工具条高亮用）与**清交互状态**（`armed` / `sel_drag`），
+    /// 判据一行都不重复。
+    ///
+    /// 返回 `Some(槽位)` ⇒ 这次换层**纠正了工具**，调用方据此回填镜像并回执；`None` ⇒ 工具没动。
     pub fn set_layer(&mut self, layer: EditLayer) -> Option<usize> {
         self.core.set_layer(layer);
         // 上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged`：不兼容就强制切铅笔。

@@ -217,7 +217,7 @@ pub const LIGHT: Palette = Palette {
     // 画布底层。截图 (300,200)-(600,400) 区域直方图：`#EFF2F5` 占 89.3%。
     canvas_bg: Color32::from_rgb(0xEF, 0xF2, 0xF5),
     // 状态栏。截图 (200,916)-(1100,936) 区域直方图：`#F7F8F9` 占 100.0%。
-    //   官方角色：`MainWindow.axaml:81` `<Border Grid.Row="4" Background="{DynamicResource Theme171B22}"
+    //   官方角色：`MainWindow.axaml:84` `<Border Grid.Row="4" Background="{DynamicResource Theme171B22}"
     //   BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">` —— `Grid.Row="4"` 就是**状态栏**
     //   （同一行里还有 `Status` / `Coordinates` / `LibraryDot` 三个状态控件）；
     //   键定义 `App.axaml:5` `Theme171B22` = `#171B22`。
@@ -346,7 +346,7 @@ pub const DARK: Palette = Palette {
     //       ⇒ 深色下 `title_bar` 与 `view_surround` **同键同值**，不是漏抄。
     //       浅色侧**不是**这个键的变换：`#604715` 是截图里 DWM 按系统强调色画的标题栏
     //       （(300,6)-(1200,26) 直方图 100%），官方应用资源里没有金色标题栏 ⇒ 两套本来就不对称。
-    //       ⚠ 旧值 `#171B22` 是**状态栏**色（`MainWindow.axaml:81`）⇒ 借错了角色，本次归位。
+    //       ⚠ 旧值 `#171B22` 是**状态栏**色（`MainWindow.axaml:84`）⇒ 借错了角色，本次归位。
     //       旁证（浅色闭环）：`Theme14171D` 按 `ThemeService.Avalonia.cs:47` 变换 = `#F9FAFB`
     //       = 本文件 `LIGHT.view_surround`（算式同 `LIGHT.status_bar`，已入 `官方浅色变换可复算`）。
     //
@@ -375,13 +375,13 @@ pub const DARK: Palette = Palette {
     //       `resources["CanvasPaper"] = dark ? Color.FromRgb(31, 37, 43) : Color.FromRgb(239, 242, 245)`
     //       ⇒ 深色 = (31,37,43) = `#1F252B`（浅色那半正是本文件 `LIGHT.canvas_bg` 的 `#EFF2F5`，闭环可验）。
     canvas_bg: Color32::from_rgb(0x1F, 0x25, 0x2B),
-    // 官方: MainWindow.axaml:81 `<Border Grid.Row="4" Background="{DynamicResource Theme171B22}"
+    // 官方: MainWindow.axaml:84 `<Border Grid.Row="4" Background="{DynamicResource Theme171B22}"
     //       BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">` —— `Grid.Row="4"` = **状态栏**
     //       （同行还有 `Status` / `Coordinates` / `LibraryDot` 三个状态控件）；键定义 `App.axaml:5`。
     //       ⇒ 深色 = `#171B22`，**比 `Panel`（`#1C2028`）暗一档**。
     //       旧值 `#1C2028` 抄的是 `Panel`（面板体 / 工具栏 / 菜单条，`App.axaml:8` +
     //       `ThemeService.Avalonia.cs:50` `resources["Panel"] = Brush("Theme1C2028")`，
-    //       消费点 `MainWindow.axaml:5/6/8/24`）⇒ 深色下状态栏与面板同色，丢掉官方那条更暗的横带。
+    //       消费点 `MainWindow.axaml:5/6/8/27`）⇒ 深色下状态栏与面板同色，丢掉官方那条更暗的横带。
     //       浅色侧按 `:47` 现算 = `#F7F8F9`，与截图直方图逐字节相同（算式见 `LIGHT.status_bar`）。
     status_bar: Color32::from_rgb(0x17, 0x1B, 0x22),
 
@@ -456,7 +456,7 @@ pub const DARK: Palette = Palette {
     // 官方: CollisionMarkers.cs:7 `Color.FromArgb(90, 65, 165, 245)` —— 同上，主题无关常量，与 LIGHT 同值。
     //       预乘（截断）: 65×90/255=22.9→22、165×90/255=58.2→58、245×90/255=86.5→86。
     collision_high_mark: rgba_pm(22, 58, 86, 90),
-    // 官方: MainWindow.axaml:81 `<Ellipse x:Name="LibraryDot" … Fill="{DynamicResource ThemeD1AD77}"/>`
+    // 官方: MainWindow.axaml:84 `<Ellipse x:Name="LibraryDot" … Fill="{DynamicResource ThemeD1AD77}"/>`
     //       （键定义 App.axaml:65）⇒ 状态圆点是**金/琥珀档** `#D1AD77`。
     //       旧值 `#E5E9F0` 抄的是 Window Foreground 文字色 ⇒ 圆点与旁边的 `Muted` 文字同色、
     //       失去"状态指示"的视觉区分（浅色侧 `#434D5A` 正是 `ThemeD1AD77` 的官方浅色变换，闭环可验）。
@@ -675,7 +675,7 @@ mod tests {
     /// `Blend(White, #A3ADB9, clamp(L*1.4-0.07, 0, 0.65))`。
     ///
     /// 2026-11-05 增补两个键（都是本轮订正过的角色，用**公式**而不是注释钉住）：
-    /// - `Theme171B22` → `LIGHT.status_bar`：证明状态栏源键是 `MainWindow.axaml:81` 那一行；
+    /// - `Theme171B22` → `LIGHT.status_bar`：证明状态栏源键是 `MainWindow.axaml:84` 那一行；
     /// - `Theme14171D` → `LIGHT.view_surround`：证明 `DARK.title_bar` 取的窗口外框键真实存在
     ///   （`App.axaml:83` `Selector="Window"` 的 `Background`）。
     #[test]
@@ -702,7 +702,7 @@ mod tests {
             ([0x30, 0x36, 0x40], LIGHT.separator, "separator"),
             ([0x25, 0x2C, 0x38], LIGHT.input_bg, "input_bg"),
             ([0x14, 0x18, 0x1F], LIGHT.input_search_bg, "input_search_bg"),
-            // 状态栏：`MainWindow.axaml:81` 的 `Theme171B22`（浅色由公式算出，与截图直方图逐字节相同）。
+            // 状态栏：`MainWindow.axaml:84` 的 `Theme171B22`（浅色由公式算出，与截图直方图逐字节相同）。
             ([0x17, 0x1B, 0x22], LIGHT.status_bar, "status_bar"),
             // 窗口外框：`App.axaml:83` `Selector="Window"` 的 `Theme14171D`（= `DARK.title_bar` 的源键）。
             ([0x14, 0x17, 0x1D], LIGHT.view_surround, "view_surround"),

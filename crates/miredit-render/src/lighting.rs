@@ -9,10 +9,10 @@
 //!
 //! | # | 位置（CrystalStudio） | 关键代码 | 本模块对应 |
 //! |---|---|---|---|
-//! | 1 | `MapViewport.cs:89` | `DarknessVisible => Lighting != MapLighting.Day` | [`MapLighting::Day`] ⇒ [`apply`] **直接返回**，一个字节都不碰 |
+//! | 1 | `MapViewport.cs:93` | `DarknessVisible => Lighting != MapLighting.Day` | [`MapLighting::Day`] ⇒ [`apply`] **直接返回**，一个字节都不碰 |
 //! | 2 | `MapViewport.Presentation.cs:34-35` | `dc.DrawImage(DarknessMask(), …)` | `Canvas::apply_black_mask` |
-//! | 3 | `MapViewport.Presentation.cs:70` | `DawnDusk => 205, Day => 0, _ => 255` | [`MapLighting::darkness`] |
-//! | 4 | `MapViewport.Presentation.cs:87-93` | `pixels[i] = Math.Max(0, pixels[i] - texture.Pixels[…])` | `叠加光源` 的 `saturating_sub` |
+//! | 3 | `MapViewport.Presentation.cs:77` | `byte darkness = Lighting switch { DawnDusk => 205, Day => 0, _ => 255 }`（同函数 `:70-71` 是上游**长边 1536 降采样**，本仓 1:1 —— 见 §二·补） | [`MapLighting::darkness`] |
+//! | 4 | `MapViewport.Presentation.cs:94-100`（关键行 `:99`） | `pixels[i] = Math.Max(0, pixels[i] - texture.Pixels[…])` | `叠加光源` 的 `saturating_sub` |
 //! | 5 | `MapPreview.cs:14-15` | `EmitsLight` = `Light ∈ 1..9` **且**有前景图 | [`emits_light`] |
 //! | 6 | `MapPreview.cs:17-19` | 11 项 `lightSizes` 表 | [`LIGHT_SIZES`] |
 //! | 7 | `MapPreview.cs:23` | `index = Math.Min(light * 3, 9)` | [`light_bounds`] |
@@ -23,7 +23,7 @@
 //!
 //! | 档 | 环境光 ambient（注释值） | 遮罩 alpha = `255 - ambient` | 代码字面量 |
 //! |---|---:|---:|---|
-//! | [`MapLighting::DawnDusk`] | 50 | **205** | `Presentation.cs:70` `DawnDusk => 205` |
+//! | [`MapLighting::DawnDusk`] | 50 | **205** | `Presentation.cs:77` `DawnDusk => 205` |
 //! | [`MapLighting::Day`] | 255 | **0** | 同左 `Day => 0` |
 //! | [`MapLighting::Night`] | 0 | **255** | 同左 `_ => 255`（默认分支 = Night） |
 //!
@@ -33,12 +33,30 @@
 //! ⚠ **本模块不生成任何衰减曲线**：三张光罩 PNG 是从官方目录**原样拷贝**的
 //! （`assets/lights/{445,685,925}.png`，SHA256 与 `CrystalStudio/CrystalStudio/PreviewLights/`
 //! 逐字节相同），本模块只做「解码 → 取 R → 减 alpha」。**没有 `205/0/255` 以外的任何自定数值**，
-//! 也没有任何三档之间的过渡/动画（官方是三档互斥单选，`MainWindow.axaml.cs:626-633`）。
+//! 也没有任何三档之间的过渡/动画（官方是三档互斥单选，`MainWindow.axaml.cs:676-683`）。
+//!
+//! # 二·补、遮罩**采样分辨率**：上游降采样再拉伸，本仓 1:1（A-005，有意差异）
+//!
+//! 上游 `MapViewport.Presentation.cs:66-71` 的 `DarknessMask()` 先算
+//! `scale = Math.Min(1, 1536 / Math.Max(ActualWidth, ActualHeight))`，
+//! 即**长边超过 1536 就按 1536 降采样**（注释原文："Keep work bounded on large displays.
+//! The smooth light mask does not need one texel per physical pixel"），
+//! 随后 `:35` 的 `dc.DrawImage(DarknessMask(), new Rect(0, 0, ActualWidth, ActualHeight))`
+//! 把这张小图**拉伸**回整个视口。
+//!
+//! 本仓**不做降采样**：遮罩表按**可见区世界像素 1:1** 建（[`apply`] 里的
+//! `vp.pixel_size()`，与画布纹理同尺寸），光罩按帧的 `anchor` 偏移直接叠加。
+//!
+//! ⇒ **有意差异**，但不是数值偏差：`205/0/255` 三档 alpha、11 项 `lightSizes` 表、
+//! `sizes[index]`/`sizes[index+1]` 的定位/贴图错位、光罩 PNG 的 SHA256 全都与官方一致；
+//! 区别只在"遮罩栅格多密"—— 本仓更锐（大屏 / 放大时不会出现上游拉伸后的插值边缘），
+//! 代价是遮罩内存随**可见区**像素数走（与画布纹理同量级，不随整图尺寸增长）。
+//! 不改实现：加 1536 上限只会**降低**画面质量，换不来本仓需要的精度。
 //!
 //! # 三、四条硬口径
 //!
 //! 1. **「白天」= 关**：`darkness == 0` ⇒ [`apply`] 第一行就 `return`，连遮罩都不建
-//!    （照官方 `MapViewport.cs:89` 的短路写，**不造一个恒等系数**）。这也是
+//!    （照官方 `MapViewport.cs:93` 的 `DarknessVisible` 短路写，**不造一个恒等系数**）。这也是
 //!    [`crate::RenderOptions::default()`] 能与改动前**逐字节相同**的来源；
 //! 2. **盖三层、裁在地图矩形内**：本模块在 `compose` 的三层循环**全部结束之后**才跑
 //!    （见 `compose.rs` 的调用点），而离屏画布**本身就是地图矩形**
@@ -95,28 +113,28 @@ use crate::types::{Viewport, CELL_H, CELL_W};
 /// 地图光照档位（官方 `public enum MapLighting { DawnDusk, Day, Night }`，`MapLighting.cs:3`）。
 ///
 /// **默认 = [`MapLighting::Day`]**，与官方两处默认一致：
-/// `MapViewport.cs:88` 的 `Lighting { get; set; } = MapLighting.Day`、
+/// `MapViewport.cs:92` 的 `Lighting { get; set; } = MapLighting.Day`、
 /// `MainWindow.axaml:5` 的 `DayLighting … IsChecked="True"`。
 ///
 /// ⚠ 官方**不持久化**这个选择（`SettingsStore.cs` / `SettingsWindow.cs` 里一处都没有）⇒
 /// 本库同样不做持久化，默认值就是「白天」。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum MapLighting {
-    /// 黎明 / 黄昏：环境光 50 ⇒ 遮罩 alpha **205**（`Presentation.cs:70`）。
+    /// 黎明 / 黄昏：环境光 50 ⇒ 遮罩 alpha **205**（`Presentation.cs:77`）。
     DawnDusk,
-    /// 白天：环境光 255 ⇒ 遮罩 alpha **0** ⇒ **完全不画遮罩**（`MapViewport.cs:89` 短路）。
+    /// 白天：环境光 255 ⇒ 遮罩 alpha **0** ⇒ **完全不画遮罩**（`MapViewport.cs:93` 的 `DarknessVisible` 短路）。
     ///
     /// 这是 [`Default`]，也是「输出与改动前逐字节相同」的那一档。
     #[default]
     Day,
-    /// 夜晚：环境光 0 ⇒ 遮罩 alpha **255**（`Presentation.cs:70` 的 `_ => 255` 默认分支）。
+    /// 夜晚：环境光 0 ⇒ 遮罩 alpha **255**（`Presentation.cs:77` 的 `_ => 255` 默认分支）。
     Night,
 }
 
 impl MapLighting {
     /// 全屏黑色遮罩的 alpha：`255 - 环境光`。
     ///
-    /// 逐值对应官方 `MapViewport.Presentation.cs:70` 的
+    /// 逐值对应官方 `MapViewport.Presentation.cs:77` 的
     /// `Lighting switch { DawnDusk => 205, Day => 0, _ => 255 }`。
     pub const fn darkness(self) -> u8 {
         match self {
@@ -273,6 +291,18 @@ pub const 扫描外扩格数: i32 = 16;
 ///    逐像素 `遮罩 = 遮罩.saturating_sub(强度)`（= 官方 `Math.Max(0, a - i)`）；
 /// 4. 用 `Canvas::apply_black_mask` 把遮罩整幅叠到画布（纯黑源覆盖）。
 ///
+/// # 与上游的采样差异（A-005，有意差异；判据见模块文档 §二·补）
+///
+/// 上游 `DarknessMask()`（`MapViewport.Presentation.cs:66-71`）把遮罩栅格**按长边降到 ≤1536**
+/// 再拉伸回视口；本函数按**可见区世界像素 1:1** 建表（[`Viewport::pixel_size`]）。
+///
+/// - **没有数值差异**：三档 alpha（`205/0/255`）、[`LIGHT_SIZES`] 11 项表、`sizes[index]` 的
+///   定位与 `sizes[index+1]` 的贴图（含那格错位）、光罩 PNG 全都与官方一致；
+/// - **本仓更锐**：大屏/放大时不会出现上游"缩小再拉大"的插值边缘；
+/// - **代价是内存**：遮罩 = 可见区像素数 × 1 字节（与画布纹理同量级，不随整图尺寸增长）；
+/// - 若将来要改成上游那样限 1536，**必须同时**加双线性采样并做**逐像素对照**（在本仓 1:1
+///   结果上取样），否则会引入可见的亮度台阶 —— 那是实现改动，不是文档改动。
+///
 /// # 参数
 ///
 /// - `front_visible`：物件层（表层）是否可见。官方 `Presentation.cs:73` 的
@@ -291,7 +321,7 @@ pub(crate) fn apply(
 ) {
     let darkness = lighting.darkness();
     if darkness == 0 {
-        return; // 白天：连遮罩都不画（官方 `MapViewport.cs:89`）
+        return; // 白天：连遮罩都不画（官方 `MapViewport.cs:93` 的 `DarknessVisible`）
     }
     let Some((宽, 高)) = vp.pixel_size() else {
         return; // 视口本身非法（`compose` 早一步已拒，这里只是不 panic）
