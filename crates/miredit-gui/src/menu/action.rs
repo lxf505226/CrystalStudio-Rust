@@ -377,7 +377,10 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             match selection_ops::apply(cx.edit, &mut d.map, SelCmd::Fill, None) {
                 Some(rec) => Outcome {
                     touched_map: rec.changed > 0,
-                    receipt: Some((rec.text, rec.warn)),
+                    // D-004 拍板①：**填充成功不写「上一次操作」段**（`status_fill` 已说同一件事）；
+                    // 被拒时照写 —— 那时「填充」段是空的，原因只有这一处能说
+                    receipt: selection_ops::写操作回执(SelCmd::Fill, &rec)
+                        .then_some((rec.text, rec.warn)),
                     rebuild_text: true,
                     repaint: true,
                 },

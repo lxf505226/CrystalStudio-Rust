@@ -1564,7 +1564,14 @@ impl MireditApp {
                 ]
             )
         );
-        self.op = Some((rec.text, rec.warn));
+        // D-004 拍板①：选区**填充成功**不写「上一次操作」段（`status_fill` 已经在说同一件事），
+        // 顺手把它清空 —— 上一次操作的旧回执对新这次填充同样不再成立。
+        // 其余命令（复制/剪切/粘贴/删除）与**被拒**的填充照旧写。
+        if selection_ops::写操作回执(cmd, &rec) {
+            self.op = Some((rec.text, rec.warn));
+        } else {
+            self.op = None;
+        }
         if rec.changed > 0 {
             self.touch_map();
         }
@@ -5265,6 +5272,102 @@ mod tests {
         let d = app.doc.doc.as_mut().expect("有图");
         assert_eq!((d.map.width, d.map.height), (8, 8), "撤销回原尺寸");
         assert_eq!(d.to_bytes().expect("出字节"), 原, "撤销后保存字节必须逐字节回原");
+    }
+
+    // ───────────────────── 编辑 → 填充选区：同屏不并排同义（D-004） ─────────────────────
+
+    /// **D-004 拍板①：选区填充成功后不再并排出现两句同义文案**。
+    ///
+    /// 判据（同屏可验）：
+    /// ① 成功填充 ⇒ `app.op`（= 状态栏「上一次操作」段）**为空**，
+    ///    而内核 `last_fill` 在（⇒ 状态栏「填充」段照旧显示 `填充 N 格`）；
+    /// ② 被拒的填充（没有选区）⇒ 回执照写且是警示色（那时没有「填充」段，原因只能靠它说）。
+    #[test]
+    fn 填充选区不再并排两句同义() {
+        let mut app = 尺寸应用(8, 8);
+        // 取一格做笔刷（地表层默认；格 (0,0) 的 bk_img = 1）
+        let brush = {
+            let d = app.doc.doc.as_ref().expect("有图");
+            app.edit.pick_at(&d.map, 0, 0)
+        };
+        assert!(brush.is_some(), "格 (0,0) 应有地表图号可吸");
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(0, 0, 3, 3)
+        ));
+        app.dispatch_menu(menu::model::Action::FillSelection, 画布());
+        // ① 成功：只有「填充」段，没有「上一次操作」段
+        assert!(
+            app.edit.last_fill().is_some(),
+            "填充成功要留下 last_fill（状态栏「填充」段的数据源）"
+        );
+        assert!(app.op.is_none(), "填充成功不许再写「上一次操作」段：{:?}", app.op);
+        let (fill_n, _) = (
+            app.edit.last_fill().map(|r| r.cells).unwrap_or(0),
+            app.edit.last_fill().map(|r| r.layer),
+        );
+        assert!(fill_n > 0, "地表 step=2 ⇒ 4×4 选区应真填到格");
+        assert_eq!(app.edit.undo_len(), 1, "整次填充 = 一步撤销");
+        // ② 被拒：清掉选区再填 ⇒ 回执必须写（且警示色）
+        app.edit.clear_selection();
+        app.dispatch_menu(menu::model::Action::FillSelection, 画布());
+        let (text, warn) = app.op.as_ref().expect("被拒必须有回执");
+        assert!(*warn, "拒绝回执要警示色");
+        assert!(!text.is_empty());
+    }
+
+    /// **D-004 键盘入口（`Ctrl+Shift+V`）与菜单同判据**：成功不写 `op`，拒绝照写。
+    ///
+    /// 与 `填充选区不再并排两句同义` 同一组断言，只是走**真键盘路径**（三条入口共用
+    /// `selection_ops::写操作回执`，这条用例钉住键盘那条也接了同一个函数）。
+    #[test]
+    fn 键盘填充选区同判据() {
+        let mut app = 尺寸应用(8, 8);
+        let brush = {
+            let d = app.doc.doc.as_ref().expect("有图");
+            app.edit.pick_at(&d.map, 0, 0)
+        };
+        assert!(brush.is_some(), "格 (0,0) 应有地表图号可吸");
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(0, 0, 3, 3)
+        ));
+        // 真键盘：Ctrl+Shift+V（修饰键要放 `RawInput::modifiers`，事件里那份 egui 不读）
+        按一次带修饰键(
+            &mut app,
+            egui::Key::V,
+            egui::Modifiers {
+                command: true,
+                shift: true,
+                ..Default::default()
+            },
+        );
+        // ① 成功：`op` 空，`status_fill` 有值（同一件事只在一处说）
+        assert!(app.op.is_none(), "键盘填充成功也不许写「上一次操作」段：{:?}", app.op);
+        let 文案 = crate::screen_text::build(
+            &app.doc,
+            &app.view,
+            app.hover,
+            &app.lines,
+            &app.edit,
+        );
+        let fill = 文案.status_fill.expect("状态栏「填充」段必须有值");
+        assert!(fill.contains("填充"), "「填充」段文案：{fill}");
+        assert_eq!(app.edit.undo_len(), 1, "整次填充 = 一步撤销");
+        // ② 拒绝（清掉选区再按一次）：`op` 必须有值且是警示色
+        app.edit.clear_selection();
+        按一次带修饰键(
+            &mut app,
+            egui::Key::V,
+            egui::Modifiers {
+                command: true,
+                shift: true,
+                ..Default::default()
+            },
+        );
+        let (text, warn) = app.op.as_ref().expect("被拒的键盘填充必须给回执");
+        assert!(*warn, "拒绝回执要警示色");
+        assert!(!text.is_empty());
     }
 
     // ───────────────────── 工具 → 检查地图（A-015 / R32-R33） ─────────────────────

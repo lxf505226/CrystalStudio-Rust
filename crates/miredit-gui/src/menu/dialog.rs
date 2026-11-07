@@ -1076,6 +1076,64 @@ mod tests {
         assert_ne!(Kind::Open.id_prefix(), Kind::SaveAs.id_prefix());
     }
 
+    /// **D-003 守卫：同一块面板里「标题」与「主按钮」不许同文**（2026-11-07 拍板）。
+    ///
+    /// 另存为原来是「标题=另存为、按钮=另存为」，同一面板上下两处只差位置 ⇒ 用户只能
+    /// 靠位置区分。现在按钮是「保存副本」。这条按**四个模态**逐个断言
+    /// `title() != ok_text()`，防止将来把某个按钮文案又抄回标题（也防回退）。
+    #[test]
+    fn 标题与主按钮不许同文() {
+        let kinds = [
+            Kind::Open,
+            Kind::SaveAs,
+            Kind::ExportSelection,
+            Kind::ExportMinimap,
+        ];
+        for k in kinds {
+            assert_ne!(
+                k.title(),
+                k.ok_text(),
+                "{k:?}：标题与主按钮同文（D-003 那一类重复）"
+            );
+        }
+        // D-003 的具体取值也钉住（改文案要有意识地改）
+        assert_eq!(tx::SAVE_AS_DLG_TITLE, "另存为", "标题不动（与菜单项同源）");
+        assert_eq!(tx::SAVE_AS_DLG_OK, "保存副本", "按钮与标题区分，且点明是副本");
+    }
+
+    /// **D-003 几何面：`保存副本` 四个字必须整句放进主按钮**（2026-11-07）。
+    ///
+    /// 判据用**真排版宽度**（`paint::text_w`，与绘制同一个 `BODY_FONT`）比按钮宽度，
+    /// 不是"看起来差不多"。另存为模态按 `save_as_rects` 的几何量（面板宽
+    /// `metrics::OPEN_DLG_W`、按钮宽 `OPEN_DLG_BTN_W`）。
+    #[test]
+    fn 另存为主按钮文字放得下() {
+        let ctx = crate::fonts::measure_ctx();
+        let screen = Rect::from_min_size(
+            pos2(0.0, 0.0),
+            egui::vec2(crate::metrics::WINDOW_W, crate::metrics::WINDOW_H),
+        );
+        let l = Layout::compute(screen);
+        let p = Painter::new(ctx, egui::LayerId::debug(), screen);
+        let r = save_as_rects(&l);
+        let 宽 = crate::paint::text_w(&p, tx::SAVE_AS_DLG_OK, crate::metrics::BODY_FONT);
+        assert!(
+            宽 <= r.ok.width(),
+            "「{}」排版宽 {宽}px 超过按钮宽 {}px（会被裁成 …）",
+            tx::SAVE_AS_DLG_OK,
+            r.ok.width()
+        );
+        // 面板本身也放得下（按钮在面板内、左右各留内边距）
+        assert!(r.ok.right() <= r.panel.right() - crate::metrics::OPEN_DLG_PAD + 0.01);
+        // 标题同样要放得下（D-003 只改按钮，标题不动）
+        let 标题宽 = crate::paint::text_w(&p, tx::SAVE_AS_DLG_TITLE, crate::metrics::TITLE_FONT);
+        assert!(
+            标题宽 <= r.panel.width() - 2.0 * crate::metrics::OPEN_DLG_PAD,
+            "标题「{}」{标题宽}px 放不进面板",
+            tx::SAVE_AS_DLG_TITLE
+        );
+    }
+
     /// **提交动作按种类分开**：打开模态只会提交 `Open`，另存为只会提交 `SaveAs`。
     #[test]
     fn 提交动作按种类分开() {

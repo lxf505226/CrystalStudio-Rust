@@ -424,7 +424,12 @@ pub const MENU_KEYBOARD_SHORTCUTS: &str = "键盘快捷键(S)…"; // EN: Keyboa
 ///
 /// 为什么文案带产品名：任务栏/开始菜单里同时可能有别的编辑器，
 /// 只写「关于」在弹窗标题里会分不清是谁的版本号。
-pub const MENU_ABOUT: &str = "关于 Crystal Studio"; // EN: About Crystal Studio
+///
+/// ⚠ **D-008：引用 [`ABOUT_TITLE`]，不再各写一份字面量**（2026-11-07）。
+/// 原来这里是第二个 `"关于 Crystal Studio"` 字面量，而 [`ABOUT_TITLE`] 的文档却声称
+/// "同一份" —— 代码与注释不符，改一处忘另一处就会让菜单项与模态标题说法不一致。
+/// 现在两处真的同一份；`ui_text::ALL` 仍按名字登记两条（守卫看不出区别，也不需要）。
+pub const MENU_ABOUT: &str = ABOUT_TITLE; // EN: About Crystal Studio
 
 /// **"未实现"的灰显原因模板** —— 点击灰显项时整句进状态栏。
 ///
@@ -756,7 +761,12 @@ pub const SAVE_AS_DLG_TITLE: &str = "另存为"; // EN: Save As ｜ 官方: Save
 /// 另存为模态说明（点名"原文件不动"，这是与「保存地图」的差别）。
 pub const SAVE_AS_DLG_HINT: &str = "输入目标 .map 的完整路径（回车另存，Esc 取消；原文件不动）"; // EN: Type the target .map path (Enter saves there, Esc cancels; the original file stays untouched) ｜ 官方: SaveAs_04C37C25
 /// 另存为模态主按钮。
-pub const SAVE_AS_DLG_OK: &str = "另存为"; // EN: Save As ｜ 官方: SaveAs_04C37C25
+///
+/// ⚠ **D-003 拍板：按钮文字与标题不同词**（2026-11-07）。原来主按钮与
+/// [`SAVE_AS_DLG_TITLE`] **同值**「另存为」，同一块面板上下两处只差位置 ⇒ 重复显示。
+/// 改「保存副本」：既与标题区分，又点明"写的是**另一份**副本"（原文件不动，见
+/// [`SAVE_AS_DLG_HINT`]）。**标题不动**（标题与菜单项同源的口径不能破）。
+pub const SAVE_AS_DLG_OK: &str = "保存副本"; // EN: Save a copy ｜ 官方: SaveAs_04C37C25（按钮与标题不同词是本仓有意为之，见 D-003）
 
 /// 另存为：目标路径是空串（**一个字节都没写**，文档路径也没动）。
 pub const SAVE_AS_ERR_EMPTY: &str = "目标路径为空（没有写盘，文档路径也没改）"; // EN: empty target path (nothing written, document path unchanged)
@@ -1107,6 +1117,10 @@ pub const HOVER_DETAIL_JOIN: &str = " · "; // EN: " · "
 // ───────────────────────── 右侧：资源面板 ─────────────────────────
 
 /// Palette 四个页签（顺序同参考图）。
+///
+/// ⚠ **D-009 同词不同义，有意保留**：页签名「资源库」与下面那一行的左标签
+/// [`PALETTE_LIB_LABEL`] 同词（2026-11-07 复核）。页签 = **页面名**，行标签 = **选择行**，
+/// 不是"同一件事说两遍"；用户拍板保留，故两个常量各自独立。
 pub const TAB_LIBRARY: &str = "资源库"; // EN: Library ｜ 官方: Library_DC20B3D5（旧称「图库」；截图页签首项即「资源库」）
 pub const TAB_FAVOURITES: &str = "收藏"; // EN: Favourites ｜ 官方: Favourites_D97D51D3
 pub const TAB_RECENT: &str = "最近使用"; // EN: Recently Used ｜ 官方: RecentlyUsed_D61031AC
@@ -1129,6 +1143,11 @@ pub const EMPTY_DESC: [&str; 2] = [EMPTY_DESC_0, EMPTY_DESC_1];
 /// 空态主按钮。
 pub const EMPTY_ACTION: &str = "设置资源目录"; // EN: Set Library Folder ｜ 官方: SetLibraryFolder_1E671E37（旧称「设置素材目录」）
 /// Palette 分页行文字模板（`{n}` = 已登记资源库数；装载失败时为 0）。
+///
+/// ⚠ **D-007 有意保留**：与状态栏右端的 [`STATUS_LIB_TMPL`] **同句、且同一个 `lib_n`**
+/// （2026-11-07 复核：两条都在屏上，数值永远一致）。这是**不同信息面**——
+/// 一条在资源面板底部（"这个面板在列哪一族的库"），一条在状态栏右端（"整场装了几库"）；
+/// 用户拍板保留两处、不合并模板，故两常量各自独立存在（别为了"去重"把它们并成一个）。
 pub const PAGE_LABEL_TMPL: &str = "资源库 {n} 个"; // EN: {n} libraries loaded ｜ 官方: libraries_01CFC309（资源库；旧称「素材库 {n} 个」）
 
 // ───────────────── 右侧：资源面板 · 真实图块网格（本单新增） ─────────────────
@@ -1137,6 +1156,9 @@ pub const PAGE_LABEL_TMPL: &str = "资源库 {n} 个"; // EN: {n} libraries load
 // 每条要么带真实数据（模板 + 运行期填充），要么是"确实没做到/确实没有"的如实说明。
 
 /// 资源库选择行的左标签（旧称「地形组」那一行的位置，现在标的是"下面是资源库选择"）。
+///
+/// ⚠ **D-009 同词不同义，有意保留**：与页签 [`TAB_LIBRARY`] 同词。页签是**页面名**、
+/// 这一行是**下拉框的左标签** ⇒ 不合并、不改词（用户拍板）。
 pub const PALETTE_LIB_LABEL: &str = "资源库"; // EN: Library ｜ 官方: library_B718F135（旧称「图库」）
 /// 当前库的帧总数（右上角，与 `PALETTE_LIB_LABEL` 同一行）。
 ///
@@ -1372,6 +1394,9 @@ pub const STATUS_COORD_TMPL: &str = "单元格 {x},{y}"; // EN: Cell {x}, {y}
 ///
 /// 官方 `libraries_01CFC309` 把 libraries 译作「资源库」⇒ `资源库 {n} 个`
 /// （旧称「素材库 {n} 个」）。
+///
+/// ⚠ **D-007 有意保留**：与资源面板的 [`PAGE_LABEL_TMPL`] 同句、同数据（`lib_n`），
+/// 但**信息面不同**（状态栏右端 = 整场库数；面板底部 = 该面板在列哪一族）⇒ 两处都留。
 pub const STATUS_LIB_TMPL: &str = "资源库 {n} 个"; // EN: {n} libraries loaded ｜ 官方: libraries_01CFC309
 
 /// 状态栏：**磁盘格式**（九格式人读名，取自 `miredit_core::Document::format_label`）。
@@ -1539,6 +1564,11 @@ pub const SEL_PASTE_SKIP_TMPL: &str = "（{k} 格在地图外，已跳过）"; /
 pub const SEL_DELETE_TMPL: &str = "删除 {n} 格"; // EN: Deleted {n} cells ｜ 官方: RegionCopy.cs:45-69 `CutSource`
 
 /// 选区操作回执：**已填充选区**（`{n}` = 真改动的格数）。
+///
+/// ⚠ **D-004 拍板①（2026-11-07）**：这条回执**只在被拒时**进状态栏「上一次操作」段；
+/// 成功时**不写**那一本，因为同一根状态栏上的 [`STATUS_FILL_TMPL`]（`填充 {n} 格`）
+/// 已经从 `last_fill` 说了同一件事（同一个 `n`），两段并排只差「选区」两个字。
+/// 判定点只有一处：[`crate::selection_ops::写操作回执`]。
 pub const SEL_FILL_TMPL: &str = "填充选区 {n} 格"; // EN: Filled {n} cells in the selection ｜ 官方: MapViewport.cs:540 `FillSelection`
 
 /// 兜底拒绝：没有选区（内核正常会给更具体的原因，这条只在取不到 `note` 时用）。

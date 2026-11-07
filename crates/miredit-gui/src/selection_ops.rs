@@ -116,6 +116,17 @@ pub struct Receipt {
     pub changed: usize,
 }
 
+/// **这条回执该不该写进状态栏「上一次操作」段**（D-004 拍板①，唯一判定点）。
+///
+/// 选区**填充成功**时返回 `false`：同一根状态栏上的「填充」段（`status_fill`，取自内核
+/// `last_fill`）已经在说同一件事、同一个格数，两段并排只差「选区」两个字 —— 同一屏说两遍。
+///
+/// 其余一律 `true`（含**填充被拒**：那时 `last_fill` 是 `None`，没有任何一段会说原因）。
+#[must_use]
+pub fn 写操作回执(cmd: Cmd, rec: &Receipt) -> bool {
+    !(matches!(cmd, Cmd::Fill) && !rec.warn)
+}
+
 /// 把内核写进 `note` 的那一句**取走**（取走后 `note` 置空，避免状态栏两段都说同一件事）。
 pub fn take_note(ed: &mut EditSession) -> Option<String> {
     let s = ed.note().map(str::to_owned);
@@ -280,6 +291,35 @@ pub fn status_tmpl(sel: Option<Selection>, clip: Option<&Clipboard>) -> Option<&
 
 #[cfg(test)]
 mod tests {
+    /// **D-004 拍板①：只有"填充成功"这条不回写「上一次操作」段**。
+    ///
+    /// 判定点唯一（[`super::写操作回执`]）：填充成功 ⇒ `false`；填充被拒 ⇒ `true`
+    /// （那时「填充」段是空的，原因只有这一处能说）；其余四条命令恒 `true`。
+    #[test]
+    fn 只有填充成功不回写操作段() {
+        let 成功 = super::Receipt {
+            text: crate::ui_text::fill(crate::ui_text::SEL_FILL_TMPL, &[("n", "9")]),
+            warn: false,
+            changed: 9,
+        };
+        let 被拒 = super::Receipt {
+            text: crate::ui_text::SEL_ERR_NOTHING_TO_FILL.to_owned(),
+            warn: true,
+            changed: 0,
+        };
+        assert!(!super::写操作回执(super::Cmd::Fill, &成功), "填充成功不许再写一遍");
+        assert!(super::写操作回执(super::Cmd::Fill, &被拒), "填充被拒必须说原因");
+        for cmd in [
+            super::Cmd::Copy,
+            super::Cmd::Cut,
+            super::Cmd::Paste,
+            super::Cmd::Delete,
+        ] {
+            assert!(super::写操作回执(cmd, &成功), "{cmd:?} 的回执照写");
+
+        }
+    }
+
     use super::*;
     use miredit_core::EditLayer;
 
