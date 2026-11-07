@@ -618,12 +618,26 @@ pub const MAPS_SCAN_MAX_ITEMS: usize = 512;
 /// 组合框右边 x=1482，右停靠区右边 x=1491 ⇒ 9（取 10）。
 pub const RIGHT_PAD_X: f32 = 10.0;
 
-/// TextBox / ComboBox 高 32。来源：截图 Terrain Patterns 组合框 (1146,352)-(1482,383) = 32 行；
-/// 与 `theme.metrics.combo_min_height` = 34 相差 2（以截图的 32 为准）。
-pub const COMBO_H: f32 = 32.0;
+/// TextBox / ComboBox 高 **34**。
+///
+/// 上游出处：`App.axaml:85` 的 `<Style Selector="ComboBox">` ⇒ `MinHeight = 34`
+/// （同款 `Padding = 10,8,28,8`）。
+///
+/// 历史（原以截图为准，A13 订正）：本值原为 **32**，依据是参考截图量出的组合框行高
+/// (1146,352)-(1482,383) = 32 行；当时注释记「与 `theme.metrics.combo_min_height` = 34
+/// 相差 2，**以截图 32 为准**」。按用户「对齐上游」令改为 34 —— 且那个 `theme.metrics`
+/// 字段在当前 `theme.rs` 里**已不存在**（全仓 grep `combo_min_height` 0 命中），
+/// 上游 `App.axaml:85` 是唯一可回源的真值。
+pub const COMBO_H: f32 = 34.0;
 
-/// 搜索框高 29。来源：截图 (1146,396)-(1482,424) = 29 行。
-pub const SEARCH_H: f32 = 29.0;
+/// 搜索框高 **32**。
+///
+/// 上游出处：`EditorControls.axaml:49` 的 `ControlTheme x:Key="PaletteSearchBox"`
+/// ⇒ `Height = 32`（同款 `Padding = 8,4,28,4`）。
+///
+/// 历史（原以截图为准，A14 订正）：本值原为 **29**，依据是参考截图
+/// (1146,396)-(1482,424) = 29 行。
+pub const SEARCH_H: f32 = 32.0;
 
 /// 页签（Library / Favourites / Recently Used / Categories）行高 30。
 /// 来源：截图 Palette 页签行 y=285..315（`#F5F6F7`），下划线在 y=312..315。
@@ -874,7 +888,13 @@ pub const EMPTY_DESC_LINE_H: f32 = 16.0;
 
 /// 网格顶部相对 Palette 内容区上边 **150**。
 ///
-/// 推导：搜索框底 = `PALETTE_SEARCH_OFF`(111) + `SEARCH_H(29)` = 140，再留 10 的呼吸。
+/// 推导（A14 之前的原式）：搜索框底 = `PALETTE_SEARCH_OFF`(111) + `SEARCH_H` = 140，
+/// 再留 10 的呼吸 ⇒ 150。
+///
+/// ⚠ **A14 把 `SEARCH_H` 由 29 改成 32 后，原推导不再成立**：搜索框底变成 143，
+/// 到本值 150 的实际间隙只剩 **7**（不再是推导出的 10）。本值**未擅自跟着改成 153** ——
+/// 那会再挪动整个网格与分页行 3px，属产品裁定，已列入回执待裁。
+/// 现值安全：143 < 150，搜索框与网格**不重叠**。
 pub const PALETTE_GRID_OFF: f32 = 150.0;
 
 /// 每行 **8** 格。

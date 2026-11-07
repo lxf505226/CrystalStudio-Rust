@@ -216,9 +216,10 @@ pub const CELL_PROPS_TITLE: &str = "单元格属性"; // EN: Cell Properties ｜
 
 /// 模态头行：**单选一格**时的写法（官方 `"Cell {0}, {1}"`）。
 ///
-/// 占位符：`{x}` / `{y}`（`u16` 世界格坐标）。格式与状态栏/悬停浮层同一套
-/// （`单元格 265,261` 那种写法，**不带千分位**，理由见 [`HOVER_COORD_TMPL`]）。
-pub const CELL_PROPS_HEADER_CELL_TMPL: &str = "单元格 {x},{y}"; // EN: Cell {x},{y} ｜ 官方: Cell {0}, {1}
+/// 占位符：`{x}` / `{y}`（`u16` 世界格坐标）。官方这处**没有** `:N0`
+/// （`MainWindow.axaml.cs:749`）⇒ 本仓同样**不带千分位**，坐标直接填十进制。
+/// 与悬停浮层的区别是上游真值不同，不是写法不统一（浮层见 [`HOVER_COORD_TMPL`]）。
+pub const CELL_PROPS_HEADER_CELL_TMPL: &str = "单元格 {x},{y}"; // EN: Cell {x},{y} ｜ 官方: Cell {0}, {1}（无 N0）
 
 /// 模态头行：**选区**时的写法（官方 `"Apply to Selected Cells"`；本仓多给一个格数）。
 ///
@@ -1202,13 +1203,17 @@ pub const TRUNC_SUFFIX: &str = "…"; // EN: …
 //   ③ 明细行  `string.Join("\n", groups.Select(g => $"{T(g.Title)}: {g.Detail}"))`
 //     —— 即常驻检查器那六组的「标题: 值」，**同一个取数**（本仓 [`crate::cellinfo::cell_lines`]）。
 
-/// 悬停浮层的坐标行模板。占位符：`{x}` / `{y}`（`u16` 世界格坐标，从 0 起）。
+/// 悬停浮层的坐标行模板。占位符：`{x}` / `{y}`。
 ///
-/// ⚠ 官方是 `"Cell {0:N0}, {1:N0}"`（**带千分位**，如 `Cell 1,234`）；本仓库内坐标一律是
-/// `u16` 且地图上限 32767，千分位只影响 1000 以上的图 —— 但**照抄官方格式**会让状态栏
-/// （`单元格 265,261`，无千分位）与浮层两套写法并存。这里取**与状态栏一致**的写法，
-/// 差异已登记在 `cell_hover` 模块文档「与上游的差异」一节（口语化格式，不含数值）。
-pub const HOVER_COORD_TMPL: &str = "单元格 {x},{y}"; // EN: Cell {x},{y} ｜ 官方: "Cell {0:N0}, {1:N0}"
+/// ⚠ 官方是 `"Cell {0:N0}, {1:N0}"`（`MainWindow.CellHover.cs:58`）—— `N0` = **千分位分隔**、
+/// 无小数（如 `Cell 1,234`）。**A16 已对齐**：`{x}` / `{y}` 由 [`crate::cellinfo::千分位`]
+/// 预先格成带 `,` 的十进制串再填进来（[`fill`] 只做字面替换，**不认 `N0`** 这类格式说明符），
+/// 于是「模板里只有占位符、数字格式在调用点决定」这条既有分工不变。
+///
+/// 分隔符 `,` 后**不带空格**：上游是 `", "`，但本仓四处坐标模板（本常量 /
+/// [`STATUS_COORD_TMPL`] / [`INSPECTOR_HEAD_TMPL`] / [`CELL_PROPS_HEADER_CELL_TMPL`]）
+/// 一律中文无空格，属既有统一写法；是否改成 `", "` 是产品裁定，本单未擅自改。
+pub const HOVER_COORD_TMPL: &str = "单元格 {x},{y}"; // EN: Cell {x},{y} ｜ 官方: "Cell {0:N0}, {1:N0}"（N0 千分位，见 cellinfo::千分位）
 
 /// 悬停浮层：该格**可行走**。
 pub const HOVER_WALKABLE: &str = "可行走"; // EN: Walkable ｜ 官方: CellWalkable
@@ -3193,9 +3198,11 @@ mod tests {
 
     /// **悬停浮层的三条官方词条**（上游 `Localization/Strings.json:153-155`）。
     ///
-    /// 钉住两件事：① 上游确实有这三个键（`CellHoverInfo` / `CellWalkable` /
-    /// `CellNotWalkable`），本仓用的是它们的**官方中文**；② 坐标行模板能填出与状态栏
-    /// 一致的形态（占位符只有 `{x}`/`{y}`，不许出现别的东西）。
+    /// 钉住三件事：① 上游确实有这三个键（`CellHoverInfo` / `CellWalkable` /
+    /// `CellNotWalkable`），本仓用的是它们的**官方中文**；② 坐标行模板能填出上游
+    /// `"Cell {0:N0}, {1:N0}"` 的形态（占位符只有 `{x}`/`{y}`，不许出现别的东西）；
+    /// ③ `fill` **不认** `N0` —— 千分位必须由调用点先格好（见 `cellinfo::千分位`），
+    /// 所以这里传的是**已经带 `,` 的串**，传裸 `1234` 出来就是 `1234`。
     #[test]
     fn 悬停浮层文案用官方词条() {
         assert_eq!(MENU_CELL_HOVER, "地砖信息悬浮", "官方 CellHoverInfo");
@@ -3204,7 +3211,19 @@ mod tests {
         assert_ne!(HOVER_WALKABLE, HOVER_NOT_WALKABLE, "两个状态词不许同字");
         assert_eq!(
             fill(HOVER_COORD_TMPL, &[("x", "265"), ("y", "261")]),
-            "单元格 265,261"
+            "单元格 265,261",
+            "三位数以内：千分位与不分组同形"
+        );
+        assert_eq!(
+            fill(HOVER_COORD_TMPL, &[("x", "1,234"), ("y", "5,678")]),
+            "单元格 1,234,5,678",
+            "`{{x}}`/`{{y}}` 由 `cellinfo::千分位` 预先格好（`fill` 不认 N0）"
+        );
+        // 阴性对照：`fill` 不做数字格式化 —— 传裸数字就原样输出（证明上一条不是 fill 的功劳）
+        assert_eq!(
+            fill(HOVER_COORD_TMPL, &[("x", "1234"), ("y", "5678")]),
+            "单元格 1234,5678",
+            "`fill` 只做字面替换，不认 N0"
         );
     }
 

@@ -228,7 +228,7 @@ fn size_of(
 /// [`crate::cell_hover`] 里算 —— 与本模块「取数 / 绘制分开」的既有分工一致。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HoverText {
-    /// ① 坐标行（[`tx::HOVER_COORD_TMPL`] 已填好，如 `单元格 265,261`）。
+    /// ① 坐标行（[`tx::HOVER_COORD_TMPL`] 已填好，坐标带千分位，如 `单元格 1,234,261`）。
     pub coords: String,
     /// ② 该格是否可行走（[`Cell::is_walkable`] 的真值）。
     pub walkable: bool,
@@ -265,11 +265,13 @@ pub fn hover_text(x: u16, y: u16, cell: &Cell, lines: &CellLines) -> HoverText {
             )
         })
         .collect();
+    // 坐标行按上游 `CellHover.cs:58` 的 `{0:N0}` 走千分位。
+    // `tx::fill` 只做 `{name}` 字面替换、**不认格式说明符**（见 `ui_text::fill` 的文档），
+    // 所以先格成字符串再填 —— 格式化的决定点仍然只有一个（[`千分位`]）。
+    let xs = 千分位(i64::from(x));
+    let ys = 千分位(i64::from(y));
     HoverText {
-        coords: tx::fill(
-            tx::HOVER_COORD_TMPL,
-            &[("x", &x.to_string()), ("y", &y.to_string())],
-        ),
+        coords: tx::fill(tx::HOVER_COORD_TMPL, &[("x", &xs), ("y", &ys)]),
         walkable,
         walkable_text: if walkable {
             tx::HOVER_WALKABLE
@@ -278,6 +280,45 @@ pub fn hover_text(x: u16, y: u16, cell: &Cell, lines: &CellLines) -> HoverText {
         },
         details,
     }
+}
+
+/// 按 .NET `N0` 的规则把整数格成**带千分位分隔符**的字符串（上游 `MainWindow.CellHover.cs:58`）。
+///
+/// 上游原文：`LocalText.Format("Cell {0:N0}, {1:N0}", x, y)`；`LocalText.cs:56` 把它落到
+/// `string.Format(CultureInfo.GetCultureInfo(Language), …)` ⇒ 标准数字格式 `N` + 精度 `0`：
+///
+/// | 输入 | 输出 | 规则 |
+/// |---|---|---|
+/// | `0` / `1` / `999` | `0` / `1` / `999` | 不足三位不分组 |
+/// | `1000` | `1,000` | 每三位一个 `,` |
+/// | `1234` | `1,234` | |
+/// | `999999` | `999,999` | |
+/// | `-5` / `-1234` | `-5` / `-1,234` | 负号在分组**之外**、紧贴首位数字 |
+/// | `i64::MIN` | `-9,223,372,036,854,775,808` | 不取绝对值 ⇒ 不溢出、不 panic |
+///
+/// 分组符固定 `,`、组距固定 3：本仓界面语言只有 `zh-CN` / `en-US` 两套
+/// （`menu::model::Lang`），两者的 `N0` 都是 `,` + 3 位 ⇒ 与上游等价。
+/// 将来若加 `de-DE` 这类用 `.` 分组的语言，这里得跟 culture 走（上游是 culture-aware）。
+///
+/// ⚠ 不走 `tx::fill` 的格式说明符：`fill` 只做 `{name}` 字面替换，不认 `N0`。
+pub fn 千分位(v: i64) -> String {
+    let s = v.to_string();
+    // 负号单独摘出来：**绝不** `v.abs()`（`i64::MIN.abs()` 会溢出 panic）
+    let (sign, digits) = match s.strip_prefix('-') {
+        Some(rest) => ("-", rest),
+        None => ("", s.as_str()),
+    };
+    let n = digits.len();
+    let mut out = String::with_capacity(s.len() + n / 3 + 1);
+    out.push_str(sign);
+    for (i, ch) in digits.char_indices() {
+        // 从右往左每满三位插一个分组符（首位之前不插）
+        if i > 0 && (n - i) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(ch);
+    }
+    out
 }
 
 /// 把常驻检查器的**多行值**压成一行（供悬停浮层用；理由见 [`tx::HOVER_DETAIL_JOIN`]）。
@@ -542,5 +583,66 @@ mod tests {
         assert_eq!(hover_detail_text(" a \n\n b "), "a · b");
         assert_eq!(hover_detail_text(""), "");
         assert!(!hover_detail_text("低位阻挡是 ·\n高位阻挡否").contains("· ·"));
+    }
+
+    // -----------------------------------------------------------------------
+    // 千分位（A16：上游 `MainWindow.CellHover.cs:58` 的 `{0:N0}`）
+    // -----------------------------------------------------------------------
+
+    /// **逐值对照 .NET `N0`**：覆盖派单要求的全部边界
+    /// （`0` / `1` / `999` / `1000` / `1234` / `999999` / 负数）。
+    ///
+    /// 右列是 .NET `v.ToString("N0", zh-CN | en-US)` 的输出（两套 culture 的分组符与组距相同）。
+    #[test]
+    fn 千分位对齐dotnet的n0() {
+        for (v, want) in [
+            (0i64, "0"),
+            (1, "1"),
+            (9, "9"),
+            (12, "12"),
+            (123, "123"),
+            (999, "999"),
+            (1000, "1,000"),
+            (1234, "1,234"),
+            (12345, "12,345"),
+            (32767, "32,767"),
+            (999_999, "999,999"),
+            (1_000_000, "1,000,000"),
+            (-1, "-1"),
+            (-5, "-5"),
+            (-999, "-999"),
+            (-1000, "-1,000"),
+            (-1234, "-1,234"),
+            (-999_999, "-999,999"),
+        ] {
+            assert_eq!(千分位(v), want, "千分位({v}) 与 .NET N0 不符");
+        }
+    }
+
+    /// `i64` 两端极值：**不 panic、不溢出**。
+    ///
+    /// `i64::MIN.abs()` 会溢出 panic，所以实现里不取绝对值、只摘负号。
+    #[test]
+    fn 千分位极值不崩() {
+        assert_eq!(千分位(i64::MAX), "9,223,372,036,854,775,807");
+        assert_eq!(千分位(i64::MIN), "-9,223,372,036,854,775,808");
+        // 19 位数字 ⇒ 6 个分组符（19 = 3 × 6 + 1）
+        assert_eq!(千分位(i64::MAX).matches(',').count(), 6);
+        assert_eq!(千分位(i64::MIN).matches(',').count(), 6);
+    }
+
+    /// 坐标行**端到端**带千分位（`hover_text` → `HOVER_COORD_TMPL`），
+    /// 且 `< 1000` 的坐标逐字不变 —— 这正是「A16 不该改动基线截图」的依据。
+    #[test]
+    fn 悬停坐标行走千分位() {
+        let l = CellLines::unknown();
+        let c = Cell::default();
+        // 265 / 261 都 < 1000 ⇒ 与 A16 之前逐字相同
+        assert_eq!(hover_text(265, 261, &c, &l).coords, "单元格 265,261");
+        // 1000 以上才出现分组符
+        assert_eq!(hover_text(1000, 0, &c, &l).coords, "单元格 1,000,0");
+        assert_eq!(hover_text(1234, 5678, &c, &l).coords, "单元格 1,234,5,678");
+        // 地图尺寸上限 32767 也必须分组
+        assert_eq!(hover_text(32767, 32767, &c, &l).coords, "单元格 32,767,32,767");
     }
 }

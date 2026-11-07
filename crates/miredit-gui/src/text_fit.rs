@@ -303,12 +303,16 @@ mod tests {
     /// 三行都是真实模板填出来的（不是手写句子）：守卫要验的是"模板 + 运行期值"这条路径。
     fn 典型悬停面板() -> crate::cell_hover::Panel {
         use crate::cell_hover::Row;
+        // A16 起坐标行走千分位 ⇒ 这里也走**真实生产路径**（`cellinfo::千分位`）：
+        // 旧的裸 `1234,5678` 已不是运行期可能出现的形态，且比真实值窄 2 个字符。
+        let cx = crate::cellinfo::千分位(1234);
+        let cy = crate::cellinfo::千分位(5678);
         crate::cell_hover::Panel {
             rect: egui::Rect::from_min_size(egui::pos2(400.0, 300.0), egui::vec2(260.0, 90.0)),
             rows: vec![
                 (
                     Row::Coord,
-                    tx::fill(tx::HOVER_COORD_TMPL, &[("x", "1234"), ("y", "5678")]),
+                    tx::fill(tx::HOVER_COORD_TMPL, &[("x", &cx), ("y", &cy)]),
                 ),
                 (Row::Walkable, tx::HOVER_WALKABLE.to_owned()),
                 (
