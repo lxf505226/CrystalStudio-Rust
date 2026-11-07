@@ -758,13 +758,38 @@ pub const STATUS_SEG_GAP: f32 = 16.0;
 
 // ───────────────────────── 关闭拦截模态（本单新增控件） ─────────────────────────
 
-/// 关闭拦截模态的底板尺寸 560×92。
+/// 关闭拦截模态的底板宽 **520**。
 ///
-/// 来源：**推导**（参考截图里没有这个控件，它只在"有未保存修改时点关闭"才出现）。
-/// 文案 `有未保存的修改，按 Ctrl+S 保存 / 再点关闭放弃` = 20 个汉字 + 3 个拉丁词，
-/// 13px 下实测约 340px 宽 ⇒ 560 留出左右各 110px 的呼吸，居中于画布不显得挤。
-pub const MODAL_W: f32 = 560.0;
+/// 来源：**上游真值** —— 上游这个模态就是系统 `MessageBox`：
+/// `EditorDialogs.cs:79` `var dialog = new EditorWindow { Title = …, Width = 520,
+/// SizeToContent = SizeToContent.Height, CanResize = false, … }`。
+/// 本仓没有 `MessageBox`（自绘），所以取它的 `Width = 520` 作底板宽。
+///
+/// ⚠ 旧值 560 是**推导**（"文案 13px 下约 340px 宽，留左右各 110 呼吸"），
+/// 上游取证后订正为 520；旧的 560 已作废，不要再引用。
+pub const MODAL_W: f32 = 520.0;
+
+/// 关闭拦截模态的底板高 **92**。
+///
+/// ⚠ 上游是 `SizeToContent = SizeToContent.Height`（**高随内容**），没有定值；
+/// 92 是本仓自绘模态的**推导**值（见下方 [`MSG_BOX_PAD`] 的说明与 `app::close_modal_rect`）。
 pub const MODAL_H: f32 = 92.0;
+
+/// 关闭拦截模态（= 上游 `MessageBox`）的内容内边距 **22**。
+///
+/// 来源：**上游真值** `EditorDialogs.cs:81`
+/// `var content = new StackPanel { Margin = new Thickness(22), Spacing = 18 };`。
+///
+/// ⚠ **必须与 [`OPEN_DLG_PAD`]（24）分开写**：上游这四个自定义对话框是
+/// `Margin = new(24)`，`MessageBox` 是 `22` —— **本来就是两个数**。
+/// 共用 24 会把这个差异悄悄抹掉（那样"对齐上游"就只是对齐了个大概）。
+///
+/// 本仓自绘的关闭模态把文案**居中**摆放（上游是系统提供的按钮行，见
+/// `app::close_modal_choice_rects` 的「上游无对应物」登记），
+/// 所以这 22 的等价物是"文案必须放得进 `底板宽 - 2×22`"，由
+/// `app::tests::关闭拦截模态放得下文案` 钉住。
+pub const MSG_BOX_PAD: f32 = 22.0;
+
 /// 模态文字字号 13（与标题栏同档；它是一句需要看清的警告，不用 11px 小字）。
 pub const MODAL_FONT: f32 = 13.0;
 /// 模态底板圆角 6（与缩放浮层同档，见 [`crate::canvas`] 的 `fill_round(.., 6.0, ..)`）。
@@ -1336,14 +1361,33 @@ pub const ABOUT_LABEL_COL_W: f32 = 96.0;
 /// 关于对话框底部关闭提示行高 **22**。
 pub const ABOUT_HINT_H: f32 = 22.0;
 
-/// 打开地图模态的宽 **640**（路径输入框要放得下 80 个字符的路径）。
+/// 路径输入模态（打开 / 另存为 / 导出选区）的宽 **640**（路径输入框要放得下 80 个字符的路径）。
+///
+/// ⚠ **不含「导出小地图」**：那个模态单独取 [`MINIMAP_DLG_W`]（上游 420）。
+/// 上游这三个用途弹的是**系统文件选择器**（`EditorDialogs.cs` 的 `OpenFileDialog` /
+/// `SaveFileDialog` 走 `StorageProvider.OpenFilePickerAsync`），宽高由系统给，本仓自绘
+/// ⇒ 640 是本仓的推导值；而「导出小地图」上游是**真窗口** `Width = 420` ⇒ 必须独立。
 pub const OPEN_DLG_W: f32 = 640.0;
 
-/// 打开地图模态的高 **160**（标题 + 输入框 + 提示 + 两个按钮）。
-pub const OPEN_DLG_H: f32 = 160.0;
+// 路径输入模态的高 **176** —— **不再是常量**（2026-11-08 A10 订正）。
+//
+// 由 `crate::menu::dialog::路径模态内容高()` 现算；上游三个用途都是系统文件选择器
+// （高由系统给），本仓自绘 ⇒ 高度用内容算式是等价物。
+// ⚠ 旧常量 `OPEN_DLG_H = 160` 已删除：它是手写定值，改 `OPEN_DLG_PAD` 时**不跟随**，
+// 正是"内边距 16→24 后提示行底到按钮顶只剩 4px"那个断裂的根因。
+// 现在改内边距，高度自动跟随（见 `dialog::tests::改内边距时路径模态高度跟着变`）。
 
-/// 打开地图模态的内边距 **16**。
-pub const OPEN_DLG_PAD: f32 = 16.0;
+/// 打开地图模态的内边距 **24**（上游四个自定义对话框 `Margin = new(24)`）。
+///
+/// 来源：**上游真值**（四处逐字一致）：
+/// - `MinimapExportWindow.cs:18` `var panel = new StackPanel { Margin = new(24), Spacing = 10 };`
+/// - `MapExpansionWindow.cs:22` `var panel = new StackPanel { Margin = new(24), Spacing = 10 };`
+/// - `MainWindow.axaml.cs:441`（新建地图）`var panel = new StackPanel { Margin = new(24) };`
+/// - `MainWindow.axaml.cs:747`（单元格属性）`var panel = new StackPanel { Margin = new(24) };`
+///
+/// ⚠ 与关闭拦截模态的 [`MSG_BOX_PAD`]（22）**不是**同一个数，见那里的说明。
+/// ⚠ 旧值 16 已作废（当时无上游真值，按手感取的）。
+pub const OPEN_DLG_PAD: f32 = 24.0;
 
 /// 打开地图模态里路径输入框的高 **28**。
 pub const OPEN_DLG_FIELD_H: f32 = 28.0;
@@ -1384,16 +1428,40 @@ pub const CHECK_MAP_LIST_GAP: f32 = 10.0;
 
 // ───────────── 「导出小地图」模态（2026-11-06，N F-R14-1：尺寸输入） ─────────────
 //
-// 它比通用路径模态多摆三行（预设三选一 / 宽高 / 错误提示），所以**单独**给高度：
-// [`OPEN_DLG_H`] 一个字都不改 ⇒ 打开 / 另存为 / 导出选区三个模态的几何与既有用例
-// 逐像素不变（`dialog_rects` 仍按 `OPEN_DLG_H` 算）。
+// 它比通用路径模态多摆三行（预设三选一 / 宽高 / 错误提示），所以**单独**给宽高：
+// 宽取上游真值 420，高由内容算式现算（见 `dialog::小地图模态内容高`）。
 
-/// 导出小地图模态的高 **254**。
+/// 导出小地图模态的宽 **420**。
 ///
-/// 算式（面板顶为 0）：`16(PAD) + 24(标题) + 28(路径框) + 12+18(提示带) + 10 + 26(预设行)
-/// + 10 + 26(宽高行) + 10 + 32(错误行) + 10 + 26(按钮) + 16(PAD)` = `254`；
-/// 两个按钮仍按 `panel.bottom() - PAD - BTN_H` **贴底**（与其它模态同一规则）。
-pub const MINIMAP_DLG_H: f32 = 254.0;
+/// 来源：**上游真值** `MinimapExportWindow.cs:15`
+/// `Title = LocalText.T("Export Minimap"); Width = 420;`
+/// （同行 `:16` `SizeToContent = SizeToContent.Height; CanResize = false;`）。
+///
+/// ⚠ **不许改 [`OPEN_DLG_W`] 来"顺手对齐"**：上游这两者本来就是**两个独立窗口**
+/// —— 导出小地图是真 `Window`（420 定宽），而打开/另存为/导出选区上游走的是
+/// **系统文件选择器**（`EditorDialogs.cs` 的 `StorageProvider.OpenFilePickerAsync`，
+/// 宽高由系统给）。把 640 改成 420 会让那三个模态一起变窄，属于**无上游依据**的连带改动。
+pub const MINIMAP_DLG_W: f32 = 420.0;
+
+// 导出小地图模态的高 —— **不再是常量**（2026-11-08 A10 订正）。
+//
+// 由 `crate::menu::dialog::小地图模态内容高()` 现算 = **270**。
+// 上游是 `SizeToContent = SizeToContent.Height`（`MinimapExportWindow.cs:16`，高随内容），
+// 本仓 egui 无自动测高 ⇒ 内容算式是它的等价物；改 `OPEN_DLG_PAD` 时高度**自动跟随**。
+//
+// ## 订正记录（2026-11-08，A10）：旧注释里那个多余的 `+10`
+//
+// **原文（保留作历史引用，已作废）**：
+// > 算式（面板顶为 0）：`16(PAD) + 24(标题) + 28(路径框) + 12+18(提示带) + 10 + 26(预设行)
+// > + 10 + 26(宽高行) + 10 + 32(错误行) + 10 + 26(按钮) + 16(PAD)` = `254`
+//
+// **两处错，终值 254 只是碰巧对**：
+// 1. 那个算式逐项相加 = **264**，不是 254 —— 与它自己声明的终值自相矛盾；
+// 2. 多出来的正好是 `12+18(提示带)` 后面那个 **`+ 10`**：代码里
+//    `preset_top = base.field.bottom() + 12.0 + 18.0`（`dialog::minimap_rects`），
+//    提示带之后**直接**就是预设行，没有这段间距。
+//
+// ⇒ 正确算式见 `dialog::小地图模态内容高`（旧值 16 的 PAD 下 = 254，新值 24 下 = 270）。
 
 /// 导出小地图模态里「预设行 / 宽高行」的行高 **26**（只比路径框矮 2，手感统一）。
 pub const MINIMAP_DLG_ROW_H: f32 = 26.0;
@@ -1407,8 +1475,14 @@ pub const MINIMAP_DLG_ERR_H: f32 = 32.0;
 /// 导出小地图模态里单个宽/高输入框的宽 **132**（放得下 10 位数字）。
 pub const MINIMAP_DLG_FIELD_W: f32 = 132.0;
 
-/// 导出小地图模态里单个预设按钮的宽 **150**（`Large (1:1)` 这种 11 字符的标签不挤）。
-pub const MINIMAP_DLG_PRESET_W: f32 = 150.0;
+// 导出小地图模态里「单个预设按钮的宽」**已不再是常量**（2026-11-08 A10 订正）。
+//
+// 旧值 `MINIMAP_DLG_PRESET_W = 150` 已删除：3×150 + 标签列 56 + 间距 16 = 530，
+// 而上游 `Width = 420`（`MinimapExportWindow.cs:15`）时面板内宽只有 420 − 2×24 = **372**
+// ⇒ 第三个按钮必然越出面板（A10 实测断言红：`第 2 个预设按钮越出面板`）。
+// 上游该控件是 `ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch }`
+// （`MinimapExportWindow.cs:5`）⇒ 这一行本来就该**填满内宽**；
+// 按钮宽改由 `dialog::minimap_rects` 按剩余宽度均分（不写定值，改宽时自动跟随）。
 
 /// 导出小地图模态里预设行左侧标签列宽 **56**（`尺寸预设` 四个字 48 + 8 呼吸）。
 pub const MINIMAP_DLG_PRESET_COL_W: f32 = 56.0;

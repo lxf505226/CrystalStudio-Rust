@@ -2634,8 +2634,11 @@ impl MireditApp {
 
     /// 关闭确认模态的矩形（居中在视口上）。
     ///
-    /// 尺寸沿用本仓既有 `metrics::MODAL_W/H`（官方用系统 `MessageBox`，本仓自绘 ⇒ 这两项
-    /// 本来就是"推导"值，见 `metrics` 的说明）。绘制与命中**共用这一个函数**，
+    /// 宽 `metrics::MODAL_W` 现在是**上游真值 520**（上游这个模态就是系统 `MessageBox`：
+    /// `EditorDialogs.cs:79` `Width = 520`）；高 `MODAL_H` 仍是本仓推导值
+    /// （上游 `SizeToContent = SizeToContent.Height`，没有定高）。
+    /// 内边距 `MSG_BOX_PAD = 22` 对应上游 `EditorDialogs.cs:81` `Margin = new Thickness(22)`
+    /// —— **不是**四个自定义对话框的 24。绘制与命中**共用这一个函数**，
     /// 不许两处各算一份（否则画出来的按钮与能点的按钮会错位）。
     fn close_modal_rect(l: &Layout) -> Rect {
         Rect::from_center_size(l.viewport.center(), Vec2::new(m::MODAL_W, m::MODAL_H))
@@ -5002,9 +5005,11 @@ mod tests {
         );
         let w = pt::text_w(&painter, tx::CLOSE_CONFIRM, m::MODAL_FONT);
         assert!(
-            w <= c.width() - 40.0,
-            "提示文案宽 {w:.0} 放不进底板 {:.0}（需留左右各 20 的呼吸）",
-            c.width()
+            w <= c.width() - 2.0 * m::MSG_BOX_PAD,
+            "提示文案宽 {w:.0} 放不进底板 {:.0}（需留左右各 MSG_BOX_PAD = {:.0} 的呼吸，\
+             对应上游 EditorDialogs.cs:81 的 Margin(22)）",
+            c.width(),
+            m::MSG_BOX_PAD
         );
     }
 
