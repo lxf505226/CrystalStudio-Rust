@@ -266,8 +266,12 @@ impl Canvas {
 ///
 /// 公式：`A = a_s + a_d*(1-a_s)`，`C = (c_s*a_s + c_d*a_d*(1-a_s)) / A`。
 /// 全部用 `u32` 整数运算；`a_s == 255` 直接取源、`a_s == 0` 直接取目标（快路径）。
+///
+/// `pub(crate)` 的第二个调用方是 [`crate::preview_raster`]（导出成图压到不透明黑底）：
+/// 那里的目标恒为 `A == 255` 的黑 ⇒ 本函数退化成上游 `PreviewRaster.cs:45-46` 那条预乘式
+/// （`src[c] + dst[c]*(255-a)/255`，`dst` 为 0 ⇒ 只剩 `src[c]`），两处共用一份实现，不再抄第二份。
 #[inline]
-fn over(src: [u8; 4], dst: [u8; 4]) -> [u8; 4] {
+pub(crate) fn over(src: [u8; 4], dst: [u8; 4]) -> [u8; 4] {
     let sa = src[3] as u32;
     if sa == 0 {
         return dst;

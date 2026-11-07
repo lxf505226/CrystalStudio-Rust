@@ -13,9 +13,16 @@
 //! valid_minimap_size(w,h)      →  官方 ValidSize + 本仓更严护栏（非法 ⇒ 400 中文原因）
 //! pick_official_scale(...)    →  官方 16 级 mip 到本仓 4 档的有据映射
 //! tiled::render_tiled(...)    →  整幅 RGBA（64 格一块，块边界按真实帧尺寸扩边）
-//! compare::resize_to          →  面积平均缩到目标宽高（官方 redraw 的等价落点）
+//! preview_raster::fit_centered_opaque → 等比 + 居中 + 不透明黑底 + 最近邻落到目标宽高
 //! encode_rgba_png              →  PNG 字节（与写文件编码器同一个）
 //! ```
+//!
+//! ⚠ **订正（2026-11-08）**：上面第 6 行原文是
+//! 「`compare::resize_to` → 面积平均缩到目标宽高（官方 redraw 的等价落点）」——
+//! **那句是错的**。面积平均只出现在上游的 **mip 预缩**（`OverviewPixels.cs:7-42`）；
+//! 导出成图那一步（`PreviewRaster.cs:35-38`）是**最近邻点采样**，且调用点
+//! `MinimapExporter.cs:56-57` 传的是 `padding: 0, opaque: true`（等比 + 居中 + 不透明黑底）。
+//! 已按上游改实现，原文保留作历史引用。
 //!
 //! **为什么不「整幅一次渲」**：渲染库的单次调用会先合成一张 1× 中间图（≤128 MiB）。
 //! `700×700` 格的地图 `@Quarter` 的 1× 中间图是 `33600×22400×4 = 3 GB`，一次调用
@@ -104,8 +111,8 @@ use miredit_render::minimap::{
 };
 use miredit_render::tiled::{render_tiled, TiledError};
 use miredit_render::{
-    compare::resize_to, encode_rgba_png, CollisionOverlay, LayerMask, PngImage, RenderOptions,
-    RenderScale,
+    encode_rgba_png, preview_raster::fit_centered_opaque, CollisionOverlay, LayerMask, PngImage,
+    RenderOptions, RenderScale,
 };
 use mir2_assets::SpriteSource;
 use mir2_map::Map;
@@ -247,7 +254,7 @@ fn target_size(size: MinimapSize, cells_w: u32, cells_h: u32) -> ApiResult<(u32,
 }
 
 // ---------------------------------------------------------------------------
-// 二、渲染（整幅一次 + 面积平均缩到目标宽高）
+// 二、渲染（整幅一次 + 等比居中 + 不透明黑底 + 最近邻落到目标宽高）
 // ---------------------------------------------------------------------------
 
 /// 出图并按档位分派，返回 `(实际宽, 实际高, PNG 字节)`。
@@ -257,10 +264,21 @@ fn target_size(size: MinimapSize, cells_w: u32, cells_h: u32) -> ApiResult<(u32,
 /// 1× 中间图有 128 MiB 上限，`700×700` 格的地图在 `Quarter` 档的 1× 中间图是
 /// `33600×22400×4 = 3 GB`，一次渲根本装不下（那才是「700×700 必须成功」的关键）。
 ///
-/// 第二段仍是**面积平均缩到目标宽高**（官方 `PreviewRaster.Create` 的等价落点）：
-/// 分块出的是「最接近且不越界档位」的整幅，再用 [`resize_to`] 精确落到 `target`。
+/// 第二段是**最终合成**：按上游 `PreviewRaster.cs:15-19,35-38` 做
+/// `scale = min(目标宽/源宽, 目标高/源高)` + **居中**留边 + **不透明黑底** + **最近邻**取样
+/// （[`fit_centered_opaque`]）。分块出的是「最接近且不越界档位」的整幅，再落到 `target`。
 ///
-/// 宽高取自**产物**（`resize_to` 之后那张图），不是回显请求参数 —— 与 `/api/tiles` 的
+/// ⚠ **订正（2026-11-08）**：本段原文是
+/// 「第二段仍是**面积平均缩到目标宽高**（官方 `PreviewRaster.Create` 的等价落点）：
+/// 分块出的是「最接近且不越界档位」的整幅，再用 [`resize_to`] 精确落到 `target`。」
+/// —— **那句是错的**，两处都错：
+/// ① 采样：上游 `PreviewRaster.cs:35-38` 是**最近邻**（`(int)((x+.5-left)*pixels.Width/w)`），
+///    面积平均只在上游 mip 预缩 `OverviewPixels.cs:7-42`；
+/// ② 几何：上游 `PreviewRaster.cs:15-17` 是 `scale = min(...)` + 居中偏移（`padding: 0`），
+///    不是「目标宽高原样铺满」—— 后者在非等比请求（如 `1000×100`）上会把图**拉伸失真**。
+/// 原文保留作历史引用。
+///
+/// 宽高取自**产物**（`fit_centered_opaque` 之后那张图），不是回显请求参数 —— 与 `/api/tiles` 的
 /// `X-Render-Scale` 同一条纪律：响应头要说「实际给了什么」，不是「你要了什么」。
 fn render_minimap(
     map: &Map,
@@ -283,18 +301,16 @@ fn render_minimap(
     )
     .map_err(|e| tiled_error_to_api(e, cells_w, cells_h, scale, target))?;
 
-    // 第二段：面积平均缩到目标宽高（公开入口，不自己写滤镜）。
+    // 第二段：等比 + 居中 + 不透明黑底 + 最近邻（公开入口，不自己写滤镜）。
+    //
+    // 不再有「同尺寸就跳过」的短路：`opaque: true` 的黑底本身就是要落的语义
+    // （上游 `PreviewRaster.cs:19` 无条件把 alpha 写成 255），跳过会漏掉那一步。
     let 源 = PngImage {
         width: 分块.width,
         height: 分块.height,
         rgba: 分块.rgba,
     };
-    let 图 = if (源.width, 源.height) == target {
-        // 恰好同尺寸时 `resize_to` 只会 clone，直接跳过省一次整幅拷贝
-        源
-    } else {
-        resize_to(&源, target.0, target.1)
-    };
+    let 图 = fit_centered_opaque(&源, target.0, target.1);
     let (w, h) = (图.width, 图.height);
     let png = encode_rgba_png(w, h, &图.rgba)
         .map_err(|e| ApiError::internal(format!("PNG 编码失败（{w}×{h}）：{e}")))?;

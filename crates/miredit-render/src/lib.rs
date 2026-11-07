@@ -312,6 +312,7 @@ pub mod lighting;
 pub mod minimap;
 pub mod overview;
 pub mod png_io;
+pub mod preview_raster;
 pub mod stamp;
 pub mod tiled;
 
@@ -338,6 +339,10 @@ pub use overview::{
     render_overview, Overview, OverviewError, OVERVIEW_MAX_BYTES, OVERVIEW_MAX_LEVEL,
 };
 pub use png_io::{encode_rgba_png, PngImage};
+// 导出成图的**最终合成**（等比 + 居中 + 不透明黑底 + 最近邻），对齐上游
+// `PreviewRaster.Create(..., padding: 0, opaque: true)`（`MinimapExporter.cs:56-57`）。
+// 只给导出链用；mip 预缩（面积平均）仍走 `overview` / `scale`，两者**不合并**。
+pub use preview_raster::fit_centered_opaque;
 pub use scale::{try_render_region_scaled, try_render_region_scaled_with};
 // 分块渲染 + 拼接：**导出大图/小地图的唯一实现**（2026-11-06 从 `miredit-gui` 上移）。
 // GUI 与网页后端都只调这里，别再各写一套（两份必然漂，症状是「块边界丢像素」）。

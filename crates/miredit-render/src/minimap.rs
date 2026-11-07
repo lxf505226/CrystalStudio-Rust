@@ -8,7 +8,13 @@
 //! 搬完后 `miredit-gui` 那边只剩 `pub use`（API 与行为一个字节都没变，测试不动语义）。
 //!
 //! 本模块**不含渲染流程**：它只回答「该出多大」「这个尺寸合不合法」「该用哪一档倍率」。
-//! 真正出图仍走 [`crate::try_render_region_scaled_with`] + [`crate::compare::resize_to`]。
+//! 真正出图仍走 [`crate::tiled::render_tiled`] + [`crate::preview_raster::fit_centered_opaque`]。
+//!
+//! ⚠ **订正（2026-11-08）**：本行原文是「真正出图仍走 [`crate::try_render_region_scaled_with`]
+//! \+ [`crate::compare::resize_to`]」—— 那句在导出链上已过期：第二段不再是面积平均的
+//! `resize_to`，而是上游 `PreviewRaster.Create(..., padding: 0, opaque: true)` 的等价落点
+//! （等比 + 居中 + 不透明黑底 + 最近邻，见 [`crate::preview_raster`]）。`resize_to` 仍被
+//! `overview` 的 mip 预缩与 `compare_blocks` 诊断使用，**没有**被替换。原文保留作历史引用。
 //!
 //! # 一、官方口径（`@acfbbf8a` 回源订正，2026-11-06）
 //!
@@ -202,8 +208,14 @@ pub fn valid_minimap_size(width: u32, height: u32) -> Result<(), String> {
 /// ```
 ///
 /// ⚠ **官方用 16 级 overview mip，本仓只有 4 档 ⇒ 有据映射，不是自定值**。
-/// 目标像素尺寸最终仍由 [`crate::compare::resize_to`] 精确落到 [`valid_minimap_size`]
-/// 判过的宽高，不放大采样核、不改任何 render 常量。
+/// 目标像素尺寸最终仍由 [`crate::preview_raster::fit_centered_opaque`] 精确落到
+/// [`valid_minimap_size`] 判过的宽高（等比 + 居中 + 不透明黑底 + 最近邻，上游
+/// `PreviewRaster.cs:15-19,35-38`），不放大采样核、不改任何 render 常量。
+///
+/// ⚠ **订正（2026-11-08）**：本行原文写的是「最终仍由 [`crate::compare::resize_to`]
+/// 精确落到 …」，那是**旧口径**（面积平均、且目标宽高原样铺满 ⇒ 非等比请求会拉伸失真）。
+/// 按上游 `MinimapExporter.cs:56-57` → `PreviewRaster.cs:15-19,35-38` 改为上面这条。
+/// 原文保留作历史引用；`resize_to` 本身**没动**（仍服务 mip 预缩与诊断）。
 pub fn pick_official_scale(
     cells_w: u32,
     cells_h: u32,
