@@ -155,4 +155,4 @@ cargo run -p miredit-gui --release -- --map /path/to/some.map
 - 界面与文档全中文；官方界面译文的 key 与上游 `Localization/Strings.json` 对齐。
 - **不许假数据**：格式字节布局、光照 alpha、网格阈值、小地图尺寸等数值一律回源上游；上游确实不可得时才显式标注「原版不可得 ⇒ 自定值」并写明依据。
 - 许可证：**MIT**，见 [LICENSE](LICENSE)。
-- Docker：`docker/README.md` 描述的是**尚未在 CI 或任何机器上实跑验证**的编排（开发机无 Docker 环境），请以实际构建结果为准。
+- Docker：`docker/README.md` 的编排**已于 2026-11-08 在飞牛 NAS 上实跑验证**（`docker build` 成功、容器 `Up (healthy)`、`/api/health` 与根路径 `/` 均 200）。**仍未验证**的是 `front`（nginx）层、素材卷挂载、`/api/save` 写盘，逐项状态见 `docker/README.md` §7。

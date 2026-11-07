@@ -221,7 +221,8 @@ version.workspace = true
    日期版本没有 `-rc.N` 预发布形态；要验收就按 §2.1 用同日更小轮次，正式发布另起一轮。
 7. **GitHub Release**：只在**本仓** `CrystalStudio-Rust`（`https://github.com/lxf505226/CrystalStudio-Rust`）发布，标题 `Crystal Studio v<日期版本>`，正文直接取 `CHANGELOG` 该版小节，末尾附「如何更新」（§七）。**不再向上游 `fluttergo/CrystalStudio` 提 PR、也不在其仓库发 Release。**
 8. **Docker 镜像 tag**：镜像构建出来后按 `v<日期版本>` / `latest` 两个标签发布（`crystalstudio/miredit`、`crystalstudio/miredit-front`）。
-   ⚠ 现状：`docker/compose.yaml` 用的是 `:dev`，且整套编排**尚未在 CI 或任何机器上实跑验证**（见 [`docker/README.md`](docker/README.md)）。第一次真正出镜像前，这一步只能是"按规则待做"，不许写成已完成。
+   ⚠ 现状（2026-11-08 订正）：`docker/compose.yaml` 用的是 `:dev`；编排**已在飞牛 NAS 实跑验证**——`docker build -f docker/Dockerfile --target runtime` 成功（Rust 3m58s + apt-get 约 8 分钟），`docker run` 后容器 `Up (healthy)`、`Restarts=0`、`/api/health` 与根路径 `/` 均 200（见 [`docker/README.md`](docker/README.md) §7）。
+   **仍未验证**：`front`（nginx）层、素材卷挂载、`/api/save` 写盘。镜像目前只在 NAS 本地并导出 tar 归档，**未推任何 registry**。
 9. **公告「如何更新」**：Release 正文与公告里给三条路径（源码 / Release 包 / Docker）并指向 §七，明确"要不要更新"的判据：看 `CHANGELOG` 里有没有你需要的那条修复。
 10. **收尾复核**：tag 指向的提交上 `/api/health` 版本 = tag 版本；`CHANGELOG` 无占位日期、无"待定"版本号；工作树干净（发布后不再有未提交改动混进同一版本）。
 

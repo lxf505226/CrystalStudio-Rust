@@ -153,9 +153,9 @@ docker compose --profile front up -d --build
 |---|---|---|
 | `compose.yaml` 的构建上下文 | ✅ **已解决（2026-11-06）** | 已改为 **仓库根** `context: ..` + `dockerfile: docker/Dockerfile`；`Dockerfile` 的 `COPY` 也改为仓库内相对路径（`Cargo.toml` / `Cargo.lock` / `crates/` / `vendor/` / `web/`）。独立 clone 后目录名叫 `CrystalStudio-Rust` 还是别的都不影响 |
 | `mir2-assets` 的 `wil2atlas` 依赖 | ✅ **已解决** | WIL/WZL 解码器已 vendored 到 `vendor/wil2atlas/`（decoder-only，MIT；来源与逐文件 SHA256 见 `vendor/wil2atlas/NOTICE`），`crates/mir2-assets/Cargo.toml` 已改用仓库内相对路径 `path = "../../vendor/wil2atlas"`，不再依赖开发机绝对路径 |
-| `docker build` 能成功 | ❌ 未验证 | 无 Docker 环境 |
-| Linux 二进制能跑（glibc / 依赖） | ❌ 未验证 | 只做过 Windows 二进制的运行时等价验证 |
-| `nginx -t` 能接受这份配置 | ❌ 未验证 | 只做了静态配平与指令拼写核对 |
-| `entrypoint.sh` 在 busybox ash 下能跑 | ❌ 未验证 | 只做了 `bash -n`；已确认只用 POSIX 构造 |
-| 非 root（uid 10001）对挂载目录的读权限 | ❌ 未验证 | 取决于宿主目录权限，必要时 `chown` / `chmod` |
-| 容器内 `/api/save` 写盘 | ❌ 未验证 | 地图卷默认 `:ro` ⇒ 保存必然失败（有意为之，先只读验渲染） |
+| `docker build` 能成功 | ✅ **已验证（2026-11-08）** | 飞牛 NAS 实跑：`docker build -f docker/Dockerfile --target runtime`，Rust 编译 **3m58s**（100 个依赖 crate）+ runtime 阶段 `apt-get` 约 8 分钟，总墙钟约 13 分钟，`BUILD_EXIT=0`。产物 `crystalstudio/miredit:20261107.0.0`（134 MB） |
+| Linux 二进制能跑（glibc / 依赖） | ✅ **已验证（2026-11-08）** | 同上环境 `docker run` 起容器：`Up (healthy)`、`Restarts=0`、CPU 0%、内存 1.33 MiB；`/api/health` = `{"ok":true,"version":"20261107.0.0"}`、根路径 `/` = **HTTP 200**（29163 B HTML）、`/css/app.css` 与 `/js/ui.js` 均 200 |
+| `nginx -t` 能接受这份配置 | ❌ 未验证 | 只做了静态配平与指令拼写核对；2026-11-08 的实跑**未启用** `profile: front`（默认路径直连后端） |
+| `entrypoint.sh` 在 busybox ash 下能跑 | ❌ 未验证 | 只做了 `bash -n`；已确认只用 POSIX 构造。同上，`front` 层未启用 |
+| 非 root（uid 10001）对挂载目录的读权限 | ❌ 未验证 | 取决于宿主目录权限，必要时 `chown` / `chmod`；2026-11-08 实跑**未挂任何素材卷**（`/data/*` 用镜像内空目录） |
+| 容器内 `/api/save` 写盘 | ❌ 未验证 | 地图卷默认 `:ro` ⇒ 保存必然失败（有意为之，先只读验渲染）；实跑同样未挂素材，未触及 |

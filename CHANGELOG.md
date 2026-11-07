@@ -11,7 +11,10 @@
 
 ## [Unreleased]
 
-> 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。
+### 内部
+
+- **Docker 编排首次实跑验证（2026-11-08，飞牛 NAS）**：`docker build -f docker/Dockerfile --target runtime` 成功（Rust 编译 3m58s + runtime `apt-get` 约 8 分钟）；`docker run` 后容器 `Up (healthy)`、`Restarts=0`、`/api/health` = `{"ok":true,"version":"20261107.0.0"}`、根路径 `/` = HTTP 200（29163 B HTML）、`/css/app.css` 与 `/js/ui.js` 均 200；无素材时 `/api/tiles`、`/api/stamps` 如实 503（不伪造像素）。镜像 `crystalstudio/miredit:20261107.0.0`（134 MB），已导出 tar 归档；**未推任何 registry**。
+  仍未验证：`front`（nginx）层、素材卷挂载、`/api/save` 写盘。逐项状态见 `docker/README.md` §7。
 
 ## [20261107.0.0] - 2026-11-07
 
