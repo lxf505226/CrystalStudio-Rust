@@ -11,11 +11,15 @@
 
 ## [Unreleased]
 
+> 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。
+
+## [0.5.0] - 2026-11-07
+
 ### 新增
 
-- **A-015 Crop 裁剪到选区**：Tools 最前项；选区按 2 格偶数对齐（右/下可留奇数），只拷区内格；整图同尺寸 no-op；支持 7 档，Mir3Wemade/CrystalCs/trailer 明确拒绝；`Step::Resize` 整文档一步 undo/redo；成功后清选区、重 fit、保存按新尺寸回读。Expand 下一笔。
+- **A-015 Crop 裁剪到选区**：Tools 最前项；选区按 2 格偶数对齐（右/下可留奇数），只拷区内格；整图同尺寸 no-op；支持 7 档，Mir3Wemade/CrystalCs/trailer 明确拒绝；`Step::Resize` 整文档一步 undo/redo；成功后清选区、重 fit、保存按新尺寸回读。
 - core `Document::replace_resized`：先同步未保存编辑、改头部宽高、搬格/空白边框、重建视图与计数；校验全在赋值前，失败不写/不压步/不脏。
-- **A-015 Expand 地图扩边**：Tools → 地图扩边（440 宽模态，四向偶数输入）；`expand_target` 校验非负/偶数/非全 0/单边 32767/总面积 16,000,000；原格平移、四周空白、7 档头部宽度；整档 `Step::Resize` 一步 undo/redo；非法输入 Apply 灰显、不关窗。
+- **A-015 Expand 地图扩边**：Tools → 地图扩边（440 宽模态，四向偶数输入）；`expand_target` 校验非负/偶数/非全 0/单边 32767/总面积 16,000,000；原格平移、四周空白、7 档头部宽高；整档 `Step::Resize` 一步 undo/redo；非法输入 Apply 灰显、不关窗。
 
 ## [0.4.0] - 2026-11-07
 
@@ -42,6 +46,7 @@
 
 - `--shot` PNG 同构建同命令不可逐字节复现（实测同构建两次 430 px 不同，跨改动 626 px，与噪声同量级）；当前用视图状态等价（scale/pan/visible_cells 一致）+ 渲染库确定性基线代替像素门禁，截图确定化另立一单。
 - A-011 Type5 预览：`check_stamp_placement` 不判地表能力（无 `FormatId` 入参）⇒ Type5 图带地表印章时预览可能显示可放（0.55），点击仍由 `plan_stamp` 拒绝；本版先如实登记，后续给 check 加 `Option<FormatId>` 再对齐。
+- A-015 Resize：尺寸变化可撤销也可重做（上游 `History.Resize` 会清重做）；`Mir3Wemade`（块级背景在头部）/`CrystalCs`（变长格 + 印章元数据）与 `raw.trailer` 非空一律显式拒绝；本仓无印章元数据层，placed stamps 平移不适用。
 
 ## [0.2.0] - 2026-11-07
 

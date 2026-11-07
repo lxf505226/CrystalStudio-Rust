@@ -120,8 +120,8 @@ pub enum 校验 {
         /// 目标高。
         height: u16,
     },
-    /// 非法：文本不是整数（上游 `int.TryParse` 失败）。
-    不是数字,
+    /// 非法：文本**不是整数**（含空白）—— 上游 `int.TryParse` 对空串同样返回 `false`。
+    不是整数,
     /// 非法：四向判据不过（负数 / 奇数 / 全 0 / 越上限），带中文原因。
     越界(String),
 }
@@ -141,7 +141,7 @@ impl 校验 {
                 tx::EXPAND_SUMMARY_TMPL,
                 &[("w", &width.to_string()), ("h", &height.to_string())],
             ),
-            校验::不是数字 => tx::EXPAND_ERR_NOT_NUMBER.to_owned(),
+            校验::不是整数 => tx::EXPAND_ERR_NOT_NUMBER.to_owned(),
             校验::越界(why) => why.clone(),
         }
     }
@@ -162,19 +162,28 @@ impl 校验 {
     }
 }
 
-/// 校验四个输入框的文本（空串按 0 处理，与官方 `"0"` 初值同效）。
+/// 校验四个输入框的文本。
+///
+/// # 空串**不许**当 0（2026-11-07 P3 订正）
+///
+/// 上游 `MapExpansionWindow.cs:39-41` 是 `int.TryParse(LeftInput.Text, out int left) && …`：
+/// 空串 ⇒ `TryParse` 返回 `false` ⇒ `ApplyButton.IsEnabled = false`。本仓旧实现把空串当 `0`，
+/// **与上游相反**，已改成 [`校验::不是整数`]（摘要行同时说明「不能为空」）。
+///
+/// `expand_target` 的入参是 `i32`（四个已解析的数），**结构性看不到文本** ⇒ 空串不可能漏到
+/// 内核去当 0；拦截点只有本函数（GUI 层）。
 #[must_use]
 pub fn 校验(文本: &[String; 4], cells: (u16, u16)) -> 校验 {
     let mut 值 = [0i32; 4];
     for (i, s) in 文本.iter().enumerate() {
         let t = s.trim();
         if t.is_empty() {
-            值[i] = 0;
-            continue;
+            // 上游 `int.TryParse("")` == false ⇒ 禁用 Apply，**不猜 0**
+            return 校验::不是整数;
         }
         match t.parse::<i32>() {
             Ok(v) => 值[i] = v,
-            Err(_) => return 校验::不是数字,
+            Err(_) => return 校验::不是整数,
         }
     }
     match miredit_core::expand_target(cells.0, cells.1, 值[0], 值[1], 值[2], 值[3]) {
@@ -264,27 +273,25 @@ pub fn draw(
             pal.text,
         );
         pt::fill(p, *rect, pal.input_bg);
+        // 空着的框用警示色边框（**不再画 "0" 占位** —— 空≠0，上游也是禁用 Apply）
+        let 空 = 文本[i].trim().is_empty();
         pt::border(
             p,
             *rect,
-            if 焦点 == i { pal.accent } else { pal.input_border },
+            if 空 {
+                pal.warn_banner_edge
+            } else if 焦点 == i {
+                pal.accent
+            } else {
+                pal.input_border
+            },
         );
-        let 值 = &文本[i];
-        if 值.is_empty() {
+        if !空 {
             pt::text(
                 p,
                 pos2(rect.left() + 8.0, rect.center().y),
                 Align2::LEFT_CENTER,
-                "0",
-                m::BODY_FONT,
-                pal.text_muted,
-            );
-        } else {
-            pt::text(
-                p,
-                pos2(rect.left() + 8.0, rect.center().y),
-                Align2::LEFT_CENTER,
-                值,
+                &文本[i],
                 m::BODY_FONT,
                 pal.text,
             );
@@ -508,7 +515,7 @@ mod tests {
             校验(&文本(["-2", "0", "0", "0"]), cells),
             校验::越界(ref why) if why.contains("负数")
         ));
-        assert_eq!(校验(&文本(["x", "0", "0", "0"]), cells), 校验::不是数字);
+        assert_eq!(校验(&文本(["x", "0", "0", "0"]), cells), 校验::不是整数);
         let ok = 校验(&文本(["2", "4", "6", "8"]), cells);
         assert!(ok.可用());
         assert_eq!(
@@ -516,8 +523,33 @@ mod tests {
             tx::fill(tx::EXPAND_SUMMARY_TMPL, &[("w", "18"), ("h", "22")])
         );
         assert_eq!(ok.四向(), Some((2, 4, 6, 8)));
-        // 空串按 0（官方初值 "0" 的同效写法）
-        assert!(校验(&文本(["", "", "2", ""]), cells).可用());
+    }
+
+    /// **空串不许当 0**（P3 订正；上游 `int.TryParse("")` == false ⇒ Apply 禁用）。
+    ///
+    /// 逐格清空都要被拦：任何一格的原文是空串/纯空白 ⇒ [`校验::不是整数`]、`可用() == false`、
+    /// 摘要说「不能为空」、`四向()` 给 `None`（⇒ 调用方拿不到可提交的四个数）。
+    #[test]
+    fn 空串不许当零() {
+        let cells = (10, 10);
+        for i in 0..4 {
+            for 空白 in ["", " ", "\t"] {
+                let mut a = ["2", "2", "2", "2"];
+                a[i] = 空白;
+                let 判定 = 校验(&文本(a), cells);
+                assert_eq!(判定, 校验::不是整数, "第 {i} 格填 {空白:?} 必须判非法");
+                assert!(!判定.可用(), "第 {i} 格填 {空白:?} ⇒ Apply 必须禁用");
+                assert!(判定.四向().is_none());
+                assert!(判定.摘要().contains("不能为空"), "{}", 判定.摘要());
+            }
+        }
+        // 全空也一样（初值是 "0"，但用户清空后不能靠"当 0"混过去）
+        assert_eq!(
+            校验(&文本(["", "", "", ""]), cells),
+            校验::不是整数
+        );
+        // 对照：四格都有数 ⇒ 可用（否则上面那条可能只是"全都不可用"）
+        assert!(校验(&文本(["0", "0", "0", "2"]), cells).可用());
     }
 
     // ───────────────────── 模态输入（真 egui 帧） ─────────────────────
@@ -643,6 +675,53 @@ mod tests {
             },
         ];
         assert_eq!(跑(&ctx, &l, &mut o, 一帧(0.3, 点取消)), 动作::Cancel);
+    }
+
+    /// **清空任一格 ⇒ 回车与「地图扩边」都不提交**（不关窗、不进动作层）。
+    #[test]
+    fn 清空任一格则不提交() {
+        let ctx = egui::Context::default();
+        let l = 布局();
+        let r = rects(&l);
+        // ⚠ 帧时间必须**单调递增**（emath 的 `Undoer` 在时间倒退时会 panic），
+        // 所以每轮用互不重叠的时间片。
+        for i in 0..4 {
+            let t0 = i as f64 * 10.0;
+            let mut a = ["2", "2", "2", "2"];
+            a[i] = "";
+            let mut o = 浮层(a);
+            assert_eq!(
+                跑(&ctx, &l, &mut o, 一帧(t0, 键(egui::Key::Enter))),
+                动作::None,
+                "第 {i} 格为空时回车不许提交"
+            );
+            // 点按钮同样不提交（先 hover 一帧再按下+松开）
+            let _ = 跑(
+                &ctx,
+                &l,
+                &mut o,
+                一帧(t0 + 0.1, vec![egui::Event::PointerMoved(r.ok.center())]),
+            );
+            let 点 = vec![
+                egui::Event::PointerButton {
+                    pos: r.ok.center(),
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+                egui::Event::PointerButton {
+                    pos: r.ok.center(),
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                },
+            ];
+            assert_eq!(
+                跑(&ctx, &l, &mut o, 一帧(t0 + 0.2, 点)),
+                动作::None,
+                "第 {i} 格为空时点「地图扩边」不许提交"
+            );
+        }
     }
 
     /// 只收 ASCII 数字；退格删一位；一动输入就清掉上次的拒绝原因。

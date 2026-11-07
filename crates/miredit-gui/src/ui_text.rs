@@ -337,8 +337,12 @@ pub const EXPAND_SUMMARY_TMPL: &str = "扩边后：{w} × {h} 格"; // EN: Expan
 /// 非法时的原因（官方那句 `"Enter non-negative even amounts, with at least one side greater than 0. …"`）。
 ///
 /// 本仓按四种拒绝原因分别说（负数 / 奇数 / 全 0 / 越界），文案出自
-/// `miredit_core::ResizeError` 的 `Display`；这里只留"文本不是整数"那一条。
-pub const EXPAND_ERR_NOT_NUMBER: &str = "四条边都要填整数（留空按 0 算）"; // EN: Enter whole numbers.
+/// `miredit_core::ResizeError` 的 `Display`；这里只留「**不是整数 / 空着**」那一条。
+///
+/// ⚠ **空串不许当 0**（2026-11-07 P3 订正）：上游 `MapExpansionWindow.cs:39-41` 用
+/// `int.TryParse`，空串返回 `false` ⇒ `ApplyButton.IsEnabled = false`。旧文案「留空按 0 算」
+/// 与本仓旧实现一致、但与上游相反，已改成现在这句。
+pub const EXPAND_ERR_NOT_NUMBER: &str = "四条边都要填整数，且不能为空"; // EN: Enter whole numbers; empty is not allowed.
 
 /// 扩边模态的取消按钮。
 pub const EXPAND_CANCEL: &str = "取消"; // EN: Cancel ｜ 官方: Cancel
