@@ -440,6 +440,17 @@ pub fn icon_shapes(idx: usize, box_rect: Rect, color: Color32) -> Vec<Shape> {
     out
 }
 
+/// **第 `idx` 个工具的悬停提示**（工具条 hover 的唯一取数口）。
+///
+/// 越界 ⇒ 空串（`egui` 对空串不弹气泡）—— 宁可什么都不显示，也不编一句假提示。
+///
+/// 提示内容见 [`TOOLS`] 的 `tip` 字段：P（铅笔）与 K（克隆）后面带「（未接线）」，
+/// 已接线工具不带（判据在 [`tests::未接线工具在悬停提示里说明`]）。
+#[must_use]
+pub fn tip_of(idx: usize) -> &'static str {
+    TOOLS.get(idx).map_or("", |t| t.tip)
+}
+
 /// 每个工具按钮的显示区尺寸（供布局层使用）。
 pub fn box_size_of(idx: usize) -> f32 {
     TOOLS.get(idx).map(|t| t.box_size).unwrap_or(16.0)
@@ -477,7 +488,15 @@ mod tests {
                 TOOLS[i].tip
             );
         }
-        // ③ 全表里带「未接线」的**恰好这两个**槽（多一个少一个都说明标注走偏了）
+        // ③ `tip_of` 必须与 `TOOLS[i].tip` 同源（悬停取数口不许另写一份文案）
+        for (i, t) in TOOLS.iter().enumerate() {
+            assert_eq!(tip_of(i), t.tip, "第 {i} 项 tip_of 与 TOOLS 不一致");
+        }
+        // ④ 越界 ⇒ 空串（不编假提示；egui 对空串不弹气泡）
+        assert_eq!(tip_of(TOOLS.len()), "");
+        assert_eq!(tip_of(usize::MAX), "");
+
+        // ⑤ 全表里带「未接线」的**恰好这两个**槽（多一个少一个都说明标注走偏了）
         let 带标注: Vec<usize> = TOOLS
             .iter()
             .enumerate()

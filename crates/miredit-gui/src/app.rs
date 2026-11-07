@@ -3258,10 +3258,14 @@ impl MireditApp {
         //    ⚠ 工具面板隐藏时整段跳过（看不见的按钮不该还能点）。
         if self.panels.get(PanelId::Tools) {
             for (i, r) in l.tool_buttons.iter().enumerate() {
-                if ui
+                // 悬停提示：文案取 `icons::tip_of(i)`（P/K 带「未接线」）。**只在工具面板可见时**
+                // 挂（这一整段就在 `if self.panels.get(PanelId::Tools)` 里），所以隐藏后
+                // 不存在"看不见的按钮还能 hover"的问题；也不写状态栏 —— 提示是**瞬时**气泡，
+                // 不是第二个常驻显示面（常驻的「当前工具」在状态栏 `status_tool`，两者分工不同）。
+                let resp = ui
                     .interact(*r, ui.id().with(("tool_btn", i)), Sense::click())
-                    .clicked()
-                {
+                    .on_hover_text(crate::icons::tip_of(i));
+                if resp.clicked() {
                     self.selected_tool = i;
                     self.edit.select(i);
                     // 换了工具就退出待放置态：待放置态的语义是"下一次左键 = 落位"，
@@ -5806,6 +5810,140 @@ mod tests {
             "阻挡层上印章必须纠正"
         );
         assert_eq!(层, miredit_core::EditLayer::LowCollision);
+    }
+
+    // ───────────────────── 工具条悬停提示 / 点击（R48 / R51） ─────────────────────
+
+    /// 跑一帧 `interact`（鼠标事件走 `RawInput`）—— 工具按钮这类**命中区**用例都走它。
+    ///
+    /// 判据说明：`clicked()` 要求"按下前已经 hover"，所以点击必须**两帧**（与
+    /// `menu::expand`/`goto` 的模态用例同一套做法）。
+    /// ⚠ **必须复用同一个 `egui::Context`**：egui 的命中/点击判定用的是**上一帧**登记的
+    /// widget 表（`get_response` 读 `interact_widgets` 快照）。每帧新建一个 `Context`
+    /// 会让 `hovered()/clicked()` 永远为 false —— 这是本次踩过的坑，别再写成每帧 new。
+    fn 互动一帧(
+        ctx: &egui::Context,
+        app: &mut MireditApp,
+        l: &crate::layout::Layout,
+        events: Vec<egui::Event>,
+    ) {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::pos2(0.0, 0.0),
+                egui::vec2(crate::metrics::WINDOW_W, crate::metrics::WINDOW_H),
+            )),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default()
+                .frame(egui::Frame::NONE)
+                .show(ctx, |ui| app.interact(ui, l));
+        });
+    }
+
+    /// 布局（与真实窗口同尺寸）。
+    fn 测试布局() -> crate::layout::Layout {
+        crate::layout::Layout::compute(egui::Rect::from_min_size(
+            egui::pos2(0.0, 0.0),
+            egui::vec2(crate::metrics::WINDOW_W, crate::metrics::WINDOW_H),
+        ))
+    }
+
+    /// **悬停不切换工具、点击才切换**；切换时清 `armed`（待放置印章）。
+    ///
+    /// 悬停那段顺带覆盖 `on_hover_text` 的**不变量**：气泡只在 hover 时出现，
+    /// 而 hover 这一帧**不许有副作用**（`selected_tool` / `edit.slot()` 都不变）。
+    #[test]
+    fn 工具按钮悬停不切换点击才切换() {
+        let mut app = 尺寸应用(8, 8);
+        let l = 测试布局();
+        let ctx = egui::Context::default();
+        let 目标 = 3usize; // 橡皮（已接线）
+        let pos = l.tool_buttons[目标].center();
+        assert_eq!(app.selected_tool, edit::TOOL_BRUSH_IDX, "初始应是画笔");
+
+        // ① 悬停一帧：不切换
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(pos)]);
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(pos)]);
+        assert_eq!(app.selected_tool, edit::TOOL_BRUSH_IDX, "悬停不许切工具");
+        assert_eq!(app.edit.slot(), edit::TOOL_BRUSH_IDX);
+
+        // ② 待放置态 + 点击：切换并清 armed
+        app.armed = Some(crate::stamp_place::Armed {
+            id: "mir_00000".to_string(),
+            name: "测试印章".to_string(),
+            bounds: None,
+            cells: None,
+        });
+        app.op = Some(("旧的".to_string(), false));
+        互动一帧(
+            &ctx,
+            &mut app,
+            &l,
+            vec![
+                egui::Event::PointerMoved(pos),
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+        assert_eq!(app.selected_tool, 目标, "点击第 {目标} 个按钮要切过去");
+        assert_eq!(app.edit.slot(), 目标, "槽位真源跟着切");
+        assert!(app.armed.is_none(), "换工具必须退出待放置态");
+        assert!(app.op.is_none(), "退出待放置态时旧的待放置回执要清掉");
+    }
+
+    /// **工具面板隐藏 ⇒ 按钮 hover/click 都不响应**（整段在 `if panels.get(Tools)` 里）。
+    ///
+    /// 能断言的是"没有副作用"（`selected_tool` / `armed` 不动）；`on_hover_text` 的**气泡
+    /// 本身**在无头环境里不可观测（egui 把 tooltip 状态放在自己的 `Memory` 里，
+    /// `Context::run` 的 `FullOutput` 不暴露），所以"没有气泡"这一点只能由"整段被跳过"保证。
+    #[test]
+    fn 工具面板隐藏后按钮不响应() {
+        let mut app = 尺寸应用(8, 8);
+        app.panels.set(menu::panels::PanelId::Tools, false);
+        let l = 测试布局();
+        let ctx = egui::Context::default();
+        let pos = l.tool_buttons[3].center();
+        app.armed = Some(crate::stamp_place::Armed {
+            id: "x".to_string(),
+            name: "y".to_string(),
+            bounds: None,
+            cells: None,
+        });
+        // hover + 点击都来一遍
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(pos)]);
+        互动一帧(
+            &ctx,
+            &mut app,
+            &l,
+            vec![
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+        assert_eq!(app.selected_tool, edit::TOOL_BRUSH_IDX, "面板隐藏时不许切工具");
+        assert!(app.armed.is_some(), "面板隐藏时也不许清待放置态（没点到东西）");
     }
 
     // ───────────────────── 视图 → 定位到格…（F-R13-2 / R42） ─────────────────────

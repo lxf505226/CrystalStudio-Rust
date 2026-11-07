@@ -908,6 +908,48 @@ mod tests {
         }
     }
 
+    /// **工具按钮的命中矩形 = 悬停提示的作用域**（R48：`on_hover_text` 挂在 `tool_buttons` 上）。
+    ///
+    /// 钉三件事：
+    /// ① 10 个按钮矩形**互不重叠**（否则 hover 会同时点亮两个按钮 ⇒ 气泡内容不确定）；
+    /// ② 每个矩形都落在「工具」面板的**内容区**里（按钮条可见时才有提示，看不见的区域不该有热区）；
+    /// ③ 每个按钮都拿得到非空提示（[`crate::icons::tip_of`] 与 `TOOLS` 同源，另有用例）。
+    ///
+    /// ⚠ 真正"hover 后 egui 画出气泡"这一步**无法在无头测试里断言**：egui 把 tooltip 状态
+    /// 存在自己的 `Memory` 里，`Context::run` 的 `FullOutput` 不暴露它；而 `--shot` 运行又会
+    /// 锁死输入（`app::input_locked`）⇒ 截图也拿不到真实 hover。可断言的是**文案数据**
+    /// （`icons` 侧）与**热区几何**（本条）。
+    #[test]
+    fn 工具按钮热区不重叠且在面板内() {
+        let l = Layout::compute(Rect::from_min_size(
+            pos2(0.0, 0.0),
+            vec2(m::WINDOW_W, m::WINDOW_H),
+        ));
+        let c = l.p_tools.content;
+        let rects: Vec<egui::Rect> = l.tool_buttons.to_vec();
+        assert_eq!(rects.len(), 10, "工具按钮应有 10 个");
+        for (i, r) in rects.iter().enumerate() {
+            assert!(!r.is_negative() && r.width() > 1.0 && r.height() > 1.0, "第 {i} 个按钮是空矩形");
+            assert!(
+                c.expand(0.5).contains_rect(*r),
+                "第 {i} 个按钮 {:?} 不在「工具」面板内容区 {:?} 内",
+                r,
+                c
+            );
+            assert!(!crate::icons::tip_of(i).is_empty(), "第 {i} 个按钮没有悬停提示");
+        }
+        for i in 0..rects.len() {
+            for j in (i + 1)..rects.len() {
+                assert!(
+                    !rects[i].intersects(rects[j]),
+                    "第 {i} 与第 {j} 个按钮热区重叠：{:?} / {:?}",
+                    rects[i],
+                    rects[j]
+                );
+            }
+        }
+    }
+
     /// **胶囊文字放得进胶囊**：最大尺寸 `31×31` 也必须完整显示（否则会被截成 `…`）。
     ///
     /// 胶囊宽 45（`metrics::PILL_W`，量自截图 `x92..136`）—— 这条钉住"尺寸到顶也不溢出"。
