@@ -151,11 +151,44 @@ pub const SLIDER_X: f32 = 18.0;
 pub const SLIDER_W: f32 = 64.0;
 pub const SLIDER_TRACK_H: f32 = 3.0;
 
-/// `3×3` 胶囊标签：左 x=92（相对面板 84）、宽 45、高 22。
+/// `3×3` 胶囊标签的**左边位置**：截图 x=92（相对面板 84）。
 /// 来源：截图 y=280 行 `x92..136` 为 `#ECEEF0`。
+///
+/// ⚠ **只是布局偏移，不参与上游算式**：上游 `MainWindow.axaml:6` 的胶囊宽度由内容撑出，
+/// 根本没有坐标常量。本单（A17）**不动它** —— 把它和尺寸混在一起，正是上一版
+/// 「45×22 当成常量」的同类错误。
 pub const PILL_X: f32 = 84.0;
-pub const PILL_W: f32 = 45.0;
-pub const PILL_H: f32 = 22.0;
+
+// ── 胶囊尺寸：**上游是算式，不是固定值**（A17，2026-11-08） ──
+//
+// 真值：`CrystalStudio/MainWindow.axaml:6`（逐字）
+// ```xml
+// <Border Background="{DynamicResource Theme293242}" CornerRadius="4" Padding="5,2"
+//         Margin="0,4,0,0" HorizontalAlignment="Center">
+//     <TextBlock x:Name="BrushSizeLabel" Text="3×3" MinWidth="35"
+//                TextAlignment="Center" FontWeight="SemiBold" />
+// </Border>
+// ```
+//
+// 推导（Avalonia 布局：`MinWidth` 在**内层 TextBlock** 上，`Padding` 在**外层 Border** 上）：
+// - TextBlock 宽 = `max(MinWidth 35, 文字 advance)`；
+// - Border 宽 = TextBlock 宽 + `Padding.Left 5` + `Padding.Right 5` = **`max(35, 文字宽) + 10`**；
+// - Border 高 = TextBlock 行高 + `Padding.Top 2` + `Padding.Bottom 2` = **`文字高 + 4`**；
+// - 圆角 = `CornerRadius="4"`。
+//
+// ⇒ **原为截图实测 45×22（`x92..136` 宽 44~45），2026-11-08 按上游算式改为动态。**
+//   截图那个 45 正好 = `max(35, 文字宽("3×3")) + 10 = 35 + 10`（实测 `3×3` 的 advance < 35），
+//   与算式自洽 —— 这同时是「45 是内容撑出来的、不是常量」的反证：
+//   若按 `max(35, 文字宽 + 10)` 算，「3×3」只有 35 宽，**对不上截图的 45**。
+//
+// ⚠ **字形宽 / 行高上游不可得**（Avalonia + Segoe UI 的字体度量本仓拿不到）：
+//   按任务书口径取**本仓实际上屏字体**的 `layout_no_wrap` 实测值
+//   （与 [`crate::tab_strip`] 的 `TAB_CLOSE_GLYPH_W` / `TAB_CLOSE_GLYPH_H` 同一做法）。
+pub const PILL_MIN_W: f32 = 35.0;
+pub const PILL_PAD_X: f32 = 5.0;
+pub const PILL_PAD_Y: f32 = 2.0;
+/// 圆角 4（上游 `CornerRadius="4"`）。改前 `draw_tool_options` 里就是字面量 `4.0`，值不变，只是给了名字。
+pub const PILL_RADIUS: f32 = 4.0;
 
 // ───────────────────────── 笔刷尺寸（3..=31 奇数） ─────────────────────────
 

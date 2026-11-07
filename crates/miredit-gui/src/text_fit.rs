@@ -216,7 +216,7 @@ pub fn all_dyn_labels(
     out.extend(crate::canvas::dyn_labels(l, t));
     // 常驻告警黄条（画布顶部）：它也是运行期文字，同样要过排版自检
     out.extend(crate::banner::dyn_labels(p, l, t));
-    out.extend(crate::dock_left::dyn_labels(l, t));
+    out.extend(crate::dock_left::dyn_labels(p, l, t));
     out.extend(crate::dock_right::dyn_labels(l, t, pal));
     out.extend(crate::statusbar::dyn_labels(p, l, t));
     // 地砖信息悬浮面板（A-008）：它的 `dyn_labels` 吃的是 `Panel`（行内容 + 行内裁剪盒），
@@ -588,7 +588,7 @@ mod tests {
         let 其它来源 = crate::titlebar::dyn_labels(&l, &t).len()
             + crate::canvas::dyn_labels(&l, &t).len()
             + crate::banner::dyn_labels(&p, &l, &t).len()
-            + crate::dock_left::dyn_labels(&l, &t).len()
+            + crate::dock_left::dyn_labels(&p, &l, &t).len()
             + crate::dock_right::dyn_labels(&l, &t, &pal).len()
             + crate::statusbar::dyn_labels(&p, &l, &t).len();
         assert_eq!(

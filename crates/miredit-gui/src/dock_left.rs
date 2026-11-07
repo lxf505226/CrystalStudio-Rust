@@ -47,7 +47,7 @@
 //!   `theme` 现有色），再加一根 [`m::LAYER_EDIT_BAR_W`] 宽的金条 —— 1px 金框在 1500×950
 //!   截图里与眼睛图标糊在一起，金条是"当前编辑层"的可辨标识。
 
-use egui::{pos2, vec2, Align2, Painter, Rect};
+use egui::{pos2, vec2, Align2, Color32, FontId, Painter, Rect};
 use miredit_render::{CollisionOverlay, LayerMask};
 
 use crate::edit::EditLayer;
@@ -250,7 +250,7 @@ fn draw_sel(p: &Painter, labs: &[Label], prefix: &str) {
 
 /// 按 id 前缀取**动态**标签（实测截断后）并绘制。
 fn draw_dyn_sel(p: &Painter, l: &Layout, d: &DocText, prefix: &str) {
-    for mut lab in dyn_labels(l, d)
+    for mut lab in dyn_labels(p, l, d)
         .into_iter()
         .filter(|x| x.name.starts_with(prefix))
     {
@@ -261,12 +261,50 @@ fn draw_dyn_sel(p: &Painter, l: &Layout, d: &DocText, prefix: &str) {
 
 // ───────────────────────── 标签表 ─────────────────────────
 
+/// 画笔胶囊的**外框尺寸 = 上游算式**（A17，2026-11-08；推导见 [`m::PILL_MIN_W`]）。
+///
+/// 上游 `CrystalStudio/MainWindow.axaml:6`：
+/// `<Border CornerRadius="4" Padding="5,2"><TextBlock x:Name="BrushSizeLabel"
+///   Text="3×3" MinWidth="35" TextAlignment="Center" FontWeight="SemiBold" /></Border>`
+/// ⇒ 宽 = `max(MinWidth 35, 文字宽) + Padding 5×2`；高 = `文字高 + Padding 2×2`。
+///
+/// 为什么拆成一个**不吃 `Painter` 的纯函数**：这样「算式对不对」可以用任意输入直接断言，
+/// 与「本仓字体到底多宽」（[`pill_text_size`] 的 `layout_no_wrap` 实测）分开验 ——
+/// 两条都不许靠估算。
+fn pill_size(文字: egui::Vec2) -> egui::Vec2 {
+    vec2(
+        // `MinWidth` 在内层 TextBlock 上 ⇒ 先夹文字宽，再加外层 Border 的左右 padding。
+        文字.x.max(m::PILL_MIN_W) + m::PILL_PAD_X * 2.0,
+        文字.y + m::PILL_PAD_Y * 2.0,
+    )
+}
+
+/// 胶囊里文字的**上屏实测尺寸**（宽 = advance、高 = 行高），用本仓实际上屏字体量。
+///
+/// 与 [`crate::paint::text_w`] 同一口径（`layout_no_wrap`，只排版不进绘制队列），
+/// 只是这里连**高**一起要（上游算式的高度项要用它）。
+/// 上游 Avalonia + Segoe UI 的字体度量本仓拿不到 ⇒ 按任务书口径取本仓实测值。
+fn pill_text_size(p: &Painter, text: &str) -> egui::Vec2 {
+    p.layout_no_wrap(
+        text.to_owned(),
+        FontId::proportional(m::BODY_FONT),
+        Color32::WHITE,
+    )
+    .size()
+}
+
 /// 画笔胶囊的矩形（绘制与验收共用）。
-fn pill_rect(l: &Layout) -> Rect {
+///
+/// **尺寸按上游算式现算**（宽 `max(35, 文字宽)+10`、高 `文字高+4`），
+/// 不再用固定 45×22 —— 原值「截图实测 `x92..136` 宽 44~45、高 22」保留作历史引用，
+/// 2026-11-08 按上游 `MainWindow.axaml:6` 改为动态。
+/// `PILL_X`（左偏移 84）**不参与算式**，仍是布局偏移。
+fn pill_rect(p: &Painter, l: &Layout, d: &DocText) -> Rect {
     let c = l.p_tool_options.content;
+    let 尺寸 = pill_size(pill_text_size(p, &d.pill));
     Rect::from_min_size(
-        pos2(c.left() + m::PILL_X, c.center().y - m::PILL_H * 0.5),
-        vec2(m::PILL_W, m::PILL_H),
+        pos2(c.left() + m::PILL_X, c.center().y - 尺寸.y * 0.5),
+        vec2(尺寸.x, 尺寸.y),
     )
 }
 
@@ -407,7 +445,7 @@ pub fn labels(_p: &Painter, l: &Layout) -> Vec<Label> {
 /// 为什么键也算"动态"：键的纵向位置由「该行值有几行」决定（[`value_row_spans`]），
 /// 而"值有几行"是运行期数据。键的**文字**是静态常量（`tmpl` 传自身即可，仍在
 /// `ui_text::ALL` 里，字形与来源检查一样覆盖得到），但它的**位置**不是静态的。
-pub fn dyn_labels(l: &Layout, d: &DocText) -> Vec<DynLabel> {
+pub fn dyn_labels(p: &Painter, l: &Layout, d: &DocText) -> Vec<DynLabel> {
     let (key_x, val_x, head_y, c) = inspector_layout(l);
     let mut out = Vec::with_capacity(18);
 
@@ -436,7 +474,10 @@ pub fn dyn_labels(l: &Layout, d: &DocText) -> Vec<DynLabel> {
     }
 
     // ⓪ 工具选项胶囊：`7×7` / `填充`（**运行期数据**，见 [`crate::screen_text::pill_text`]）
-    let pill = pill_rect(l);
+    //
+    //    胶囊外框**按上游算式现算**（[`pill_rect`]）：宽 `max(35, 文字宽)+10`、高 `文字高+4`
+    //    —— 上游 `MainWindow.axaml:6` 里没有固定宽高，45×22 是截图里「内容撑出来」的结果。
+    let pill = pill_rect(p, l, d);
     out.push(DynLabel::new(
         "tool_options.pill",
         tx::PILL_SIZE_TMPL,
@@ -599,10 +640,12 @@ fn draw_tool_options(p: &Painter, l: &Layout, d: &DocText) {
     );
     pt::fill(p, track, t::ui().panel_header);
 
-    // ③ 胶囊底 45×22（截图 y=280 行 `x92..136` 为 `#ECEEF0`）；
+    // ③ 胶囊底（上游 `MainWindow.axaml:6`：`CornerRadius="4" Padding="5,2"` + `MinWidth="35"`）；
+    //    尺寸**按算式现算**（[`pill_rect`]），原「45×22（截图 y=280 行 `x92..136` 为 `#ECEEF0`）」
+    //    保留作历史引用 —— 2026-11-08 按上游算式改为动态。
     //    胶囊里的字是动态的，由 `draw_dyn_sel(p, l, d, "tool_options.")` 画。
-    let pill = pill_rect(l);
-    pt::fill_round(p, pill, 4.0, t::ui().input_bg);
+    let pill = pill_rect(p, l, d);
+    pt::fill_round(p, pill, m::PILL_RADIUS, t::ui().input_bg);
 }
 
 // ───────────────────────── Layers ─────────────────────────
@@ -966,7 +1009,9 @@ mod tests {
 
     /// **胶囊文字放得进胶囊**：最大尺寸 `31×31` 也必须完整显示（否则会被截成 `…`）。
     ///
-    /// 胶囊宽 45（`metrics::PILL_W`，量自截图 `x92..136`）—— 这条钉住"尺寸到顶也不溢出"。
+    /// 胶囊宽不再是固定 45（原为截图实测 `x92..136`，2026-11-08 按上游 `MainWindow.axaml:6`
+    /// 的算式改为动态：`max(MinWidth 35, 文字宽) + Padding 5×2`）—— 这条钉住
+    /// "尺寸到顶也不溢出、不被截断"。
     #[test]
     fn 胶囊最大尺寸放得下() {
         let l = Layout::compute(Rect::from_min_size(
@@ -982,7 +1027,9 @@ mod tests {
             (tx::TOOL_BUCKET.to_string(), 31),
             (tx::PILL_PENCIL.to_string(), 3),
         ] {
-            let mut labs = dyn_labels(&l, &文案(&pill, size));
+            let d = 文案(&pill, size);
+            let 胶囊宽 = pill_rect(&p, &l, &d).width();
+            let mut labs = dyn_labels(&p, &l, &d);
             let lab = labs
                 .iter_mut()
                 .find(|x| x.name == "tool_options.pill")
@@ -990,15 +1037,147 @@ mod tests {
             lab.truncate_to_fit(&p);
             assert!(
                 !lab.truncated,
-                "胶囊文字 {pill:?} 被截断成 {:?}（胶囊宽 {}）",
-                lab.text,
-                m::PILL_W
+                "胶囊文字 {pill:?} 被截断成 {:?}（胶囊宽 {胶囊宽}）",
+                lab.text
             );
             assert!(
-                crate::paint::text_w(&p, &lab.text, lab.font) <= m::PILL_W,
+                crate::paint::text_w(&p, &lab.text, lab.font) <= 胶囊宽,
                 "胶囊文字 {pill:?} 比胶囊还宽"
             );
         }
+    }
+
+    /// **A17：胶囊尺寸 = 上游算式**（`MainWindow.axaml:6`）—— 5 组输入，期望值**手算**。
+    ///
+    /// 上游：`<Border CornerRadius="4" Padding="5,2">` 套 `<TextBlock MinWidth="35" …/>`
+    /// ⇒ 宽 = `max(35, 文字宽) + 5 + 5`、高 = `文字高 + 2 + 2`。
+    /// 表里的期望值不读被测实现（手算），实现一改就红。
+    #[test]
+    fn 胶囊尺寸按上游算式() {
+        // (文字宽, 文字高) → (期望宽, 期望高)
+        for (文字宽, 文字高, 期望宽, 期望高, 说明) in [
+            // `3×3` 量级：文字宽 < MinWidth ⇒ 宽被 35 兜住，35 + 10 = 45
+            (19.0_f32, 12.0_f32, 45.0_f32, 16.0_f32, "3×3 量级"),
+            // 30 仍 < 35 ⇒ 同一个 45（MinWidth 覆盖区，宽度对文字宽不敏感）
+            (30.0, 12.0, 45.0, 16.0, "接近 MinWidth"),
+            // 恰好 35（边界）：max 取等号 ⇒ 45，证明是 max 而不是 "严格大于才用文字宽"
+            (35.0, 12.0, 45.0, 16.0, "恰等 MinWidth"),
+            // 44 > 35 ⇒ 宽度改由文字宽决定：44 + 10 = 54（两位数×两位数量级）
+            (44.0, 12.0, 54.0, 16.0, "两位数×两位数"),
+            // 单字符：宽仍被兜住（8+10=18 < 45），高度随行高走 13 + 4 = 17
+            (8.0, 13.0, 45.0, 17.0, "单字符"),
+        ] {
+            let 尺寸 = pill_size(vec2(文字宽, 文字高));
+            assert!(
+                (尺寸.x - 期望宽).abs() < 0.01,
+                "{说明}：文字宽 {文字宽} 的胶囊宽应为 {期望宽}（max(35, {文字宽}) + 5×2），实得 {}",
+                尺寸.x
+            );
+            assert!(
+                (尺寸.y - 期望高).abs() < 0.01,
+                "{说明}：文字高 {文字高} 的胶囊高应为 {期望高}（{文字高} + 2×2），实得 {}",
+                尺寸.y
+            );
+            // 两条上游口径同时成立
+            assert!(
+                尺寸.x >= m::PILL_MIN_W,
+                "{说明}：胶囊宽不许小于 MinWidth 35，实得 {}",
+                尺寸.x
+            );
+            assert!(
+                尺寸.x >= 文字宽 + m::PILL_PAD_X * 2.0 - 0.01,
+                "{说明}：胶囊宽必须装得下文字 + 左右 padding"
+            );
+        }
+    }
+
+    /// **A17：真实文案的胶囊 = 本仓实测字形 + 上游算式**（4 组真实文案）。
+    ///
+    /// 上一条验「算式对不对」，这条验「喂进算式的字形是**真的量出来的**」：
+    /// 期望值一律由 [`pill_text_size`] 的 `layout_no_wrap` 实测值现算 ——
+    /// 换成任何估算值 / 旧常量 45×22，下面的等式立刻对不上。
+    #[test]
+    fn 真实文案的胶囊按实测字形撑出() {
+        let l = Layout::compute(Rect::from_min_size(
+            pos2(0.0, 0.0),
+            vec2(m::WINDOW_W, m::WINDOW_H),
+        ));
+        let p = 量布(&l);
+        let c = l.p_tool_options.content;
+
+        for (文字, 说明) in [
+            (tx::fill(tx::PILL_SIZE_TMPL, &[("n", "3")]), "3×3（缺省）"),
+            (tx::fill(tx::PILL_SIZE_TMPL, &[("n", "7")]), "7×7"),
+            (tx::fill(tx::PILL_SIZE_TMPL, &[("n", "31")]), "31×31（上限）"),
+            (tx::PILL_PENCIL.to_string(), "1×1（铅笔口径）"),
+        ] {
+            let 实测 = pill_text_size(&p, &文字);
+            let r = pill_rect(&p, &l, &文案(&文字, 3));
+            assert!(实测.x > 0.0 && 实测.y > 0.0, "{说明}：字形量出来是空盒子");
+            // 宽 = max(35, 实测文字宽) + 10
+            assert!(
+                (r.width() - (实测.x.max(m::PILL_MIN_W) + m::PILL_PAD_X * 2.0)).abs() < 0.01,
+                "{说明}：宽应为 max(35, {}) + 10 = {}，实得 {}",
+                实测.x,
+                实测.x.max(m::PILL_MIN_W) + m::PILL_PAD_X * 2.0,
+                r.width()
+            );
+            // 高 = 实测文字高 + 4
+            assert!(
+                (r.height() - (实测.y + m::PILL_PAD_Y * 2.0)).abs() < 0.01,
+                "{说明}：高应为 {} + 4 = {}，实得 {}",
+                实测.y,
+                实测.y + m::PILL_PAD_Y * 2.0,
+                r.height()
+            );
+            // 位置口径没变：左边界 = 面板内容左 + PILL_X（84），垂直居中
+            assert!(
+                (r.left() - (c.left() + m::PILL_X)).abs() < 0.01,
+                "{说明}：左边界必须仍是 PILL_X = {}",
+                m::PILL_X
+            );
+            assert!(
+                (r.center().y - c.center().y).abs() < 0.01,
+                "{说明}：胶囊必须仍在面板内容区垂直居中"
+            );
+        }
+
+        // ★★ **`max` 真的生效 —— 单独断言**：
+        //    `3×3` 的文字宽 + 10 **小于** 45，而胶囊宽**恰是 45**
+        //    ⇒ 去掉 MinWidth 那一步，胶囊只会剩「文字宽 + 10」，不可能还是 45。
+        let 三 = tx::fill(tx::PILL_SIZE_TMPL, &[("n", "3")]);
+        let 三宽 = pill_text_size(&p, &三).x;
+        let 三r = pill_rect(&p, &l, &文案(&三, 3));
+        let 兜底宽 = m::PILL_MIN_W + m::PILL_PAD_X * 2.0;
+        assert!(
+            三宽 + m::PILL_PAD_X * 2.0 < 兜底宽,
+            "本仓字体下 `3×3` 的文字宽 {三宽} 必须小到「+10 仍不足 45」，否则这条证明不了 max 生效"
+        );
+        assert!(
+            (三r.width() - 兜底宽).abs() < 0.01,
+            "`3×3` 的胶囊宽必须被 MinWidth 兜到 {兜底宽}（文字宽只有 {三宽}），实得 {}",
+            三r.width()
+        );
+        // 反向对照：把文字加宽到越过 MinWidth，宽度必须**跟着文字变**（不是恒 45）
+        let 长 = "8888×8888";
+        let 长实测 = pill_text_size(&p, 长);
+        assert!(
+            长实测.x > m::PILL_MIN_W,
+            "对照文案 {长} 的实测宽 {} 必须越过 MinWidth 35，否则对照组无效",
+            长实测.x
+        );
+        let 长r = pill_rect(&p, &l, &文案(长, 31));
+        assert!(
+            (长r.width() - (长实测.x + m::PILL_PAD_X * 2.0)).abs() < 0.01,
+            "越过 MinWidth 后宽度必须由文字宽撑出：{} + 10，实得 {}",
+            长实测.x,
+            长r.width()
+        );
+        assert!(
+            (长r.width() - 45.0).abs() > 0.01,
+            "对照组宽度必须不等于旧的固定值 45，实得 {}",
+            长r.width()
+        );
     }
 
     /// **滑块停在真实位置**：尺寸 3 在最左（= 参考截图那个位置），31 在最右，且都在轨道上。
