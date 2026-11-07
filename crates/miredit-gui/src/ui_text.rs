@@ -1764,6 +1764,15 @@ pub const MAPLIST_SCANNING_TMPL: &str = "扫描中…已找到 {n} 张"; // EN: 
 /// [`crate::maplist::ScanStats::ms`]，不是估算值。
 pub const MAPLIST_STATUS_TMPL: &str = "{n} 张 · 扫描 {ms} ms"; // EN: {n} maps · scan {ms} ms
 
+/// **自动化取证**（`--shot` 等锁输入模式）下的扫描完成状态行：只报张数、不报耗时。
+///
+/// 为什么另出一条：耗时 [`crate::maplist::ScanStats::ms`] 是 CPU 计时，每次运行都不同
+/// ⇒ 地图列表面板开着时截图不可能逐字节复现（2026-11-07 实测 3 连跑 3 种哈希，
+/// 差异 38~69 px 全落在那几个数字上）。**交互模式仍用 [`MAPLIST_STATUS_TMPL`]，
+/// 一个字都不改**（用户看到的界面不变）；耗时真值仍打在 stderr 的
+/// [`DIAG_MAPLIST_SCAN`] 里，要查照样查得到。
+pub const MAPLIST_COUNT_TMPL: &str = "{n} 张"; // EN: {n} maps
+
 /// 有跳过/失败项时追加到状态行尾部（**不静默**：读不了的目录要能看见）。
 pub const MAPLIST_SKIPPED_TMPL: &str = " · 跳过 {skipped} 项 / 失败 {errors} 项"; // EN: · skipped {skipped} / failed {errors}
 
@@ -1892,6 +1901,12 @@ pub const DIAG_AUTODRAG: &str = "[拖动实测] {frames} 帧 / render_region {ca
 pub const DIAG_SHOT_OK: &str = "[截图] 已保存 {path}（{w}×{h}）"; // EN: [shot] saved
 /// 截图失败。
 pub const DIAG_SHOT_FAIL: &str = "[截图] 失败：{err}"; // EN: [shot] failed
+/// `--shot` 等地图列表扫描静默**超上限**：照样拍，但要说清这张图是扫描中截的。
+///
+/// 判据在 `app::MireditApp::handle_screenshot`（等 `MapListPanel::is_scanning` 转假，
+/// 上限 `SHOT_SCAN_WAIT_MAX_FRAMES` 帧）。为什么要说：扫描中截到的「扫描中… N 项」
+/// 每次运行数字都可能不同 ⇒ 这种图**不能**拿去当逐字节比对的基线，必须让人看见这条诊断。
+pub const DIAG_SHOT_SCAN_WAIT: &str = "[截图] 地图列表仍在扫描（已等 {frames} 帧 / {n} 项）—— 达到上限，按当前画面截图"; // EN: [shot] map list still scanning
 /// 同视点分块比对报告头。
 pub const DIAG_GATE2: &str = "[同视点比对] 本机画布 {w}×{h} 裁剪，客户端 {cw}×{ch} 裁剪，公共区 {iw}×{ih}，背景 RGB({r},{g},{b})"; // EN: [gate2]
 /// 同视点分块比对结果。
@@ -2507,6 +2522,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("MAPLIST_NAME_TMPL", MAPLIST_NAME_TMPL),
     ("MAPLIST_SCANNING_TMPL", MAPLIST_SCANNING_TMPL),
     ("MAPLIST_STATUS_TMPL", MAPLIST_STATUS_TMPL),
+    ("MAPLIST_COUNT_TMPL", MAPLIST_COUNT_TMPL),
     ("MAPLIST_SKIPPED_TMPL", MAPLIST_SKIPPED_TMPL),
     ("MAPLIST_EMPTY_TMPL", MAPLIST_EMPTY_TMPL),
     ("MAPLIST_FAIL_TMPL", MAPLIST_FAIL_TMPL),
@@ -2544,6 +2560,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("DIAG_AUTODRAG", DIAG_AUTODRAG),
     ("DIAG_SHOT_OK", DIAG_SHOT_OK),
     ("DIAG_SHOT_FAIL", DIAG_SHOT_FAIL),
+    ("DIAG_SHOT_SCAN_WAIT", DIAG_SHOT_SCAN_WAIT),
     ("DIAG_GATE2", DIAG_GATE2),
     ("DIAG_GATE2_RESULT", DIAG_GATE2_RESULT),
     ("DIAG_GATE2_OVERLAY", DIAG_GATE2_OVERLAY),
@@ -2799,6 +2816,7 @@ mod tests {
             ("MAPLIST_NAME_TMPL", MAPLIST_NAME_TMPL),
             ("MAPLIST_SCANNING_TMPL", MAPLIST_SCANNING_TMPL),
             ("MAPLIST_STATUS_TMPL", MAPLIST_STATUS_TMPL),
+            ("MAPLIST_COUNT_TMPL", MAPLIST_COUNT_TMPL),
             ("MAPLIST_SKIPPED_TMPL", MAPLIST_SKIPPED_TMPL),
             ("MAPLIST_EMPTY_TMPL", MAPLIST_EMPTY_TMPL),
             ("MAPLIST_FAIL_TMPL", MAPLIST_FAIL_TMPL),
@@ -2837,6 +2855,7 @@ mod tests {
             ("DIAG_AUTODRAG", DIAG_AUTODRAG),
             ("DIAG_SHOT_OK", DIAG_SHOT_OK),
             ("DIAG_SHOT_FAIL", DIAG_SHOT_FAIL),
+            ("DIAG_SHOT_SCAN_WAIT", DIAG_SHOT_SCAN_WAIT),
             ("DIAG_GATE2", DIAG_GATE2),
             ("DIAG_GATE2_RESULT", DIAG_GATE2_RESULT),
             ("DIAG_GATE2_OVERLAY", DIAG_GATE2_OVERLAY),

@@ -721,33 +721,70 @@ impl MapListPanel {
     }
 
     /// 底部状态行的文案（**空目录/失败都给中文原因**）。
+    ///
+    /// 这是**交互模式**的口径（`show_time = true`），与 2026-11-07 之前**逐字相同**。
     pub fn status_text(&self) -> String {
+        self.status_line(true).0
+    }
+
+    /// 状态行 `(文案, 生成它的模板)`；`show_time = false` = **自动化取证**专用。
+    ///
+    /// # 为什么取证模式要省掉「扫描 {ms} ms」
+    ///
+    /// 耗时 [`ScanStats::ms`] 是 CPU 计时，**每次运行都不同** ⇒ 只要地图列表面板开着，
+    /// 截图就不可能逐字节复现（2026-11-07 实测：3 连跑 3 种哈希，差异 38~69 px
+    /// 全落在那几个数字上）。取证模式改成只报「{n} 张」；
+    /// **交互模式一个字都不改**（用户看到的界面不变），真值仍然打在 stderr 的
+    /// [`crate::ui_text::DIAG_MAPLIST_SCAN`] 里。
+    ///
+    /// 为什么连模板一起返回：[`crate::text_fit::DynLabel`] 的自检要求模板
+    /// **如实**是生成这条字的那一条（`ui_text::ALL` 里要能查到），所以省掉耗时那段时
+    /// 不能再挂 [`tx::MAPLIST_STATUS_TMPL`]。
+    ///
+    /// 判据来自宿主：`app::MireditApp::maplist_show_time()`（=`!input_locked()`）。
+    pub(crate) fn status_line(&self, show_time: bool) -> (String, &'static str) {
         match &self.phase {
-            Phase::Idle => tx::MAPLIST_NO_ROOT.to_owned(),
-            Phase::Scanning => tx::fill(
-                tx::MAPLIST_SCANNING_TMPL,
-                &[("n", &self.scanning_found.to_string())],
+            Phase::Idle => (
+                tx::MAPLIST_NO_ROOT.to_owned(),
+                tx::MAPLIST_STATUS_TMPL,
             ),
-            Phase::Failed(why) => tx::fill(tx::MAPLIST_FAIL_TMPL, &[("why", why)]),
-            Phase::Ready if self.entries.is_empty() => tx::fill(
-                tx::MAPLIST_EMPTY_TMPL,
-                &[(
-                    "path",
-                    &self
-                        .root
-                        .as_ref()
-                        .map(|p| p.display().to_string())
-                        .unwrap_or_default(),
-                )],
+            Phase::Scanning => (
+                tx::fill(
+                    tx::MAPLIST_SCANNING_TMPL,
+                    &[("n", &self.scanning_found.to_string())],
+                ),
+                tx::MAPLIST_STATUS_TMPL,
+            ),
+            Phase::Failed(why) => (
+                tx::fill(tx::MAPLIST_FAIL_TMPL, &[("why", why)]),
+                tx::MAPLIST_STATUS_TMPL,
+            ),
+            Phase::Ready if self.entries.is_empty() => (
+                tx::fill(
+                    tx::MAPLIST_EMPTY_TMPL,
+                    &[(
+                        "path",
+                        &self
+                            .root
+                            .as_ref()
+                            .map(|p| p.display().to_string())
+                            .unwrap_or_default(),
+                    )],
+                ),
+                tx::MAPLIST_STATUS_TMPL,
             ),
             Phase::Ready => {
-                let mut s = tx::fill(
-                    tx::MAPLIST_STATUS_TMPL,
-                    &[
-                        ("n", &self.entries.len().to_string()),
-                        ("ms", &format!("{:.1}", self.stats.ms)),
-                    ],
-                );
+                let mut s = if show_time {
+                    tx::fill(
+                        tx::MAPLIST_STATUS_TMPL,
+                        &[
+                            ("n", &self.entries.len().to_string()),
+                            ("ms", &format!("{:.1}", self.stats.ms)),
+                        ],
+                    )
+                } else {
+                    tx::fill(tx::MAPLIST_COUNT_TMPL, &[("n", &self.entries.len().to_string())])
+                };
                 if self.stats.skipped > 0 || self.stats.errors > 0 {
                     s.push_str(&tx::fill(
                         tx::MAPLIST_SKIPPED_TMPL,
@@ -757,7 +794,12 @@ impl MapListPanel {
                         ],
                     ));
                 }
-                s
+                let tmpl = if show_time {
+                    tx::MAPLIST_STATUS_TMPL
+                } else {
+                    tx::MAPLIST_COUNT_TMPL
+                };
+                (s, tmpl)
             }
         }
     }
@@ -852,7 +894,9 @@ pub fn scrollbar_rect(l: &Layout) -> Rect {
 /// 画整个地图列表面板（标题条 + 工具条 + 列表 + 状态行）。
 ///
 /// `current` = 当前打开的地图路径（用来高亮那一行）。
-pub fn draw(p: &Painter, l: &Layout, st: &MapListPanel, current: Option<&Path>) {
+/// `show_time` = 状态行要不要带「扫描 {ms} ms」这一段（取证模式传 `false`，
+/// 判据在 `app::MireditApp::maplist_show_time`，理由见 [`MapListPanel::status_line`]）。
+pub fn draw(p: &Painter, l: &Layout, st: &MapListPanel, current: Option<&Path>, show_time: bool) {
     if l.p_maps.whole.width() <= 0.0 {
         return;
     }
@@ -952,10 +996,13 @@ pub fn draw(p: &Painter, l: &Layout, st: &MapListPanel, current: Option<&Path>) 
     // ── 状态行（空目录/失败都在这里给中文原因）──
     let sr = status_rect(l);
     pt::fill(p, sr, t::ui().panel_header);
+    // 文案与模板一起取：取证模式省掉耗时段时，挂在 `DynLabel` 上的模板必须**跟着换**
+    // （否则自检会以为这条字来自含 `{ms}` 的那条模板）。
+    let (状态文案, 状态模板) = st.status_line(show_time);
     let mut lab = DynLabel::new(
         "maplist.status",
-        tx::MAPLIST_STATUS_TMPL,
-        st.status_text(),
+        状态模板,
+        状态文案,
         LabelStyle::new(
             m::MAPS_STATUS_FONT,
             pos2(sr.left() + m::MAPS_PAD, sr.center().y),

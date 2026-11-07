@@ -87,6 +87,15 @@ use crate::theme as t;
 use crate::titlebar;
 use crate::ui_text as tx;
 
+/// `--shot` 等地图列表扫描静默的**上限帧数**（超过就照拍 + 一行诊断）。
+///
+/// 定 600 帧的理由：扫描是"每帧 4 ms 预算 + 最多 512 项"推进的
+/// （`metrics::MAPS_SCAN_BUDGET_MS` / `MAPS_SCAN_MAX_ITEMS`），600 帧 ≈ 2.4 s 的扫描工作量，
+/// 够扫约 15 万条目；取证运行的目录一般是几百到两万项。**它是个护栏，不是承诺**：
+/// 真扫不完（网络盘 / 超大目录）也照拍，但会打 [`crate::ui_text::DIAG_SHOT_SCAN_WAIT`]，
+/// 让人一眼看出"这张图不能当逐字节基线"。
+const SHOT_SCAN_WAIT_MAX_FRAMES: u64 = 600;
+
 /// 自动化动作（截图 / 拖动实测 / 素材滚动实测）的状态机。
 #[derive(Default)]
 struct Auto {
@@ -96,6 +105,8 @@ struct Auto {
     frames: u64,
     /// 是否已发出截图请求（只发一次）。
     requested: bool,
+    /// 为等地图列表扫描静默而额外消耗的帧数（`--shot`；上限见 [`SHOT_SCAN_WAIT_MAX_FRAMES`]）。
+    scan_waited: u64,
     /// 截图是否已落盘。
     saved: bool,
     /// 客户端截图路径（`--gate2-client`）。
@@ -801,21 +812,43 @@ impl MireditApp {
             .ensure(ctx, map, src, l.viewport, self.doc.map_gen, options);
     }
 
-    /// 悬停格：`--hover` 优先，否则取真实指针位置并做地图范围校验。
+    /// 悬停格：`--hover` 优先；交互模式取真实指针；**自动化取证模式下不读指针**。
+    ///
+    /// # 为什么自动化模式必须与指针解耦（2026-11-07）
+    ///
+    /// 截图取证要的是一张**可复现**的图，而"鼠标此刻在哪"不是可复现输入：指针是否落在
+    /// 窗口内、窗口落在屏幕哪，每次运行都不同。实测同一构建、同一条命令连跑两次，
+    /// 截图差 **2,166 px**，拆开正好是三处悬停相关输出：
+    ///
+    /// | 位置 | 判据 |
+    /// |---|---|
+    /// | 画布的金色单格描边（`canvas.rs:267-271`） | `hover` 为 `Some` 才画 |
+    /// | 单元格检查器六行（[`Self::refresh_cell_lines`]） | 跟着 `hover` 走 |
+    /// | 状态栏坐标（`screen_text::build`） | `hover` 为 `None` 才写 `—` |
+    ///
+    /// 所以 [`Self::input_locked`]（= `--shot` / `--autodrag` / `--palette-autoscroll`）为真、
+    /// 且**没有**显式 `--hover` 时，这里把 hover 置 `None`，`ctx.pointer_hover_pos()`
+    /// **连读都不读** —— 判据必须放在读指针**之前**，否则"恰好有指针"就会绕过它。
+    ///
+    /// **交互模式不受影响**：`input_locked()` 只在自动化开关下为真，人手操作时照旧读指针
+    /// （回归用例 [`tests::交互模式仍读指针`] 钉住这一点，防止有人顺手把读指针整段删掉）。
+    /// 显式 `--hover x,y` 仍然优先 —— 它是截图取证里可复现的唯一来源
+    /// （`scripts/shot-determinism.ps1` 就是靠它做 A/B 的）。
     fn update_hover(&mut self, ctx: &egui::Context, l: &Layout) {
-        let cell = if let Some((x, y)) = self.forced_hover {
-            Some((i32::from(x), i32::from(y)))
-        } else {
-            ctx.pointer_hover_pos()
-                .and_then(|p| self.view.screen_to_cell(l.viewport, p))
-        };
-        // 浮层锚点 = **真实指针**位置；`--hover` 伪造悬停时没有指针 ⇒ `None`
-        // （画的时候改用该格中心，否则截图里的浮层会跑到窗口左上角）。
-        self.hover_anchor = if self.forced_hover.is_some() {
+        // 一帧只读一次指针：下面两处都要它，而自动化模式下**两处都不该读**。
+        // `forced_hover` 有值时指针同样无意义（浮层锚点改钉在该格中心）。
+        let 指针 = if self.forced_hover.is_some() || self.input_locked() {
             None
         } else {
             ctx.pointer_hover_pos()
         };
+        let cell = match self.forced_hover {
+            Some((x, y)) => Some((i32::from(x), i32::from(y))),
+            None => 指针.and_then(|p| self.view.screen_to_cell(l.viewport, p)),
+        };
+        // 浮层锚点 = **真实指针**位置；没有指针（`--hover` 伪造 / 自动化取证）⇒ `None`
+        // （画的时候改用该格中心，否则截图里的浮层会跑到窗口左上角）。
+        self.hover_anchor = 指针;
         self.hover = cell.and_then(|(x, y)| match self.doc.doc.as_ref() {
             Some(d) => {
                 if x >= 0 && y >= 0 && x < i32::from(d.map.width) && y < i32::from(d.map.height) {
@@ -2546,11 +2579,37 @@ impl MireditApp {
             ctx.request_repaint();
         }
         if self.auto.shot.is_some() && !self.auto.requested && self.frames >= self.auto.frames {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
-                egui::UserData::default(),
-            ));
-            self.auto.requested = true;
-            ctx.request_repaint();
+            // ②a **扫描中态**（2026-11-07）：地图列表还没扫完 ⇒ 等它静默再拍。
+            //
+            // 为什么：`--show-maps` 打开时面板会画「扫描中… {n} 项」，而扫描是**分帧推进**的，
+            // 同一目录两次跑在同一帧上的进度不同 ⇒ 这一行文字不同（第 4 类"同一命令两张图"）。
+            // 判据用 `MapListPanel::is_scanning`（不是自己再数一遍进度）；上限见
+            // [`SHOT_SCAN_WAIT_MAX_FRAMES`]，超了照样拍但打一行诊断（见下）。
+            //
+            // ⚠ 顺序有因果：`self.maps.poll()` 在 ⑤d 已经推过一帧，这里读到的是**本帧**的真值。
+            let 扫描中 = self.maps.is_scanning();
+            if 扫描中 && self.auto.scan_waited < SHOT_SCAN_WAIT_MAX_FRAMES {
+                self.auto.scan_waited += 1;
+                ctx.request_repaint();
+            } else {
+                if 扫描中 {
+                    eprintln!(
+                        "{}",
+                        tx::fill(
+                            tx::DIAG_SHOT_SCAN_WAIT,
+                            &[
+                                ("frames", &self.auto.scan_waited.to_string()),
+                                ("n", &self.maps.len().to_string()),
+                            ]
+                        )
+                    );
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
+                    egui::UserData::default(),
+                ));
+                self.auto.requested = true;
+                ctx.request_repaint();
+            }
         }
 
         // ③ 收尾：截图完成且没有拖动任务 ⇒ 关窗
@@ -2764,7 +2823,9 @@ impl eframe::App for MireditApp {
                 //      反过来会先画一帧旧滚动位置再跳，截图就会拍到"当前项不在视野里"。
                 let cur_path = self.doc.doc.as_ref().map(|d| d.path.clone());
                 maplist::tick(&l, &mut self.maps, cur_path.as_deref());
-                maplist::draw(&p, &l, &self.maps, cur_path.as_deref());
+                // 状态行里的「扫描 {ms} ms」只在交互模式显示（取证截图必须可复现，
+                // 判据见 [`Self::maplist_show_time`]）
+                maplist::draw(&p, &l, &self.maps, cur_path.as_deref(), self.maplist_show_time());
                 canvas::draw(
                     &p,
                     &l,
@@ -2988,6 +3049,20 @@ impl MireditApp {
     /// 它们本来就不该由人来点。
     fn input_locked(&self) -> bool {
         self.auto.shot.is_some() || self.auto.autodrag.is_some() || self.auto.palette_scroll.is_some()
+    }
+
+    /// 地图列表面板的状态行要不要带「扫描 {ms} ms」：**只在交互模式显示**。
+    ///
+    /// 判据就是 [`Self::input_locked`]（不另立一套）。为什么取证模式不显示：
+    /// 扫描耗时是 CPU 计时，每次运行都不同 ⇒ 面板开着时截图不可能逐字节复现
+    /// （2026-11-07 实测 3 连跑 3 种哈希，差异 38~69 px 全落在那几个数字上）。
+    /// 交互模式**一个字都不改**；耗时真值仍在 stderr 的
+    /// [`crate::ui_text::DIAG_MAPLIST_SCAN`] 里。
+    ///
+    /// 判据收在这一个方法里（而不是在 `maplist::draw` 里各写一遍），
+    /// 这样"哪里算取证模式"仍然只有 `input_locked` 一处真源。
+    fn maplist_show_time(&self) -> bool {
+        !self.input_locked()
     }
 
     /// 这一帧要不要画**印章待放置轮廓**：`(锚点, 包围盒)`。
@@ -3633,6 +3708,236 @@ mod tests {
             ..Default::default()
         });
         assert_eq!(a.forced_hover, Some((100, 100)));
+    }
+
+    // ─────────────── 截图（`--shot`）与悬停解耦（2026-11-07） ───────────────
+
+    /// 跑一帧 [`MireditApp::update_hover`]：指针位置走 `RawInput`（同 [`互动一帧`] 的做法）。
+    ///
+    /// 为什么必须用 `ctx.run`：`ctx.pointer_hover_pos()` 读的是**本帧**装配好的输入状态，
+    /// 光把事件塞进 `Context` 是读不到的（与键盘用例 [`按一次键`] 同一个坑）。
+    fn 悬停一帧(
+        ctx: &egui::Context,
+        app: &mut MireditApp,
+        l: &crate::layout::Layout,
+        pos: egui::Pos2,
+    ) {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::pos2(0.0, 0.0),
+                egui::vec2(crate::metrics::WINDOW_W, crate::metrics::WINDOW_H),
+            )),
+            events: vec![egui::Event::PointerMoved(pos)],
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| app.update_hover(ctx, l));
+    }
+
+    /// 悬停用例的夹具：8×8 合成图 + 视口 fit ⇒ 格中心 ↔ 世界格一一对应。
+    fn 悬停夹具() -> (MireditApp, crate::layout::Layout) {
+        let mut app = 尺寸应用(8, 8);
+        let l = 测试布局();
+        app.view.fit_map(l.viewport, 8, 8);
+        (app, l)
+    }
+
+    /// **`--shot` 下没有 `--hover` 时 hover 恒 `None` —— 指针就在图上也不读**。
+    ///
+    /// 这是「同一命令两张截图」的根因修复：判据是 `input_locked() && forced_hover.is_none()`，
+    /// 必须放在 `ctx.pointer_hover_pos()` **之前**（否则"恰好有指针"就绕过它）。
+    #[test]
+    fn 截图模式不读指针() {
+        let (mut app, l) = 悬停夹具();
+        let ctx = egui::Context::default();
+        // 指针确实落在 (3,4) 这格上 —— 交互模式下它就是悬停格（见 [`交互模式仍读指针`]）
+        let pos = app.view.cell_rect(l.viewport, 3, 4).center();
+        assert_eq!(
+            app.view.screen_to_cell(l.viewport, pos),
+            Some((3, 4)),
+            "夹具：格中心必须能反解回同一格"
+        );
+        app.auto.shot = Some(PathBuf::from(r"E:\__shot__.png"));
+        assert!(app.input_locked(), "带 --shot 必须锁输入");
+        assert!(app.forced_hover.is_none());
+
+        悬停一帧(&ctx, &mut app, &l, pos);
+        assert_eq!(app.hover, None, "截图模式：指针在图上也不许产生悬停格");
+        assert_eq!(app.hover_anchor, None, "浮层锚点同样不许读指针");
+    }
+
+    /// **`--shot` + 显式 `--hover` 仍然生效**（显式钉的格是取证里唯一可复现的来源）。
+    #[test]
+    fn 截图模式显式hover仍生效() {
+        let (mut app, l) = 悬停夹具();
+        let ctx = egui::Context::default();
+        app.auto.shot = Some(PathBuf::from(r"E:\__shot__.png"));
+        app.forced_hover = Some((2, 5));
+        // 指针故意放在**另一格**：结果必须是显式那一格，不许被指针盖掉
+        let pos = app.view.cell_rect(l.viewport, 6, 1).center();
+        悬停一帧(&ctx, &mut app, &l, pos);
+        assert_eq!(app.hover, Some((2, 5)), "--hover 优先于指针");
+        assert_eq!(app.hover_anchor, None, "伪造悬停没有指针 ⇒ 浮层改钉格中心");
+    }
+
+    /// **交互模式不受影响**：不锁输入时必须照旧读指针（防止把读指针整段删掉）。
+    #[test]
+    fn 交互模式仍读指针() {
+        let (mut app, l) = 悬停夹具();
+        let ctx = egui::Context::default();
+        assert!(!app.input_locked(), "没有自动化开关 = 交互模式");
+        assert!(app.forced_hover.is_none());
+        let pos = app.view.cell_rect(l.viewport, 3, 4).center();
+        悬停一帧(&ctx, &mut app, &l, pos);
+        assert_eq!(app.hover, Some((3, 4)), "交互模式：指针所在格就是悬停格");
+        assert_eq!(app.hover_anchor, Some(pos), "浮层锚点就是指针位置");
+    }
+
+    /// **回归**：`--shot` 下「金框 / 单元格检查器 / 状态栏坐标」都不再有悬停相关输出。
+    ///
+    /// 三处共用同一个 `app.hover`（画布描边 `canvas.rs:267-271`、检查器
+    /// [`MireditApp::refresh_cell_lines`]、状态栏 `screen_text::build`），所以一条用例
+    /// 把三处一起钉住：任意一处绕开 `hover`（比如自己去读指针），这里就会红。
+    #[test]
+    fn 截图模式没有悬停相关的屏幕输出() {
+        let (mut app, l) = 悬停夹具();
+        let ctx = egui::Context::default();
+        app.auto.shot = Some(PathBuf::from(r"E:\__shot__.png"));
+        // 「地砖信息悬浮」压到**开**：它默认关，开着也必须一个像素都不画
+        app.cell_hover = true;
+        let pos = app.view.cell_rect(l.viewport, 3, 4).center();
+        悬停一帧(&ctx, &mut app, &l, pos);
+        悬停一帧(&ctx, &mut app, &l, pos);
+
+        // ① 画布金色单格描边：`CanvasCtx::hover` 就是 `app.hover`
+        assert_eq!(app.hover, None, "金框判据：画布只在 Some 时描边");
+        // ② 悬停浮层：开关开着也不画（`hover_panel` 的第一条就是 `self.hover?`）
+        assert!(app.hover_panel(&l).is_none(), "悬停浮层不许出现");
+        // ③ 单元格检查器：与"什么都没悬停"逐字相同
+        let 空 = CellLines::unknown();
+        assert_eq!(app.lines.head, 空.head, "检查器标题行");
+        assert_eq!(app.lines.values, 空.values, "检查器六行");
+        // ④ 状态栏坐标：`—`（不是上一只鼠标留下的 x,y）
+        app.text = screen_text::build(&app.doc, &app.view, app.hover, &app.lines, &app.edit);
+        assert_eq!(app.text.status_coord, tx::VAL_UNKNOWN, "状态栏坐标");
+    }
+
+    /// 建一个全是空 `.map` 的临时目录（扫描器只看目录项，不读内容）。
+    fn 一堆空地图目录(名字: &str, n: usize) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(名字);
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("建临时目录");
+        for i in 0..n {
+            std::fs::write(dir.join(format!("m{i}.map")), b"").expect("写空地图");
+        }
+        dir
+    }
+
+    /// 跑一帧 [`MireditApp::handle_screenshot`]（自动化状态机就在里面推进）。
+    fn 截图一帧(ctx: &egui::Context, app: &mut MireditApp) {
+        let input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::pos2(0.0, 0.0),
+                egui::vec2(crate::metrics::WINDOW_W, crate::metrics::WINDOW_H),
+            )),
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| app.handle_screenshot(ctx));
+    }
+
+    /// **`--shot` 撞上地图列表扫描中 ⇒ 先等它静默，这一帧不请求截图**。
+    ///
+    /// 挡的是「截到『扫描中… N 项』」——那行数字随扫描进度变，是"同一命令两张图"的
+    /// 第 4 类来源（前四类见 [`MireditApp::update_hover`] 的文档）。
+    #[test]
+    fn 截图等地图列表扫描静默() {
+        let dir = 一堆空地图目录("miredit_gui_app_shot_scan_wait", 50);
+        let mut app = 尺寸应用(8, 8);
+        app.maps.start(&dir);
+        assert!(app.maps.is_scanning(), "刚 start 就该在扫");
+        app.auto.shot = Some(std::env::temp_dir().join("miredit-shot-scan-wait.png"));
+        app.auto.frames = 0; // 本帧就到期（不等 --frames）
+
+        let ctx = egui::Context::default();
+        截图一帧(&ctx, &mut app);
+
+        assert!(!app.auto.requested, "扫描中不许请求截图");
+        assert_eq!(app.auto.scan_waited, 1, "等待帧数要记账（上限才拦得住）");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **扫描超过上限帧数 ⇒ 照样截（打诊断），不能永远等下去**。
+    #[test]
+    fn 扫描超上限照样截图() {
+        let dir = 一堆空地图目录("miredit_gui_app_shot_scan_cap", 20);
+        let mut app = 尺寸应用(8, 8);
+        app.maps.start(&dir);
+        assert!(app.maps.is_scanning());
+        app.auto.shot = Some(std::env::temp_dir().join("miredit-shot-scan-cap.png"));
+        app.auto.frames = 0;
+        app.auto.scan_waited = SHOT_SCAN_WAIT_MAX_FRAMES; // 已经等满上限
+
+        let ctx = egui::Context::default();
+        截图一帧(&ctx, &mut app);
+
+        assert!(app.auto.requested, "达到上限必须照拍（并打一行诊断）");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **`--shot`（锁输入）下地图列表状态行不报耗时** —— 耗时是天然不可复现值，
+    /// 留着它截图就不可能逐字节复现（实测 3 连跑 3 种哈希，差异全落在那几个数字上）。
+    #[test]
+    fn 截图模式地图列表状态行不报耗时() {
+        let dir = 一堆空地图目录("miredit_gui_app_maplist_no_time", 2);
+        let mut app = 尺寸应用(8, 8);
+        app.maps.start(&dir);
+        while app.maps.poll() {}
+        assert_eq!(app.maps.len(), 2, "夹具：两张空图都要进列表");
+
+        app.auto.shot = Some(std::env::temp_dir().join("miredit-shot-maplist.png"));
+        assert!(app.input_locked(), "带 --shot 必须锁输入");
+        assert!(!app.maplist_show_time(), "锁输入 ⇒ 状态行不显示耗时");
+
+        let (文案, 模板) = app.maps.status_line(app.maplist_show_time());
+        assert_eq!(
+            文案,
+            tx::fill(tx::MAPLIST_COUNT_TMPL, &[("n", "2")]),
+            "取证模式只留「N 张」"
+        );
+        assert_eq!(
+            模板, tx::MAPLIST_COUNT_TMPL,
+            "模板要如实换成不含 {{ms}} 的那条（DynLabel 自检要求）"
+        );
+        assert!(!文案.contains("ms"), "不许出现耗时单位：{文案}");
+        assert!(!文案.contains('·'), "分隔符也一并省掉：{文案}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// **交互模式一个字不改**：状态行仍是「{n} 张 · 扫描 {ms} ms」（改前那条模板原样）。
+    #[test]
+    fn 交互模式地图列表状态行仍报耗时() {
+        let dir = 一堆空地图目录("miredit_gui_app_maplist_with_time", 2);
+        let mut app = 尺寸应用(8, 8);
+        app.maps.start(&dir);
+        while app.maps.poll() {}
+        assert_eq!(app.maps.len(), 2);
+        assert!(!app.input_locked(), "没有自动化开关 = 交互模式");
+        assert!(app.maplist_show_time());
+
+        // 改前口径原样复算：模板 + (n, ms) 两个占位符 ⇒ 逐字比对
+        let 期望 = tx::fill(
+            tx::MAPLIST_STATUS_TMPL,
+            &[
+                ("n", "2"),
+                ("ms", &format!("{:.1}", app.maps.stats().ms)),
+            ],
+        );
+        assert_eq!(
+            app.maps.status_text(),
+            期望,
+            "交互模式文案必须与改前逐字相同"
+        );
+        assert!(app.maps.status_text().contains("ms"), "交互模式仍报耗时");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// **改笔刷尺寸不重渲**（任务书 §三.1 的最后一条）：尺寸只改"下一次落笔多大一块"，
