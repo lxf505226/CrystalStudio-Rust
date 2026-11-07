@@ -3397,7 +3397,12 @@ impl eframe::App for MireditApp {
                 match &self.overlay {
                     Overlay::OpenMap { path } => menu::dialog::draw_open_map(&p, &l, path),
                     Overlay::SaveAs { path } => menu::dialog::draw_save_as(&p, &l, path),
-                    // 导出两个模态与另存为**同一套排版**，只是标题/提示/按钮文案不同
+                    // 导出两个模态与另存为共用**同一套排版骨架**（标题/路径框/按钮行的几何同源）。
+                    // ⚠ 订正（2026-11-08）：原文是「导出两个模态与另存为**同一套排版**，只是标题/提示/按钮文案不同」——
+                    //   **「提示」这一项已不成立**：小地图模态的提示行已按上游删除
+                    //   （上游 `MinimapExportWindow.cs:20-30` 实读 8 个子项里没有提示行），
+                    //   另两个路径模态仍有（见 `dialog.rs` 的 `Kind::hint()` 返回 `Option`）。
+                    //   原文保留作历史引用。
                     Overlay::ExportSelection { path } => {
                         menu::dialog::draw_export_selection(&p, &l, path)
                     }
