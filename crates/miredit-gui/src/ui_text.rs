@@ -888,8 +888,10 @@ pub const EXPORT_SEL_DLG_OK: &str = "导出"; // EN: Export ｜ 官方: ExportSe
 
 /// 导出小地图模态标题。
 pub const EXPORT_MINI_DLG_TITLE: &str = "导出小地图"; // EN: Export Minimap ｜ 官方: ExportMinimap_C5960A2C
-/// 导出小地图模态说明（点名「先路径、再尺寸」与 Tab 换输入框）。
-pub const EXPORT_MINI_DLG_HINT: &str = "输入目标 .png 的完整路径，再选尺寸档位或手填宽高（回车导出，Tab 换输入框，Esc 取消）"; // EN: Type the target .png path, then pick a size preset or type width/height (Enter exports, Tab switches inputs, Esc cancels) ｜ 官方: ExportMinimap_C5960A2C
+// 导出小地图模态的**说明行已删除**（2026-11-08）：上游 `MinimapExportWindow.cs:20-30`
+// 的子项里没有任何提示/说明行（实读顺序：尺寸预设标签 → ComboBox → 宽度标签 →
+// WidthInput → 高度标签 → HeightInput → error → 按钮行）⇒ 本仓自加的那条
+// `EXPORT_MINI_DLG_HINT` 属于自主设计，已连同绘制点一起删除（无消费点，留着会 `dead_code`）。
 /// 导出小地图模态主按钮。
 pub const EXPORT_MINI_DLG_OK: &str = "导出"; // EN: Export ｜ 官方: ExportMinimap_C5960A2C
 
@@ -2288,7 +2290,6 @@ pub const ALL: &[(&str, &str)] = &[
     ("EXPORT_SEL_DLG_HINT", EXPORT_SEL_DLG_HINT),
     ("EXPORT_SEL_DLG_OK", EXPORT_SEL_DLG_OK),
     ("EXPORT_MINI_DLG_TITLE", EXPORT_MINI_DLG_TITLE),
-    ("EXPORT_MINI_DLG_HINT", EXPORT_MINI_DLG_HINT),
     ("EXPORT_MINI_DLG_OK", EXPORT_MINI_DLG_OK),
     // 导出小地图的尺寸输入（2026-11-06，N F-R14-1）
     ("EXPORT_MINI_DLG_PRESET_LABEL", EXPORT_MINI_DLG_PRESET_LABEL),
@@ -3050,7 +3051,6 @@ mod tests {
             ("EXPORT_SEL_DLG_HINT", EXPORT_SEL_DLG_HINT),
             ("EXPORT_SEL_DLG_OK", EXPORT_SEL_DLG_OK),
             ("EXPORT_MINI_DLG_TITLE", EXPORT_MINI_DLG_TITLE),
-            ("EXPORT_MINI_DLG_HINT", EXPORT_MINI_DLG_HINT),
             ("EXPORT_MINI_DLG_OK", EXPORT_MINI_DLG_OK),
             ("EXPORT_ERR_EMPTY", EXPORT_ERR_EMPTY),
             ("EXPORT_ERR_IS_DIR_TMPL", EXPORT_ERR_IS_DIR_TMPL),

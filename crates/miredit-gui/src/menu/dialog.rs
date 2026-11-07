@@ -377,7 +377,7 @@ pub struct MinimapRects {
 /// | 上下内边距 | `pad × 2` | 上游 `Margin = new(24)`（`:18`） |
 /// | 标题 | 24 | `TextBlock`（绘制在 `pad + 12` 居中） |
 /// | 路径框 | `OPEN_DLG_FIELD_H` = 28 | `TextBox` |
-/// | 提示带 | 12 + 18 | 距框底 12 + 一行 18 |
+/// | 间距 | `MINIMAP_DLG_GAP` = 10 | 上游 `Spacing = 10`（`:18`） |
 /// | ① 预设行 | `MINIMAP_DLG_ROW_H` = 26 | `ComboBox`（`Preset`） |
 /// | 间距 | `MINIMAP_DLG_GAP` = 10 | 上游 `Spacing = 10`（`:18`） |
 /// | ② 宽高行 | `MINIMAP_DLG_ROW_H` = 26 | `WidthInput` / `HeightInput` 两个 `TextBox` |
@@ -386,14 +386,23 @@ pub struct MinimapRects {
 /// | 间距 | `MINIMAP_DLG_GAP` = 10 | 上游 `Spacing = 10` |
 /// | 按钮行 | `OPEN_DLG_BTN_H` = 26 | `Cancel` + `ExportButton`（贴底 `pad`） |
 ///
-/// ⇒ `pad = 24` 时 = **270**（旧 `pad = 16` 时 = 254，即订正前的旧值）。
+/// ⇒ `pad = 24` 时 = **250**（旧 `pad = 16` 时 = 234，即订正前的旧值）。
+///
+/// ## 订正记录（2026-11-08，删掉提示行）
+///
+/// 上一版这里还有一项 `提示带 = 12 + 18`，画的是本仓**自加**的说明行
+/// （`EXPORT_MINI_DLG_HINT`）。上游 `MinimapExportWindow.cs:20-30` 的子项里**没有**这一行
+/// ⇒ 该行已删除，那一项换成一行 `MINIMAP_DLG_GAP`（与其余各行同一间距，
+/// 等价于上游 `Spacing = 10`）：`pad = 24` 时 270 → **250**。
+///
+/// ⚠ **不是 270 − 30 = 240**：240 只在「预设行紧贴路径框底（0 间距）」时成立，
+/// 那会破坏本模态其余三处 `Spacing = 10` 的统一间距，也让预设按钮直接贴住输入框底边。
 #[must_use]
 pub fn 小地图模态内容高_按(pad: f32) -> f32 {
     pad * 2.0                  // 面板上下内边距
         + 24.0                 // 标题
         + m::OPEN_DLG_FIELD_H  // 路径输入框
-        + 12.0                 // 提示带：距框底
-        + 18.0                 // 提示带：一行高
+        + m::MINIMAP_DLG_GAP   // 路径框 → 预设行（上游 Spacing = 10；原「提示带 12+18」已删）
         + m::MINIMAP_DLG_ROW_H // ① 预设行
         + m::MINIMAP_DLG_GAP   // 上游 Spacing = 10
         + m::MINIMAP_DLG_ROW_H // ② 宽高行
@@ -411,9 +420,9 @@ pub fn 小地图模态内容高() -> f32 {
 
 /// 算「导出小地图」模态的几何：路径框与两个按钮沿用通用几何，中间**多出三行**。
 ///
-/// 纵向（面板顶为 0）：`pad → 24(标题) → 28(路径框) → 12+18(提示) → 26(预设行)
+/// 纵向（面板顶为 0）：`pad → 24(标题) → 28(路径框) → 10(间距) → 26(预设行)
 /// → 10 → 26(宽高行) → 10 → 32(错误行) → 10 → 26(按钮) → pad`，合计
-/// [`小地图模态内容高`]（`pad = 24` 时 270）。
+/// [`小地图模态内容高`]（`pad = 24` 时 250）。
 ///
 /// ⚠ 宽用 [`m::MINIMAP_DLG_W`]（上游 420），**不是** [`m::OPEN_DLG_W`]（640）。
 pub fn minimap_rects(l: &Layout) -> MinimapRects {
@@ -427,7 +436,12 @@ pub fn minimap_rects(l: &Layout) -> MinimapRects {
     // （`MinimapExportWindow.cs:5`）⇒ 它**填满**面板内宽；本仓用三个按钮当它的等价物，
     // 所以这一行也该填满。定值 150（3×150 + 标签列 + 间距 = 530）在 420 宽的内宽 372 下
     // **必然越界**（A10 实测：第 3 个按钮右边界越过面板右边）。
-    let preset_top = base.field.bottom() + 12.0 + 18.0;
+    // 预设行的顶 = 路径框底 + 一行间距（上游 `Spacing = 10`）。
+    //
+    // ⚠ 这里原来还有 `+ 12.0 + 18.0`：那是本仓自加的那行提示（`EXPORT_MINI_DLG_HINT`）
+    // 的「距框底 12 + 一行 18」。上游 `MinimapExportWindow.cs:20-30` 的子项里**没有**
+    // 这一行（顺序见 `draw_export_minimap` 的文档），2026-11-08 已删除 ⇒ 用同一行间距。
+    let preset_top = base.field.bottom() + m::MINIMAP_DLG_GAP;
     let preset_x = inner_l + m::MINIMAP_DLG_PRESET_COL_W + m::MINIMAP_DLG_LABEL_GAP;
     let preset_right = base.panel.right() - m::OPEN_DLG_PAD;
     let preset_w =
@@ -527,13 +541,18 @@ impl Kind {
         }
     }
 
-    /// 输入框下方那句提示。
-    fn hint(self) -> &'static str {
+    /// 输入框下方那句提示（**不是每个模态都有**）。
+    ///
+    /// `ExportMinimap` ⇒ `None`：上游 `MinimapExportWindow.cs:20-30` 的子项里
+    /// 根本没有提示/说明行（顺序：尺寸预设标签 → ComboBox → 宽度标签 → WidthInput →
+    /// 高度标签 → HeightInput → error → 按钮行），本仓此前自加的那一行已于 2026-11-08 删除。
+    /// 用 `Option` 而不是空串：将来谁想再画这一行，得先显式处理 `None` 这一支。
+    fn hint(self) -> Option<&'static str> {
         match self {
-            Kind::Open => tx::OPEN_DLG_HINT,
-            Kind::SaveAs => tx::SAVE_AS_DLG_HINT,
-            Kind::ExportSelection => tx::EXPORT_SEL_DLG_HINT,
-            Kind::ExportMinimap => tx::EXPORT_MINI_DLG_HINT,
+            Kind::Open => Some(tx::OPEN_DLG_HINT),
+            Kind::SaveAs => Some(tx::SAVE_AS_DLG_HINT),
+            Kind::ExportSelection => Some(tx::EXPORT_SEL_DLG_HINT),
+            Kind::ExportMinimap => None,
         }
     }
 
@@ -665,15 +684,18 @@ fn draw_path_dialog(p: &Painter, l: &Layout, path: &str, kind: Kind) {
     let caret_x = draw_field_text(p, r.field, path);
     draw_caret(p, r.field, caret_x);
 
-    // 提示
-    pt::text(
-        p,
-        pos2(inner_l, r.field.bottom() + 12.0),
-        Align2::LEFT_CENTER,
-        kind.hint(),
-        m::BODY_FONT,
-        pal.text_muted,
-    );
+    // 提示（这三种用途都有；`Kind::ExportMinimap` 没有提示行，但它不走这条绘制路径，
+    // 见 `draw_export_minimap`）
+    if let Some(hint) = kind.hint() {
+        pt::text(
+            p,
+            pos2(inner_l, r.field.bottom() + 12.0),
+            Align2::LEFT_CENTER,
+            hint,
+            m::BODY_FONT,
+            pal.text_muted,
+        );
+    }
 
     // 两个按钮：主按钮用强调色底 + `accent_button_text`，次按钮用输入框底
     pt::fill(p, r.ok, pal.accent);
@@ -751,29 +773,14 @@ fn wrap_two(p: &Painter, text: &str, font: f32, max_w: f32) -> Vec<String> {
     lines
 }
 
-/// 把一条**单行**文案裁到 `max_w` 以内（放不下时尾部用 `…` 收，**不许溢出面板**）。
-///
-/// 与 [`wrap_two`] 同一套「显式省略、不悄悄吞掉」的纪律，只是这里只有一行。
-///
-/// ⚠ 为什么需要它（2026-11-08 A10）：本仓的「导出小地图」提示行
-/// （[`tx::EXPORT_MINI_DLG_HINT`]，**上游 `MinimapExportWindow` 没有这一行**，是本仓自加的
-/// 按键说明）约 47 个汉字 ≈ 600px 宽。面板按上游收窄到 420 后内宽只有 372，
-/// 单行硬画会**冲出面板右边**（实测截图上文字越过面板边界落到右侧面板上）。
-fn 单行裁到(p: &Painter, text: &str, font: f32, max_w: f32) -> String {
-    if pt::text_w(p, text, font) <= max_w {
-        return text.to_owned();
-    }
-    let mut s: String = text.to_owned();
-    while !s.is_empty() && pt::text_w(p, &format!("{s}…"), font) > max_w {
-        s.pop();
-    }
-    s.push('…');
-    s
-}
-
 /// 画「导出小地图」模态：路径框 + 三档预设 + 宽/高 + 错误提示（排版见 [`minimap_rects`]）。
 ///
-/// 与 [`draw_path_dialog`] 的差别只有中间那三行；标题/提示/按钮的文字与配色同一套。
+/// 子项顺序**逐项对齐上游** `MinimapExportWindow.cs:20-30`（实读）：
+/// `尺寸预设`标签 → ComboBox → `宽度(像素)`标签 → WidthInput → `高度(像素)`标签 →
+/// HeightInput → `error` → 按钮行。**没有任何提示/说明行** ——
+/// 本仓此前在路径框下自加的那一行已于 2026-11-08 删除（见 [`小地图模态内容高_按`] 的订正记录）。
+///
+/// 与 [`draw_path_dialog`] 的差别只有中间那三行；标题/按钮的文字与配色同一套。
 /// 尺寸非法时「导出」按钮按官方 `ExportButton.IsEnabled = false`（`MinimapExportWindow.cs:48`）
 /// 画成灰底灰字 —— 与 `interact_export_minimap` 里「非法不提交」是同一个判据（[`MinimapDlg::is_valid`]）。
 pub fn draw_export_minimap(
@@ -808,23 +815,7 @@ pub fn draw_export_minimap(
         draw_caret(p, r.base.field, caret_x);
     }
 
-    // ② 提示行（面板按上游收到 420 后单行放不下 ⇒ 显式省略，不许溢出面板）
-    let 提示 = 单行裁到(
-        p,
-        Kind::ExportMinimap.hint(),
-        m::BODY_FONT,
-        r.base.panel.width() - 2.0 * m::OPEN_DLG_PAD,
-    );
-    pt::text(
-        p,
-        pos2(inner_l, r.base.field.bottom() + 12.0),
-        Align2::LEFT_CENTER,
-        &提示,
-        m::BODY_FONT,
-        pal.text_muted,
-    );
-
-    // ③ 预设行：左标签 + 三个按钮（选中项 = 强调色底，与主按钮同一套配色）
+    // ② 预设行：左标签 + 三个按钮（选中项 = 强调色底，与主按钮同一套配色）
     pt::text(
         p,
         pos2(
@@ -855,7 +846,7 @@ pub fn draw_export_minimap(
         );
     }
 
-    // ④ 宽高行：`宽 [__] px   高 [__] px`（标签右对齐到框左边，单位左对齐到框右边）
+    // ③ 宽高行：`宽 [__] px   高 [__] px`（标签右对齐到框左边，单位左对齐到框右边）
     let width_focus = dlg.focus == MiniFocus::Width;
     pt::text(
         p,
@@ -902,7 +893,7 @@ pub fn draw_export_minimap(
         pal.text_muted,
     );
 
-    // ⑤ 错误提示带（有错误才画；两行折行，尾巴用 `…`）
+    // ④ 错误提示带（有错误才画；两行折行，尾巴用 `…`）
     if let Some(why) = dlg.error.as_deref() {
         pt::fill(p, r.error, pal.warn_banner_bg);
         pt::border(p, r.error, pal.warn_banner_edge);
@@ -919,7 +910,7 @@ pub fn draw_export_minimap(
         }
     }
 
-    // ⑥ 两个按钮（与通用模态同一套配色；尺寸非法时「导出」按官方 `IsEnabled=false` 画灰）
+    // ⑤ 两个按钮（与通用模态同一套配色；尺寸非法时「导出」按官方 `IsEnabled=false` 画灰）
     let (ok_bg, ok_border, ok_fg) = if dlg.is_valid(cells) {
         (pal.accent, pal.accent_dark, pal.accent_button_text)
     } else {
@@ -1194,19 +1185,27 @@ mod tests {
     }
 
     /// 两个模态的文案**各不相同**且都来自 `ui_text`（标题/提示/主按钮各一条）。
+    ///
+    /// ⚠ 2026-11-08 改口径：`Kind::hint()` 现在返回 `Option<&str>`（`ExportMinimap` 没有提示行
+    /// —— 上游 `MinimapExportWindow.cs:20-30` 就没有），所以这两条断言由
+    /// `== 常量` 变成 `== Some(常量)`。**测的还是同一件事**：这两个模态的提示来自哪条常量。
     #[test]
     fn 两个模态的文案各自独立() {
         assert_eq!(Kind::Open.title(), tx::OPEN_DLG_TITLE);
         assert_eq!(Kind::SaveAs.title(), tx::SAVE_AS_DLG_TITLE);
-        assert_eq!(Kind::Open.hint(), tx::OPEN_DLG_HINT);
-        assert_eq!(Kind::SaveAs.hint(), tx::SAVE_AS_DLG_HINT);
+        assert_eq!(Kind::Open.hint(), Some(tx::OPEN_DLG_HINT));
+        assert_eq!(Kind::SaveAs.hint(), Some(tx::SAVE_AS_DLG_HINT));
         assert_eq!(Kind::Open.ok_text(), tx::OPEN_DLG_OK);
         assert_eq!(Kind::SaveAs.ok_text(), tx::SAVE_AS_DLG_OK);
         // 标题与提示不许写成同一句（那会让用户分不清自己开的是哪个模态）
         assert_ne!(Kind::Open.title(), Kind::SaveAs.title());
         assert_ne!(Kind::Open.hint(), Kind::SaveAs.hint());
         // 另存为的提示必须点名"原文件不动"（这是它与「保存地图」的唯一差别）
-        assert!(Kind::SaveAs.hint().contains("原文件不动"), "{}", Kind::SaveAs.hint());
+        assert!(
+            Kind::SaveAs.hint().is_some_and(|h| h.contains("原文件不动")),
+            "{:?}",
+            Kind::SaveAs.hint()
+        );
         // 两个模态的 egui id 前缀必须不同（点击归属不许依赖绘制顺序）
         assert_ne!(Kind::Open.id_prefix(), Kind::SaveAs.id_prefix());
     }
@@ -1312,11 +1311,17 @@ mod tests {
         ];
         for i in 0..kinds.len() {
             assert!(!kinds[i].title().is_empty());
-            assert!(!kinds[i].hint().is_empty());
             assert!(!kinds[i].ok_text().is_empty());
+            // 提示行**不是每个模态都有**：`ExportMinimap` 按上游没有这一行（见 [`Kind::hint`]）
+            if kinds[i] != Kind::ExportMinimap {
+                assert!(
+                    kinds[i].hint().is_some_and(|h| !h.is_empty()),
+                    "{:?} 的提示不许为空",
+                    kinds[i]
+                );
+            }
             for j in (i + 1)..kinds.len() {
                 assert_ne!(kinds[i].title(), kinds[j].title(), "标题撞了：{:?}", kinds[i]);
-                assert_ne!(kinds[i].hint(), kinds[j].hint(), "提示撞了：{:?}", kinds[i]);
                 assert_ne!(
                     kinds[i].id_prefix(),
                     kinds[j].id_prefix(),
@@ -1325,9 +1330,23 @@ mod tests {
                 );
             }
         }
-        // 两个导出的提示都要点名目标扩展名（它们是 PNG，不是 .map）
-        assert!(Kind::ExportSelection.hint().contains(".png"));
-        assert!(Kind::ExportMinimap.hint().contains(".png"));
+        // 有提示的那几个模态，提示两两不同（没提示的不参与比较，否则 `None != Some(..)` 是空断言）
+        let 有提示: Vec<Kind> = kinds.iter().copied().filter(|k| k.hint().is_some()).collect();
+        assert_eq!(有提示.len(), 3, "应当恰好三个模态有提示行（导出小地图按上游没有）");
+        for i in 0..有提示.len() {
+            for j in (i + 1)..有提示.len() {
+                assert_ne!(有提示[i].hint(), 有提示[j].hint(), "提示撞了：{:?}", 有提示[i]);
+            }
+        }
+        // **上游口径守卫**（2026-11-08）：导出小地图模态**没有**提示行 ——
+        // 上游 `MinimapExportWindow.cs:20-30` 的子项里没有任何提示/说明行（实读）。
+        assert_eq!(
+            Kind::ExportMinimap.hint(),
+            None,
+            "上游 MinimapExportWindow.cs:20-30 没有提示行 ⇒ 这里必须是 None（不许再自加）"
+        );
+        // 导出选区的提示要点名目标扩展名（它是 PNG，不是 .map）
+        assert!(Kind::ExportSelection.hint().is_some_and(|h| h.contains(".png")));
         // 提交动作必须按种类分开（不许把导出的输入喂给另存为）
         assert_eq!(
             Kind::ExportSelection.submit(r"I:\a.png"),
@@ -1616,6 +1635,25 @@ mod tests {
         assert_eq!(r.width.top(), r.height.top(), "宽高必须同一行");
         assert!(r.width.bottom() < r.error.top(), "错误带压到宽高行");
         assert!(r.error.bottom() < r.base.ok.top(), "按钮压到错误带");
+        // 纵向**间距是等式不是不等式**（2026-11-08 删提示行后收紧）：
+        // ① 路径框底 → 预设行顶 = 恰好一个 `MINIMAP_DLG_GAP`
+        //    （原来这里还夹着本仓自加的那行提示 `12 + 18`；上游没有这一行 ⇒ 现在只有一个间距。
+        //     谁把 `+ 12.0 + 18.0` 加回来，这条立刻红）
+        assert!(
+            (r.presets[0].top() - r.base.field.bottom() - m::MINIMAP_DLG_GAP).abs() < 0.01,
+            "路径框底 {} → 预设行顶 {} 的间距必须 = MINIMAP_DLG_GAP {}（提示带已按上游删除）",
+            r.base.field.bottom(),
+            r.presets[0].top(),
+            m::MINIMAP_DLG_GAP
+        );
+        // ② 错误带底 → 按钮顶 = 恰好一个 `MINIMAP_DLG_GAP`（即 `err.bottom < ok.top` 的**实测余量**）
+        assert!(
+            (r.base.ok.top() - r.error.bottom() - m::MINIMAP_DLG_GAP).abs() < 0.01,
+            "错误带底 {} → 按钮顶 {} 的余量必须 = MINIMAP_DLG_GAP {}",
+            r.error.bottom(),
+            r.base.ok.top(),
+            m::MINIMAP_DLG_GAP
+        );
         // 横向：三个预设互不相交、宽高框互不相交、按钮不撞
         for i in 1..r.presets.len() {
             assert!(!r.presets[i - 1].intersects(r.presets[i]), "预设按钮重叠");
@@ -1742,12 +1780,12 @@ mod tests {
                 "内边距 {a}→{b}：高度必须跟着变 2×Δ（{ha}→{hb}）"
             );
         }
-        // 当前值钉死：PAD = 24 ⇒ 270
-        assert!((小地图模态内容高() - 270.0).abs() < 0.01, "PAD=24 ⇒ 270");
-        // 订正前的旧值：PAD = 16 ⇒ 254（**注意 254 是对的，错的是旧注释的推导**）
+        // 当前值钉死：PAD = 24 ⇒ 250（2026-11-08 删提示行后：270 − 20，见算式文档）
+        assert!((小地图模态内容高() - 250.0).abs() < 0.01, "PAD=24 ⇒ 250");
+        // 订正前的旧值：PAD = 16 ⇒ 234（旧口径是 254，那里面还含着已删的提示带 12+18）
         assert!(
-            (小地图模态内容高_按(16.0) - 254.0).abs() < 0.01,
-            "PAD=16 ⇒ 254"
+            (小地图模态内容高_按(16.0) - 234.0).abs() < 0.01,
+            "PAD=16 ⇒ 234"
         );
         // 内容比路径模态高（多出预设行 / 宽高行 / 错误带三行）
         assert!(小地图模态内容高() > 路径模态内容高());
@@ -1798,21 +1836,11 @@ mod tests {
             }
         }
 
-        // ③ 提示行必须放得进面板内宽（2026-11-08 A10 新增守卫）
-        //
-        // 上游 `MinimapExportWindow` **没有**这一行，是本仓自加的按键说明、约 47 个汉字；
-        // 面板按上游收到 420 后内宽只有 372，单行硬画会冲出面板右边
-        // （实测截图上文字越过面板边界落到右侧面板上）⇒ 现在走 `单行裁到` 显式省略。
-        let 内宽 = r.base.panel.width() - 2.0 * m::OPEN_DLG_PAD;
-        let 提示 = 单行裁到(&p, Kind::ExportMinimap.hint(), m::BODY_FONT, 内宽);
-        assert!(
-            pt::text_w(&p, &提示, m::BODY_FONT) <= 内宽 + 0.5,
-            "提示行仍超出面板内宽 {内宽}：{提示}"
-        );
-        // 放不下就必须显式省略（条件断言：将来把文案改短到放得下时不该红）
-        if pt::text_w(&p, Kind::ExportMinimap.hint(), m::BODY_FONT) > 内宽 {
-            assert!(提示.ends_with('…'), "放不下就必须以 … 收尾：{提示}");
-        }
+        // ③ **提示行已删除**（2026-11-08）：原守卫是「提示行必须放得进面板内宽 372」，
+        // 而这一行本身是本仓自加的（上游 `MinimapExportWindow.cs:20-30` 没有）
+        // ⇒ 守卫失去被测对象，随之删除；替代守卫是几何面的两条等式断言
+        // （见 `小地图模态几何自洽`：预设行紧接路径框一个 GAP、错误带底到按钮顶恰好一个 GAP），
+        // 若有人把 `+12+18` 那一段加回来，那两条必红。
 
         // ④ 三个预设按钮的标签必须放得进按钮（宽度是均分出来的，标签长了会被画出框外）
         for (i, preset) in MINIMAP_PRESETS.iter().enumerate() {
