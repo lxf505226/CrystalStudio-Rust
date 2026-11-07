@@ -96,10 +96,10 @@ cargo run -p miredit-web --release
 
 **200（恒）**
 ```json
-{ "ok": true, "version": "0.5.0" }
+{ "ok": true, "version": "0.5.1" }
 ```
 > 进程能应答就返回 200。图库/印章目录不可用**不算**进程不健康。
-> `version` 是**当前快照**（`0.5.0`），实际值以进程返回为准；唯一真源是根 `Cargo.toml` 的
+> `version` 是**当前快照**（`0.5.1`），实际值以进程返回为准；唯一真源是根 `Cargo.toml` 的
 > `[workspace.package].version`，前端只经 `/api/health` 取版本，不在 JS 里另写一份数字。
 
 ---
