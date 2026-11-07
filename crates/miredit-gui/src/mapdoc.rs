@@ -196,6 +196,11 @@ impl MapDoc {
         }
         self.document
             .replace_raw_after_resize(session.raw().clone());
+        // **字节数**是"这份文档现在多大"的诊断值（状态栏/标题旁那份），尺寸变了它必然变；
+        // 现算一次比留着一个旧数字诚实（`bytes` 原本记的是打开时那份文件的长度）。
+        if let Ok(b) = self.document.try_to_bytes() {
+            self.bytes = b.len();
+        }
     }
 
     /// **把文档的出处路径改成新路径**（「另存为」成功后调，2026-11-05）。

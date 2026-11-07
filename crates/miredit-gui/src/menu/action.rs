@@ -341,15 +341,10 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         },
         // ───────────── 编辑 ─────────────
         Action::Undo => {
+            // 三条入口（菜单/键盘/`Command`）共用 `apply_undo_like`：
+            // 尺寸变化的整档步骤在那里同步保存源，别在这里另写一套（R37）
             let n = match cx.doc.doc.as_mut() {
-                Some(d) => {
-                    let n = cx.edit.undo(&mut d.map);
-                    // 撤销的可能是**尺寸变化**（整档步骤）⇒ 保存源要跟着回旧尺寸
-                    if n > 0 {
-                        d.adopt_resized(cx.edit.document());
-                    }
-                    n
-                }
+                Some(d) => cx.edit.apply_undo_like(d, false),
                 None => 0,
             };
             if n > 0 {
@@ -363,13 +358,7 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         }
         Action::Redo => {
             let n = match cx.doc.doc.as_mut() {
-                Some(d) => {
-                    let n = cx.edit.redo(&mut d.map);
-                    if n > 0 {
-                        d.adopt_resized(cx.edit.document());
-                    }
-                    n
-                }
+                Some(d) => cx.edit.apply_undo_like(d, true),
                 None => 0,
             };
             if n > 0 {
@@ -589,33 +578,20 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             let Some(area) = cx.edit.selection() else {
                 return Outcome::refused(tx::STATUS_CROP_NEED_SELECTION.to_owned());
             };
-            let (w, h) = (d.map.width, d.map.height);
-            // 边界先算：既用于"整图 no-op"的早退，也用于给保存源传同一组偏移
-            let (left, top, right, bottom) = match miredit_core::crop_bounds(w, h, area) {
-                Ok(v) => v,
-                Err(e) => {
-                    return Outcome::refused(tx::fill(
-                        tx::STATUS_RESIZE_REFUSED_TMPL,
-                        &[("why", &e.to_string())],
-                    ))
-                }
-            };
-            let (nw, nh) = (right - left, bottom - top);
-            if nw == w && nh == h {
-                // 上游 `if (cropped.Width == Width && cropped.Height == Height) return false;`
-                return Outcome::refused(tx::STATUS_CROP_NOOP.to_owned());
-            }
             match cx.edit.crop_to(&mut d.map, area) {
-                Ok(_) => {
+                // `changed == false` = 选区已覆盖整图（上游 `CropSelection` 的同一条早退）：
+                // 什么都没做，所以说一句「没有可裁剪的余地」，不假装成功
+                Ok(out) if !out.changed => Outcome::refused(tx::STATUS_CROP_NOOP.to_owned()),
+                Ok(out) => {
                     // 保存源同步：尺寸变化之后**内核会话**才是字节层权威（它先同步编辑再改尺寸）
                     d.adopt_resized(cx.edit.document());
                     // 上游 `RefreshAfterResize` 的最后一句就是 `Fit()`
-                    cx.view.fit_map(cx.canvas, nw, nh);
+                    cx.view.fit_map(cx.canvas, out.width, out.height);
                     Outcome {
                         touched_map: true,
                         ..Outcome::ok(tx::fill(
                             tx::STATUS_CROP_OK_TMPL,
-                            &[("w", &nw.to_string()), ("h", &nh.to_string())],
+                            &[("w", &out.width.to_string()), ("h", &out.height.to_string())],
                         ))
                     }
                 }
@@ -624,6 +600,30 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
                     &[("why", &e.to_string())],
                 )),
             }
+        }
+        // ───────────── 工具：地图扩边（A-015 Expand） ─────────────
+        //
+        // 上游 `MainWindow.Expand.cs:5-12`：`busy` / 印章图 / 任意层锁定 ⇒ 直接返回；
+        // 否则弹 440 宽对话框，确认后 `Viewport.ExpandMap(l,t,r,b)`（四向偶数、上限在
+        // `MapDimensions.CanExpand` 里判），成功再写状态栏「Expanded map: W × H cells」。
+        //
+        // 本仓：只切浮层状态（真正的改尺寸在 `expand_apply` 里做），
+        // **状态栏不回执**（模态自己写着摘要，回执同屏重复）。
+        Action::ExpandMap => {
+            if cx.doc.doc.is_none() {
+                return Outcome::refused(need_map_receipt());
+            }
+            *cx.overlay = crate::menu::Overlay::ExpandMap {
+                文本: [
+                    crate::menu::expand::初值[0].to_string(),
+                    crate::menu::expand::初值[1].to_string(),
+                    crate::menu::expand::初值[2].to_string(),
+                    crate::menu::expand::初值[3].to_string(),
+                ],
+                focus: 0,
+                error: None,
+            };
+            Outcome::opened_overlay()
         }
         // ───────────── 工具：检查地图（A-015 / R32-R33） ─────────────
         //
@@ -697,6 +697,44 @@ fn zoom_by(cx: &mut Ctx<'_>, factor: f32) -> Outcome {
         tx::MENU_ZOOM_TMPL,
         &[("pct", &cx.view.zoom_percent().to_string())],
     ))
+}
+
+/// **执行一次扩边**（`Overlay::ExpandMap` 提交时调）。
+///
+/// 语义全在内核 [`miredit_core::EditSession::expand_by`]（判据 = 上游 `MapDimensions.CanExpand`，
+/// 整次扩边 = 一步撤销）；这里只做三件宿主的事：
+/// ① 让**保存源**跟上新尺寸（[`crate::mapdoc::MapDoc::adopt_resized`]）；
+/// ② 视口重 fit（上游 `RefreshAfterResize` 的 `Fit()`）；
+/// ③ 回执「已扩边为 W × H 格」+ `touched_map`（⇒ `map_gen+1`）。
+///
+/// # Errors
+///
+/// 返回**中文原因**（不支持该格式 / 有尾块 / 越界…）与一条警示回执 —— 调用方负责把它
+/// 上屏并**保持模态打开**（上游非法时 `ApplyButton.IsEnabled = false`，同样不关窗）。
+pub fn expand_apply(
+    cx: &mut Ctx<'_>,
+    left: i32,
+    top: i32,
+    right: i32,
+    bottom: i32,
+) -> Result<Outcome, String> {
+    let Some(d) = cx.doc.doc.as_mut() else {
+        return Err(tx::STATUS_CHECK_MAP_NEEDS_MAP.to_owned());
+    };
+    match cx.edit.expand_by(&mut d.map, left, top, right, bottom) {
+        Ok(out) => {
+            d.adopt_resized(cx.edit.document());
+            cx.view.fit_map(cx.canvas, out.width, out.height);
+            Ok(Outcome {
+                touched_map: true,
+                ..Outcome::ok(tx::fill(
+                    tx::STATUS_EXPAND_OK_TMPL,
+                    &[("w", &out.width.to_string()), ("h", &out.height.to_string())],
+                ))
+            })
+        }
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 /// **打开一张地图**（`文件 → 打开地图…` 模态点「打开」时走这里）。

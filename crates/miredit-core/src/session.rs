@@ -1545,13 +1545,17 @@ impl EditSession {
     /// # Errors
     ///
     /// 见 [`crate::ResizeError`]（空选区 / 尾块 / 不支持该格式 / 尺寸越界）。
-    pub fn crop_to(&mut self, area: Selection) -> Result<(u16, u16), crate::ResizeError> {
+    pub fn crop_to(&mut self, area: Selection) -> Result<crate::ResizeOutcome, crate::ResizeError> {
         let (w, h) = self.doc.size();
         let (left, top, right, bottom) = crate::resize::crop_bounds(w, h, area)?;
         let (nw, nh) = (right - left, bottom - top);
         if nw == w && nh == h {
             // 上游：`if (cropped.Width == Width && cropped.Height == Height) return false;`
-            return Ok((w, h));
+            return Ok(crate::ResizeOutcome {
+                width: w,
+                height: h,
+                changed: false,
+            });
         }
         self.装入尺寸变化(nw, nh, i32::from(left), i32::from(top))
     }
@@ -1570,7 +1574,7 @@ impl EditSession {
         top: i32,
         right: i32,
         bottom: i32,
-    ) -> Result<(u16, u16), crate::ResizeError> {
+    ) -> Result<crate::ResizeOutcome, crate::ResizeError> {
         let (w, h) = self.doc.size();
         let (nw, nh) = crate::resize::expand_target(w, h, left, top, right, bottom)?;
         self.装入尺寸变化(nw, nh, -left, -top)
@@ -1583,7 +1587,7 @@ impl EditSession {
         height: u16,
         off_x: i32,
         off_y: i32,
-    ) -> Result<(u16, u16), crate::ResizeError> {
+    ) -> Result<crate::ResizeOutcome, crate::ResizeError> {
         // ① 未结算的一笔先收掉（上游 `History.Resize` 的第一句就是 `Commit()`）
         if self.undo.stroke_active() || self.undo.stroke_pending() {
             self.undo.end();
@@ -1598,7 +1602,11 @@ impl EditSession {
         self.last_clear = None;
         self.note = None;
         self.sync_dirty();
-        Ok((width, height))
+        Ok(crate::ResizeOutcome {
+            width,
+            height,
+            changed: true,
+        })
     }
 
     // ── 撤销 / 重做 ──

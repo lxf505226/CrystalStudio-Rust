@@ -1,4 +1,4 @@
-//! **菜单项静态表**：5 个菜单 / **45 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
+//! **菜单项静态表**：5 个菜单 / **46 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
 //! 逐项照抄官方（分组 = 官方 `<Separator />` 的位置）。
 //!
 //! # 数据来源（两处互相印证）
@@ -10,16 +10,16 @@
 //! 运行时由代码追加的那几项（语言 / 7 个面板开关 / 锁定 / 重置）见
 //! `ui_text` 里「下拉菜单项」小节的说明与 [`crate::menu::panels`] 的模块文档。
 //!
-//! # 45 项的账
+//! # 46 项的账
 //!
 //! ```text
-//! 文件 10 + 编辑 5 + 视图 20 + 工具 8 + 帮助 2 = 45
+//! 文件 10 + 编辑 5 + 视图 20 + 工具 9 + 帮助 2 = 46
 //! 视图 20 = XAML 9 + 语言 1 + 面板开关 8 + 锁定/重置 2
 //!
 //! ⚠ **2026-11-05 起是 40 项**（原 39）：上游 `901dbe2f` 新增了第 8 个面板
 //! （`docking.Add("Maps", …)`），而 `DockWorkspace.cs:269 AddSectionMenu` 会为
 //! **每一个**面板生成一条 CheckBox 菜单项 ⇒ 面板开关 7 → 8，视图 18 → 19。
-//! ⚠ **2026-11-07 起是 45 项**（编辑 4 → 5、工具 6 → 7 → 8：检查地图、裁剪到选区）：补了「单元格属性…」（R12-F1）；此前同日视图 19 → 20 补了「地砖信息悬浮」
+//! ⚠ **2026-11-07 起是 46 项**（编辑 4 → 5；工具 6 → 7 → 8 → 9：检查地图、裁剪到选区、地图扩边）：补了「单元格属性…」（R12-F1）；此前同日视图 19 → 20 补了「地砖信息悬浮」
 //! （[`Action::CellHover`]），照官方 `MainWindow.axaml` 的 `CellHoverToggle`
 //! （CheckBox、缺省不勾、**它前面有一条分隔线**）。
 //! ⚠ **2026-11-06 起是 41 项**（帮助 1 → 2）：本仓补了「帮助 → 关于 Crystal Studio」
@@ -44,7 +44,7 @@
 //!
 //! 静态子项共 **5** 个（[`sub_count`]），另有 1 个动态列表（行数随 `recent` 变：0 条 ⇒ 1 行空态）。
 //! 子项**不进** [`MENUS`] 的 `items`（那是"顶级 42 项"的口径），
-//! 所以 [`item_count`] 仍是 45、`--menu-dump` 的汇总行仍是 45 —— 子项在 dump 里
+//! 所以 [`item_count`] 仍是 46、`--menu-dump` 的汇总行仍是 46 —— 子项在 dump 里
 //! 靠 `parent=` 列自证（见 [`crate::menu::dump_lines`]）。
 //!
 //! [`tests::顶级39项与子项5项计数`] 把这两笔账都钉住。
@@ -204,7 +204,7 @@ impl Lang {
 ///
 /// # 为什么需要它
 ///
-/// 顶级 45 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
+/// 顶级 46 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
 /// 单元格网格（`app.grid`）、开启门（`app.doors_open`）、**地图光照（`app.lighting`）**、
 /// **地砖信息悬浮（`app.cell_hover`）**、8 个面板显隐（`app.panels`）—— 它们由
 /// [`check`] / [`check_with`] / [`check_with_hover`] 直接从宿主字段读，
@@ -368,6 +368,11 @@ pub enum Action {
     /// 把地图裁成**选区所在的那块**（四边偶数对齐，上游 `AlignSelection`），整次裁剪 =
     /// **一步撤销**（整档快照）。没有选区 ⇒ 状态栏给原因，不会静默什么都不做。
     CropSelection,
+    /// **地图扩边**（A-015 Expand；官方 `Tools → ExpandMap`，无快捷键）。
+    ///
+    /// 打开 440 宽模态：四向各加几格（**必须是偶数**、至少一条 > 0），整次扩边 =
+    /// **一步撤销**；原格整体平移、四周是新空白格。
+    ExpandMap,
     GenTown,
     GenTerrain,
     GenProvince,
@@ -439,6 +444,7 @@ impl Action {
             Action::LockLayout => "view.lock_layout",
             Action::ResetLayout => "view.reset_layout",
             Action::CropSelection => "tools.crop_selection",
+            Action::ExpandMap => "tools.expand_map",
             Action::GenTown => "tools.gen_town",
             Action::GenTerrain => "tools.gen_terrain",
             Action::GenProvince => "tools.gen_province",
@@ -488,6 +494,7 @@ impl Action {
             Action::LockLayout => tx::MENU_LOCK_LAYOUT,
             Action::ResetLayout => tx::MENU_RESET_LAYOUT,
             Action::CropSelection => tx::MENU_CROP_SELECTION,
+            Action::ExpandMap => tx::MENU_EXPAND_MAP,
             Action::GenTown => tx::MENU_GEN_TOWN,
             Action::GenTerrain => tx::MENU_GEN_TERRAIN,
             Action::GenProvince => tx::MENU_GEN_PROVINCE,
@@ -681,20 +688,21 @@ pub const VIEW_ITEMS: [Item; 20] = [
     it(Action::ResetLayout, false),
 ];
 
-/// 工具菜单（**8 项**，分隔线在 1/2 与 5/6 之间）。
+/// 工具菜单（**9 项**，分隔线在 2/3 与 6/7 之间）。
 ///
 /// 官方 `MainWindow.axaml` 的 Tools 组顺序是：裁剪 / 扩边 / 分隔线 / 四个生成器 /
 /// 分隔线 / 模块三项 / 分隔线 / **CheckMap** / Identify / Extract，其中模块三项与
 /// 裁剪/扩边不在本仓范围（Crop/Expand 另开单）。本仓只取与上游**相对次序**一致的那段：
 ///
 /// ```text
-/// Crop │ 生成器四项 │ CheckMap │ Identify │ Extract
+/// Crop │ Expand │ 生成器四项 │ CheckMap │ Identify │ Extract
 /// ```
 ///
-/// ⇒ 分隔线落在 1/2（裁剪之后）与 5/6（四个生成器之后），`CheckMap` 在 `Identify` **之前**
+/// ⇒ 分隔线落在 2/3（裁剪/扩边之后）与 6/7（四个生成器之后），`CheckMap` 在 `Identify` **之前**
 /// （官方在 axaml 里的先后：`CheckMap` → `IdentifyButton` → `ExtractObjectsButton`）。
-pub const TOOLS_ITEMS: [Item; 8] = [
+pub const TOOLS_ITEMS: [Item; 9] = [
     it(Action::CropSelection, false),
+    it(Action::ExpandMap, false),
     it(Action::GenTown, true),
     it(Action::GenTerrain, false),
     it(Action::GenProvince, false),
@@ -740,7 +748,7 @@ pub const MENUS: [Menu; 5] = [
     },
 ];
 
-/// 全部菜单项总数（= **45**：文件 10 + 编辑 5 + 视图 20 + 工具 8 + 帮助 2）。
+/// 全部菜单项总数（= **46**：文件 10 + 编辑 5 + 视图 20 + 工具 9 + 帮助 2）。
 pub fn item_count() -> usize {
     MENUS.iter().map(|m| m.items.len()).sum()
 }
@@ -749,7 +757,7 @@ pub fn item_count() -> usize {
 ///
 /// 「最近打开」的动态列表**不计入**（行数随设置文件里的 `recent` 变：
 /// 0 条 ⇒ 1 行官方空态行）。子项**不进** [`MENUS`] 的 `items`，所以 [`item_count`] 仍是 42
-/// —— 两笔账分开数，免得"加 5 个子项就把顶级 45 撑成 50"。
+/// —— 两笔账分开数，免得"加 5 个子项就把顶级 46 撑成 51"。
 pub fn sub_count() -> usize {
     let mut n = 0;
     for m in &MENUS {
@@ -918,6 +926,8 @@ pub const fn state(action: Action) -> State {
         // 「裁剪到选区」2026-11-07 起真实现（A-015 Crop）：要开图 + 要选区，
         // 没有图 ⇒ 灰显；有图没选区 ⇒ 点了给原因（不静默）。
         Action::CropSelection => State::NeedsMap,
+        // 「地图扩边」2026-11-07 起真实现（A-015 Expand）：要开图（扩的是当前这张图）
+        Action::ExpandMap => State::NeedsMap,
         Action::GenTown => State::Todo(tx::WHY_GEN_TOWN),
         Action::GenTerrain => State::Todo(tx::WHY_GEN_TERRAIN),
         Action::GenProvince => State::Todo(tx::WHY_GEN_PROVINCE),
@@ -1065,7 +1075,7 @@ mod tests {
     use crate::menu::panels::PanelVis;
     use std::collections::BTreeSet;
 
-    /// **45 项的账**：文件 10 / 编辑 5 / 视图 20 / 工具 8 / 帮助 2（2026-11-06 加「关于」；`n    /// 2026-11-07 加「地砖信息悬浮」与「单元格属性…」）。
+    /// **46 项的账**：文件 10 / 编辑 5 / 视图 20 / 工具 9 / 帮助 2（2026-11-06 加「关于」；`n    /// 2026-11-07 加「地砖信息悬浮」与「单元格属性…」）。
     ///
     /// 这条是验收门 §四.2 的机器判据：任何人加/删一项，这里先红。
     #[test]
@@ -1077,9 +1087,9 @@ mod tests {
             20,
             "视图菜单（XAML 9 + 语言 1 + 面板 8 + 锁定/重置 2）"
         );
-        assert_eq!(TOOLS_ITEMS.len(), 8, "工具菜单（含裁剪与检查地图）");
+        assert_eq!(TOOLS_ITEMS.len(), 9, "工具菜单（含裁剪/扩边/检查地图）");
         assert_eq!(HELP_ITEMS.len(), 2, "帮助菜单（键盘快捷键 + 关于）");
-        assert_eq!(item_count(), 45, "5 个菜单合计");
+        assert_eq!(item_count(), 46, "5 个菜单合计");
         assert_eq!(MENUS.len(), 5);
         // 视图里的面板开关正好 8 个，且与 PanelId::ALL 一一对应
         let panels: Vec<_> = VIEW_ITEMS
@@ -1110,7 +1120,7 @@ mod tests {
                 assert_eq!(MENUS[mi].items[ii].action.id(), id);
             }
         }
-        assert_eq!(ids.len(), 45);
+        assert_eq!(ids.len(), 46);
         assert!(find_by_id("no.such_item").is_none());
     }
 
@@ -1248,7 +1258,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(ready + need_map + todo, 45);
+        assert_eq!(ready + need_map + todo, 46);
         // 任务书 §三.3 点名必须真接上的那一批：逐条钉住，防止有人把它们改回 Todo
         for a in [
             Action::OpenMap,
@@ -1458,8 +1468,8 @@ mod tests {
         );
         assert_eq!(
             seps(&TOOLS_ITEMS),
-            vec![1, 5],
-            "工具：裁剪之后（官方 Crop/Expand 组之后那条）+ 4 个生成器之后"
+            vec![2, 6],
+            "工具：裁剪/扩边之后（官方 Crop/Expand 组之后那条）+ 4 个生成器之后"
         );
         // 帮助菜单：`键盘快捷键…` ｜ `关于 Crystal Studio` —— 这一条分隔线是**本仓新增**的
         // （官方帮助菜单没有 About，见 `HELP_ITEMS` 的文档），目的是把"查手势"与"查身份"分开。
@@ -1478,6 +1488,7 @@ mod tests {
             ids,
             [
                 "tools.crop_selection",
+                "tools.expand_map",
                 "tools.gen_town",
                 "tools.gen_terrain",
                 "tools.gen_province",
@@ -1561,7 +1572,7 @@ mod tests {
     #[test]
     fn 顶级42项与子项5项计数() {
         // ① 顶级是 42（2026-11-06 帮助 1 → 2；2026-11-07 视图 19 → 20），子项不许把它撑大
-        assert_eq!(item_count(), 45);
+        assert_eq!(item_count(), 46);
         // ② 静态子项 5，且顺序照官方
         assert_eq!(sub_count(), 5, "地图光照 3 + 语言 2");
         assert_eq!(

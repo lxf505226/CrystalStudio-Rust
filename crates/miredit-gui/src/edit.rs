@@ -307,9 +307,59 @@ impl EditSession {
     /// 整档撤销）；宿主地图经 [`Self::with_map`] 换进内核视图 ⇒ 内核**就地**换视图字段，
     /// 所以调用之后 `map` 已经是新尺寸（画布下一帧直接按新尺寸贴）。
     ///
+    /// 返回值里的 `changed == false` = **选区已覆盖整图、什么都没做**（不入栈、不置脏）。
+    ///
     /// # Errors
     ///
     /// 见 [`miredit_core::ResizeError`]（空选区 / 尾块 / 该格式不支持 / 尺寸越界）。
+    /// 与内核 `Command::Undo/Redo` 同形的回执（`changed` + 脏/可撤销标志 + 一句说明）。
+    fn core_outcome(&self, changed: usize, note: String) -> miredit_core::Outcome {
+        self.core.outcome(changed, Some(note))
+    }
+
+    /// **撤销 / 重做**（三条入口共用：菜单 `Action::Undo/Redo`、键盘 `Ctrl+Z`/`Ctrl+Shift+Z`|`Ctrl+Y`、
+    /// 以及 `Command::Undo/Redo`）。
+    ///
+    /// 为什么必须共用一个函数：尺寸变化是**整档步骤**，会话里的文档改完之后宿主还有一份
+    /// **保存源**（`MapDoc::document`）。撤销/重做越过一次尺寸变化时，保存源必须跟着回旧/新
+    /// 尺寸，否则 `to_bytes` 会因「视图与字节层形状不符」被拒（R37 复核抓到的 P2：
+    /// 键盘与 `Command` 两条入口原先各写一套，漏了这一步）。
+    ///
+    /// `adopt_resized` 内部**只在尺寸真的不同时**才拷字节层 ⇒ 普通一步撤销零成本。
+    ///
+    /// 返回还原/重放的格数（`0` = 没有可撤销/可重做的步骤）。
+    pub fn apply_undo_like(&mut self, doc: &mut crate::mapdoc::MapDoc, redo: bool) -> usize {
+        let n = if redo {
+            self.with_map(&mut doc.map, |core| core.redo())
+        } else {
+            self.with_map(&mut doc.map, |core| core.undo())
+        };
+        if n > 0 {
+            doc.adopt_resized(self.document());
+        }
+        n
+    }
+
+    /// **四向扩边**（工具 → 地图扩边）：改地图尺寸 + 一步撤销。
+    ///
+    /// 判据（四向 ≥0、全偶数、至少一条 > 0、尺寸上限）与搬格全在内核
+    /// [`miredit_core::EditSession::expand_by`]；宿主地图经 [`Self::with_map`] 换进内核视图
+    /// ⇒ 调用之后 `map` 已是新尺寸。
+    ///
+    /// # Errors
+    ///
+    /// 见 [`miredit_core::ResizeError`]（负数 / 奇数 / 全 0 / 越界 / 不支持该格式 / 有尾块）。
+    pub fn expand_by(
+        &mut self,
+        map: &mut Map,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    ) -> Result<miredit_core::ResizeOutcome, miredit_core::ResizeError> {
+        self.with_map(map, |core| core.expand_by(left, top, right, bottom))
+    }
+
     /// **内核文档**（只读）：尺寸变化之后宿主用它同步保存源
     /// （[`crate::mapdoc::MapDoc::adopt_resized`] 的入参）。
     #[must_use]
@@ -321,7 +371,7 @@ impl EditSession {
         &mut self,
         map: &mut Map,
         area: miredit_core::Selection,
-    ) -> Result<(u16, u16), miredit_core::ResizeError> {
+    ) -> Result<miredit_core::ResizeOutcome, miredit_core::ResizeError> {
         self.with_map(map, |core| core.crop_to(area))
     }
 
@@ -1185,13 +1235,39 @@ pub fn apply_script(
 
 impl EditSession {
     /// 脚本专用：把一条命令作用在 `doc.doc` 的地图上（没有地图 ⇒ 返回 0 格回执）。
-    fn apply_cmd_in(
+    /// **把一条命令作用在宿主文档上**（`--edit-*` 脚本与宿主测试用）。
+    ///
+    /// `Command::Undo/Redo` 在这里被路由到 [`Self::apply_undo_like`]（尺寸变化的保存源同步），
+    /// 其余命令走 [`Self::apply_cmd`]。
+    pub(crate) fn apply_cmd_in(
         &mut self,
         doc: &mut crate::mapdoc::DocState,
         cmd: miredit_core::Command,
     ) -> miredit_core::Outcome {
         match doc.doc.as_mut() {
-            Some(d) => self.apply_cmd(&mut d.map, cmd),
+            Some(d) => match cmd {
+                // ⚠ 撤销/重做**必须**走 `apply_undo_like`（它会同步尺寸变化的保存源）；
+                // 直接 `apply_cmd` 会让 `Command::Undo/Redo` 这条入口绕过那一步（R37 P2）。
+                miredit_core::Command::Undo => {
+                    let n = self.apply_undo_like(d, false);
+                    let note = if n == 0 {
+                        "没有可撤销的步骤".to_string()
+                    } else {
+                        format!("撤销 {n} 格")
+                    };
+                    self.core_outcome(n, note)
+                }
+                miredit_core::Command::Redo => {
+                    let n = self.apply_undo_like(d, true);
+                    let note = if n == 0 {
+                        "没有可重做的步骤".to_string()
+                    } else {
+                        format!("重做 {n} 格")
+                    };
+                    self.core_outcome(n, note)
+                }
+                other => self.apply_cmd(&mut d.map, other),
+            },
             // 没有地图：什么都不做，但也要给一份"改了 0 格 + 原因"的回执（不静默）
             None => miredit_core::Outcome {
                 changed: 0,

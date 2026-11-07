@@ -1086,8 +1086,10 @@ impl MireditApp {
             }
         }
         if undo {
+            // ⚠ 走 `apply_undo_like`（不是裸 `edit.undo`）：尺寸变化是整档步骤，
+            // 撤销越过它时**保存源**也要回旧尺寸，否则保存会因形状不符被拒（R37 P2）。
             let n = match self.doc.doc.as_mut() {
-                Some(d) => self.edit.undo(&mut d.map),
+                Some(d) => self.edit.apply_undo_like(d, false),
                 None => 0,
             };
             // 撤销之后"上一次操作的回执"就不再成立了（它描述的那一步已经没了）
@@ -1098,7 +1100,7 @@ impl MireditApp {
         }
         if redo {
             let n = match self.doc.doc.as_mut() {
-                Some(d) => self.edit.redo(&mut d.map),
+                Some(d) => self.edit.apply_undo_like(d, true),
                 None => 0,
             };
             self.op = None;
@@ -1394,6 +1396,59 @@ impl MireditApp {
                     (self.op, self.overlay) = (None, Overlay::None);
                     let (text, warn) = self.apply_cell_props(light, door, offset);
                     self.op = Some((text, warn));
+                    ui.ctx().request_repaint();
+                }
+            }
+        } else if matches!(self.overlay, Overlay::ExpandMap { .. }) {
+            // 地图扩边模态（A-015 Expand）：Esc / 取消 ⇒ 关；「地图扩边」⇒ 交给内核改尺寸。
+            let cells = self
+                .doc
+                .doc
+                .as_ref()
+                .map(|d| (d.map.width, d.map.height))
+                .unwrap_or((0, 0));
+            match menu::expand::interact(ui, l, &mut self.overlay, cells) {
+                menu::expand::动作::None => {}
+                menu::expand::动作::Cancel => act = menu::dialog::DialogAction::Cancel,
+                menu::expand::动作::Apply {
+                    left,
+                    top,
+                    right,
+                    bottom,
+                } => {
+                    let 结果 = {
+                        let mut cx = menu::action::Ctx {
+                            doc: &mut self.doc,
+                            view: &mut self.view,
+                            edit: &mut self.edit,
+                            panels: &mut self.panels,
+                            dark: &mut self.dark,
+                            grid: &mut self.grid,
+                            cell_hover: &mut self.cell_hover,
+                            doors_open: &mut self.doors_open,
+                            lighting: &mut self.lighting,
+                            canvas: l.viewport,
+                            overlay: &mut self.overlay,
+                            settings_path: &self.settings_path,
+                            recent: &mut self.recent,
+                            tool: self.selected_tool,
+                            hover: self.hover,
+                        };
+                        menu::action::expand_apply(&mut cx, left, top, right, bottom)
+                    };
+                    match 结果 {
+                        Ok(out) => {
+                            // 成功：关模态 + 落回执（`touched_map` ⇒ `map_gen+1`）
+                            self.finish_menu(menu::model::Action::ExpandMap, out);
+                            self.overlay = Overlay::None;
+                        }
+                        Err(why) => {
+                            // 失败：**不关窗**，把原因写进模态摘要（上游 `IsEnabled=false` 同义）
+                            if let Overlay::ExpandMap { error, .. } = &mut self.overlay {
+                                *error = Some(why);
+                            }
+                        }
+                    }
                     ui.ctx().request_repaint();
                 }
             }
@@ -2615,6 +2670,17 @@ impl eframe::App for MireditApp {
                             error.as_deref(),
                             *有门字节,
                         )
+                    }
+                    // 工具 → 地图扩边（A-015 Expand）：440 宽模态，摘要实时反映四个输入。
+                    Overlay::ExpandMap { 文本, focus, error } => {
+                        let cells = self
+                            .doc
+                            .doc
+                            .as_ref()
+                            .map(|d| (d.map.width, d.map.height))
+                            .unwrap_or((0, 0));
+                        let 判定 = menu::expand::校验(文本, cells);
+                        menu::expand::draw(&p, &l, 文本, *focus, &判定, error.as_deref())
                     }
                     // 工具 → 检查地图（A-015）：760×480 只读诊断面板。
                     // 陈旧判定：浮层里存的是**检查那一刻**的 `map_gen`，与当前值不同 ⇒
@@ -5009,6 +5075,196 @@ mod tests {
         )
         .expect("读回");
         assert_eq!(回读.size().0, 4, "重做后保存字节读回 4 宽");
+    }
+
+    /// 按一次**带修饰键**的键（`Ctrl+Z` 那种；`按一次键` 只发裸键）。
+    fn 按一次带修饰键(app: &mut MireditApp, key: egui::Key, modifiers: egui::Modifiers) {
+        let ctx = egui::Context::default();
+        // ⚠ 修饰键要放在 `RawInput::modifiers`（"这一帧开头按着谁"），
+        // 只塞进 `Event::Key{modifiers}` 是不够的 —— egui 0.33 的 `InputState::modifiers`
+        // 取的是 `RawInput::modifiers`，事件里那份只描述"这个按键事件当时的修饰键"。
+        let input = egui::RawInput {
+            modifiers,
+            events: vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers,
+            }],
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| app.handle_keys(ctx));
+    }
+
+    /// **键盘撤销/重做跨过裁剪**（R37 P2：这条入口原先绕过了保存源同步）。
+    ///
+    /// 判据全在**保存字节**上：`Ctrl+Z` 之后存出来的必须与裁剪前逐字节相同（原尺寸），
+    /// `Ctrl+Y` 之后存出来的必须能读回新尺寸。
+    #[test]
+    fn 键盘撤销重做跨越裁剪() {
+        let mut app = 尺寸应用(8, 8);
+        let 原 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(2, 2, 5, 5)
+        ));
+        app.dispatch_menu(menu::model::Action::CropSelection, 画布());
+        assert_eq!(app.doc.doc.as_ref().expect("有图").map.width, 4);
+
+        // Ctrl+Z（键盘）⇒ 回 8×8，且**保存字节逐字节回原**
+        按一次带修饰键(&mut app, egui::Key::Z, egui::Modifiers::COMMAND);
+        let d = app.doc.doc.as_mut().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (8, 8), "Ctrl+Z 回原尺寸");
+        assert_eq!(d.to_bytes().expect("出字节"), 原, "Ctrl+Z 后保存字节必须逐字节回原");
+
+        // Ctrl+Y（键盘）⇒ 回 4×4，保存字节读回新尺寸
+        按一次带修饰键(&mut app, egui::Key::Y, egui::Modifiers::COMMAND);
+        let d = app.doc.doc.as_mut().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (4, 4), "Ctrl+Y 回新尺寸");
+        let bytes = d.to_bytes().expect("出字节");
+        let 回读 = miredit_core::Document::from_bytes(
+            std::path::Path::new(r"E:\x\crop-kbd.map"),
+            bytes,
+        )
+        .expect("读回");
+        assert_eq!(回读.size(), (4, 4), "Ctrl+Y 后保存字节读回 4×4");
+    }
+
+    /// **`Command::Undo/Redo` 跨过裁剪**（`--edit-undo` 与网页层走的就是这条）。
+    ///
+    /// 与键盘用例同判据（只看保存字节），因为 R37 P2 的漏洞正是"这条入口没同步保存源"。
+    #[test]
+    fn 命令撤销重做跨越裁剪() {
+        let mut app = 尺寸应用(8, 8);
+        let 原 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(2, 2, 5, 5)
+        ));
+        app.dispatch_menu(menu::model::Action::CropSelection, 画布());
+        assert_eq!(app.doc.doc.as_ref().expect("有图").map.width, 4);
+
+        // `Command::Undo`
+        let out = app.edit.apply_cmd_in(&mut app.doc, miredit_core::Command::Undo);
+        assert!(out.changed > 0, "撤销要有回执");
+        let d = app.doc.doc.as_mut().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (8, 8), "Command::Undo 回原尺寸");
+        assert_eq!(d.to_bytes().expect("出字节"), 原, "Command::Undo 后保存字节回原");
+
+        // `Command::Redo`
+        let out = app.edit.apply_cmd_in(&mut app.doc, miredit_core::Command::Redo);
+        assert!(out.changed > 0);
+        let d = app.doc.doc.as_mut().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (4, 4), "Command::Redo 回新尺寸");
+        let bytes = d.to_bytes().expect("出字节");
+        let 回读 = miredit_core::Document::from_bytes(
+            std::path::Path::new(r"E:\x\crop-cmd.map"),
+            bytes,
+        )
+        .expect("读回");
+        assert_eq!(回读.size(), (4, 4));
+    }
+
+    // ───────────────────── 工具 → 地图扩边（A-015 Expand / R36） ─────────────────────
+
+    /// 经**动作层**做一次扩边（= 模态提交那条路；`Ok` = 成功回执，`Err` = 中文原因）。
+    fn 扩边(app: &mut MireditApp, 四向: [i32; 4]) -> Result<menu::action::Outcome, String> {
+        let mut cx = menu::action::Ctx {
+            doc: &mut app.doc,
+            view: &mut app.view,
+            edit: &mut app.edit,
+            panels: &mut app.panels,
+            dark: &mut app.dark,
+            grid: &mut app.grid,
+            cell_hover: &mut app.cell_hover,
+            doors_open: &mut app.doors_open,
+            lighting: &mut app.lighting,
+            canvas: 画布(),
+            overlay: &mut app.overlay,
+            settings_path: &app.settings_path,
+            recent: &mut app.recent,
+            tool: app.selected_tool,
+            hover: app.hover,
+        };
+        let r = menu::action::expand_apply(&mut cx, 四向[0], 四向[1], 四向[2], 四向[3]);
+        if let Ok(out) = &r {
+            app.finish_menu(menu::model::Action::ExpandMap, out.clone());
+        }
+        r
+    }
+
+    /// 菜单项打开 440 宽模态：四个输入初值 `"0"`、焦点在第一个、没有错误。
+    #[test]
+    fn 扩边菜单打开模态() {
+        let mut app = 尺寸应用(8, 8);
+        app.dispatch_menu(menu::model::Action::ExpandMap, 画布());
+        match &app.overlay {
+            Overlay::ExpandMap { 文本, focus, error } => {
+                assert_eq!(文本, &["0".to_string(), "0".into(), "0".into(), "0".into()]);
+                assert_eq!(*focus, 0);
+                assert!(error.is_none());
+                assert_eq!(menu::model::Action::ExpandMap.id(), "tools.expand_map");
+            }
+            other => panic!("应打开扩边模态：{other:?}"),
+        }
+        // 模态开着时不该改图
+        assert_eq!(app.doc.doc.as_ref().expect("有图").map.width, 8);
+    }
+
+    /// 扩边成功：尺寸按四向变大、回执、`map_gen` +1、重 fit、保存字节读回新尺寸。
+    #[test]
+    fn 扩边改变尺寸并重拟合() {
+        let mut app = 尺寸应用(8, 8);
+        let gen = app.doc.map_gen;
+        let out = 扩边(&mut app, [2, 4, 6, 8]).expect("合法四向应成功");
+        let d = app.doc.doc.as_ref().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (16, 20), "8+2+6 × 8+4+8");
+        let (text, warn) = out.receipt.expect("要有回执");
+        assert_eq!(text, tx::fill(tx::STATUS_EXPAND_OK_TMPL, &[("w", "16"), ("h", "20")]));
+        assert!(!warn);
+        assert!(out.touched_map, "改尺寸要标 touched_map");
+        assert!(app.doc.map_gen > gen, "地图代号要 +1");
+        let want = crate::canvas_view::CanvasView::fit_scale(画布(), 16, 20);
+        assert!((app.view.scale - want).abs() < 1e-4, "扩边后要重 fit（{} vs {want}）", app.view.scale);
+        // 保存字节：读回 16×20；旧 (0,0) 在 (2,4)，边框空白
+        let bytes = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        let 回读 = miredit_core::Document::from_bytes(
+            std::path::Path::new(r"E:\x\expand.map"),
+            bytes,
+        )
+        .expect("读回");
+        assert_eq!(回读.size(), (16, 20));
+        assert_eq!(回读.raw().cell(2, 4).expect("图内").bk_img, 1, "旧 (0,0) 在 (2,4)");
+        assert_eq!(回读.raw().cell(0, 0).expect("图内").bk_img, 0, "左上角是空白格");
+    }
+
+    /// 非法四向（奇数 / 全 0）⇒ 明确原因、地图一字节不动、不入撤销栈。
+    #[test]
+    fn 扩边非法报原因不改图() {
+        let mut app = 尺寸应用(8, 8);
+        let 前 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        let gen = app.doc.map_gen;
+        let e = 扩边(&mut app, [1, 0, 0, 0]).expect_err("奇数必须拒");
+        assert!(e.contains("偶数"), "{e}");
+        let e = 扩边(&mut app, [0, 0, 0, 0]).expect_err("全 0 必须拒");
+        assert!(e.contains("不能全为 0"), "{e}");
+        assert_eq!(app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节"), 前);
+        assert_eq!(app.doc.map_gen, gen);
+        assert_eq!(app.edit.undo_len(), 0, "失败不许入撤销栈");
+    }
+
+    /// 扩边后 **Ctrl+Z** ⇒ 保存字节逐字节回原（与裁剪同一条整档撤销）。
+    #[test]
+    fn 扩边后键盘撤销回原字节() {
+        let mut app = 尺寸应用(8, 8);
+        let 原 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        扩边(&mut app, [2, 2, 2, 2]).expect("应成功");
+        assert_eq!(app.doc.doc.as_ref().expect("有图").map.width, 12);
+        按一次带修饰键(&mut app, egui::Key::Z, egui::Modifiers::COMMAND);
+        let d = app.doc.doc.as_mut().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (8, 8), "撤销回原尺寸");
+        assert_eq!(d.to_bytes().expect("出字节"), 原, "撤销后保存字节必须逐字节回原");
     }
 
     // ───────────────────── 工具 → 检查地图（A-015 / R32-R33） ─────────────────────

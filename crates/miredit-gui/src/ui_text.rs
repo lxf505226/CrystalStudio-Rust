@@ -314,6 +314,38 @@ pub const STATUS_CROP_NOOP: &str = "选区已覆盖整张地图，没有可裁�
 /// 没有选区就点「裁剪到选区」时的回执（上游是静默 `return false`，本仓必须说出来）。
 pub const STATUS_CROP_NEED_SELECTION: &str = "先在地图上框选要保留的部分再裁剪"; // EN: Select an area inside the map before cropping.
 
+/// 扩边模态标题（官方 `Title = "Expand Map"`，中文取 Strings.json 的「地图扩边」）。
+pub const EXPAND_TITLE: &str = "地图扩边"; // EN: Expand Map ｜ 官方: ExpandMap
+
+/// 扩边模态第一行提示（官方 `"Add blank cells on each side in steps of 2. …"`）。
+pub const EXPAND_HINT: &str = "每边按 2 格为单位加空白格。"; // EN: Add blank cells on each side in steps of 2.
+
+/// 扩边模态第二行提示（官方同一句的后半：「原有画面保持不变」）。
+pub const EXPAND_HINT2: &str = "原有画面保持不变。"; // EN: Existing artwork is preserved.
+
+/// 四个输入框的标签（顺序 = 左 / 上 / 右 / 下，官方 `"Add left (cells)"` 等）。
+pub const EXPAND_FIELDS: [&str; 4] = [
+    "左加（格）", // EN: Add left (cells)
+    "上加（格）", // EN: Add top (cells)
+    "右加（格）", // EN: Add right (cells)
+    "下加（格）", // EN: Add bottom (cells)
+];
+
+/// 合法时的摘要（官方 `"Expanded map: {0} × {1} cells"`）。占位符：`{w}` / `{h}`。
+pub const EXPAND_SUMMARY_TMPL: &str = "扩边后：{w} × {h} 格"; // EN: Expanded map: {w} × {h} cells ｜ 官方: Expanded map: {0} × {1} cells
+
+/// 非法时的原因（官方那句 `"Enter non-negative even amounts, with at least one side greater than 0. …"`）。
+///
+/// 本仓按四种拒绝原因分别说（负数 / 奇数 / 全 0 / 越界），文案出自
+/// `miredit_core::ResizeError` 的 `Display`；这里只留"文本不是整数"那一条。
+pub const EXPAND_ERR_NOT_NUMBER: &str = "四条边都要填整数（留空按 0 算）"; // EN: Enter whole numbers.
+
+/// 扩边模态的取消按钮。
+pub const EXPAND_CANCEL: &str = "取消"; // EN: Cancel ｜ 官方: Cancel
+
+/// 扩边成功后的状态栏回执（官方 `"Expanded map: {0} × {1} cells"`）。
+pub const STATUS_EXPAND_OK_TMPL: &str = "已扩边为 {w} × {h} 格"; // EN: Expanded map: {w} × {h} cells
+
 /// 地图不支持改尺寸 / 有尾块 / 尺寸越界时的拒绝前缀（详细原因接在后面）。
 pub const STATUS_RESIZE_REFUSED_TMPL: &str = "改尺寸失败：{why}"; // EN: Resize failed: {why}
 
@@ -1950,6 +1982,14 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_EXTRACT_OBJECTS", MENU_EXTRACT_OBJECTS),
     ("MENU_CROP_SELECTION", MENU_CROP_SELECTION),
     ("MENU_EXPAND_MAP", MENU_EXPAND_MAP),
+    ("EXPAND_TITLE", EXPAND_TITLE),
+    ("EXPAND_HINT", EXPAND_HINT),
+    ("EXPAND_HINT2", EXPAND_HINT2),
+    ("EXPAND_FIELDS", EXPAND_FIELDS[0]),
+    ("EXPAND_SUMMARY_TMPL", EXPAND_SUMMARY_TMPL),
+    ("EXPAND_ERR_NOT_NUMBER", EXPAND_ERR_NOT_NUMBER),
+    ("EXPAND_CANCEL", EXPAND_CANCEL),
+    ("STATUS_EXPAND_OK_TMPL", STATUS_EXPAND_OK_TMPL),
     ("STATUS_CROP_OK_TMPL", STATUS_CROP_OK_TMPL),
     ("STATUS_CROP_NOOP", STATUS_CROP_NOOP),
     ("STATUS_CROP_NEED_SELECTION", STATUS_CROP_NEED_SELECTION),

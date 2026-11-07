@@ -173,7 +173,7 @@ pub use map_check::{
     UNCHECKED_SIZE_MISMATCH,
 };
 pub use metadata::{clamp_area, no_door_bytes_reason, Area};
-pub use resize::{crop_bounds, expand_target, ResizeError};
+pub use resize::{crop_bounds, expand_target, ResizeError, ResizeOutcome};
 pub use paint::{
     paint, PaintOutcome, Tool, TOOL_BRUSH, TOOL_BRUSH_IDX, TOOL_BUCKET, TOOL_BUCKET_IDX,
     TOOL_ERASER, TOOL_ERASER_IDX, TOOL_PICKUP, TOOL_PICKUP_IDX, TOOL_UNWIRED,

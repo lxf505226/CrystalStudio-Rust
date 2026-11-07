@@ -52,6 +52,21 @@ use crate::convert::{sync_view_into_raw, view_from_raw};
 use crate::document::Document;
 use crate::selection::Selection;
 
+/// 尺寸变化的结果（裁剪 / 扩边共用）。
+///
+/// `changed == false` ⇒ **尺寸没变**（选取覆盖整图）⇒ 什么都没做：不入撤销栈、不置脏、
+/// 字节不变（上游 `MapViewport.CropSelection` 的 `cropped.Width == Width && … return false`
+/// 同一条早退，本仓只是把它显式报出来）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ResizeOutcome {
+    /// 结果宽。
+    pub width: u16,
+    /// 结果高。
+    pub height: u16,
+    /// 是否真的改了尺寸。
+    pub changed: bool,
+}
+
 /// 尺寸变化被拒的原因（**每一句都能直接上屏**）。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ResizeError {

@@ -44,6 +44,7 @@ pub mod action;
 pub mod cellprops;
 pub mod check_map;
 pub mod dialog;
+pub mod expand;
 pub mod model;
 pub mod panels;
 pub mod popup;
@@ -116,6 +117,22 @@ pub enum Overlay {
         error: Option<String>,
         /// 本格式有没有门字节（Mir3 两档没有 ⇒ 两个门输入框禁用 + 一句原因）。
         有门字节: bool,
+    },
+    /// **「工具 → 地图扩边」模态**（A-015 Expand / R36）。
+    ///
+    /// 440 宽面板 + 四个「加几格」输入（初值 `"0"`）+ 实时摘要：合法 ⇒「扩边后：W × H 格」，
+    /// 非法 ⇒ 一句中文原因且「地图扩边」按钮灰显（点击也不响应、**不关窗**）。
+    /// 几何/绘制/输入/校验在 [`expand`]；提交后由 `menu::action` 落到
+    /// `EditSession::expand_by`（一步撤销 + 保存源同步 + 重 fit）。
+    ExpandMap {
+        /// 四个输入框的原文（顺序 = 左 / 上 / 右 / 下）。
+        文本: [String; 4],
+        /// 键盘焦点（`0..=3`，顺序同上）。
+        focus: usize,
+        /// 上一次提交**被内核拒绝**的原因（不支持该格式 / 有尾块 / 越界…）。
+        ///
+        /// `Some` ⇒ 摘要行改显示它（警示色），**模态不关**（用户改完可以再试）。
+        error: Option<String>,
     },
     /// **「工具 → 检查地图」的结果模态**（A-015 / R32-R33）。
     ///
@@ -1035,11 +1052,11 @@ mod tests {
     use super::*;
     use crate::menu::model::{find_by_id, item_count};
 
-    /// 45 项、5 菜单（`dump` 的计数与静态表必须一致）。
+    /// 46 项、5 菜单（`dump` 的计数与静态表必须一致）。
     #[test]
     fn 表与常量一致() {
         assert_eq!(MENUS.len(), 5);
-        assert_eq!(item_count(), 45);
+        assert_eq!(item_count(), 46);
         assert!(find_by_id("view.dark_mode").is_some());
     }
 
@@ -1691,8 +1708,9 @@ mod tests {
         //   `[regex]::Matches($axaml,'<Separator\s*/>').Count == 8`，代码追加 3 条），
         //   本仓 `sep_before` 的 11 处才是对的 —— 以代码实测为准，报告那个数已过期。
         let seps = rows.iter().filter(|l| l.contains("sep=yes")).count();
-        // 2026-11-07：Tools 组补「裁剪到选区」后，官方那条「Crop/Expand 之后」的分隔线
-        // 也落地了 ⇒ 官方 11 → 12，加本仓「关于」前 1 条 = **13**。
+        // 2026-11-07：Tools 组补「裁剪到选区 / 地图扩边」后，官方那条「Crop/Expand 之后」的
+        // 分隔线也落地了（原来工具组只有 CheckMap 前那一条）⇒ 官方 11 → 12，
+        // 加本仓「关于」前 1 条 = **13**。扩边插在 Crop 与 GenTown 之间，**不再新增**分隔线。
         assert_eq!(
             seps, 13,
             "分隔线 13 条（官方 12 + 本仓「关于」前 1 条）"

@@ -250,10 +250,11 @@ fn 扩边四周是空白格() {
 fn 整图裁剪是空操作() {
     let mut ed = crate::session::EditSession::new(文档(造raw(FormatId::Old12, 4, 4)));
     let 前 = ed.document().try_to_bytes().expect("出字节");
-    let (w, h) = ed
+    let out = ed
         .crop_to(Selection::new(0, 0, 3, 3))
         .expect("整图裁剪不该报错");
-    assert_eq!((w, h), (4, 4), "尺寸不变");
+    assert_eq!((out.width, out.height), (4, 4), "尺寸不变");
+    assert!(!out.changed, "整图裁剪的 changed 必须是 false（P3）");
     assert_eq!(ed.undo_len(), 0, "整图裁剪不许入撤销栈");
     assert!(!ed.dirty(), "整图裁剪不许置脏");
     assert_eq!(ed.document().try_to_bytes().expect("出字节"), 前, "字节不变");
