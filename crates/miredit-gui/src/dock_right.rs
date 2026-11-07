@@ -509,23 +509,28 @@ impl MiniMap {
 
 /// 小地图的两块矩形：`(地图区, 视口框)`；没打开地图 ⇒ `None`（**一个框都不画**）。
 ///
-/// - **地图区**：按 `map.width × map.height` 的**世界像素**等比缩放进 `block`
-///   （保持长宽比、居中）。所以它是"这张图的形状"，不是装饰。
+/// - **地图区**：按 `map.width × map.height` 的**世界像素**等比缩放进 `block.shrink(6)`
+///   （保持长宽比、居中）—— 上游 `MapMinimap.Avalonia.cs:19-21` 的 `MapBounds` 用
+///   `(ActualWidth - 12) / w` 定倍数、`(ActualWidth - w*scale) / 2` 定位置，
+///   `-12` 是两边合计 ⇒ 等价于每边内缩 [`m::MINIMAP_FIT_INSET`] = 6。
+///   所以地图区是"这张图的形状"，不是装饰；返回值就是后续绘制/交互要用的**实际**矩形。
 /// - **视口框**：把 `view` 的格窗口按同一比例映射到地图区上，再**夹进**地图区 ——
 ///   视口可以比整图大（缩到 25% 时确实看得见全图），那时框 = 整块地图区，是实话。
 ///
-/// `block` 传的是地图块矩形（[`minimap_block_rect`]），不是整个面板。
+/// `block` 传的是地图块矩形（[`minimap_block_rect`]，200×138，**尺寸不变**），不是整个面板。
 pub fn minimap_rects(block: Rect, mini: &MiniMap) -> Option<(Rect, Rect)> {
     let (mw, mh) = mini.map?;
-    if mw == 0 || mh == 0 || block.width() <= 0.0 || block.height() <= 0.0 {
+    // 可用区 = 块每边内缩 6（上游的 `-12`）；块太小/退化时连图都放不下 ⇒ 不画
+    let inner = block.shrink(m::MINIMAP_FIT_INSET);
+    if mw == 0 || mh == 0 || !inner.is_positive() {
         return None;
     }
     // 世界像素尺寸：一格 = 48×32（与 `miredit_render` 同源，不另编一个比例）
     let world_w = f32::from(mw) * m::CELL_W;
     let world_h = f32::from(mh) * m::CELL_H;
-    // 等比缩放进地图块（取小的那个比例，保证整图都在块里）
-    let k = (block.width() / world_w).min(block.height() / world_h);
-    let map = Rect::from_center_size(block.center(), vec2(world_w * k, world_h * k));
+    // 等比 fit 进可用区（取小的那个比例，保证整图都在块里），居中
+    let k = (inner.width() / world_w).min(inner.height() / world_h);
+    let map = Rect::from_center_size(inner.center(), vec2(world_w * k, world_h * k));
 
     // 视口：世界格 → 世界像素 → 小地图像素，再夹到地图区里
     let (vx, vy, vw, vh) = mini.view;
@@ -549,6 +554,42 @@ pub fn minimap_rects(block: Rect, mini: &MiniMap) -> Option<(Rect, Rect)> {
         ),
     );
     Some((map, vb))
+}
+
+/// 小地图像素 → 世界像素（上游 `MapMinimap.Avalonia.cs:70-75` 的 `WorldAt` **逐字**）。
+///
+/// 上游原文（`_upstream/CrystalStudio/`，文件 sha256 前 8 位 `11f92126`）：
+///
+/// ```csharp
+/// private Point WorldAt(Point point)
+/// {
+///     var map = MapBounds; var source = Viewport!;
+///     return new(Math.Clamp((point.X - map.X) / map.Width, 0, 1) * source.Document.Width * 48.0,
+///         Math.Clamp((point.Y - map.Y) / map.Height, 0, 1) * source.Document.Height * 32.0);
+/// }
+/// ```
+///
+/// 即 `wx = clamp((p.x - map.x) / map.w, 0.0, 1.0) * world_w`，`wy` 同理。
+/// **点在区外**（左/上/右/下）时被夹到边界 —— 上游那个 `Math.Clamp(…, 0, 1)` 就是干这个的，
+/// 所以永远不会算出负坐标或超过 `world_w/h` 的值。
+///
+/// - `map`：传 [`minimap_rects`] 返回的**地图区**（fit 进块内那个矩形），不是 200×138 的地图块。
+///   上游同样拿 `MapBounds`（fit 后的图）算，块内那圈留白属于"图外"，夹到边界正合适。
+/// - `world`：世界像素尺寸，调用方按 `(W as f32 * 48.0, H as f32 * 32.0)` 给
+///   （与 [`m::CELL_W`] 和 [`m::CELL_H`] 同源；上游就在这里直接写 `* 48.0` / `* 32.0`）。
+/// - `map` 是空矩形（没打开地图时 `MapBounds` 走 `default`）⇒ 返回 `(0, 0)`，**绝不除零**。
+pub fn minimap_world_at(p: egui::Pos2, map: egui::Rect, world: (f32, f32)) -> (f32, f32) {
+    // 上游没有这道 guard（它先 `if (map.Width <= 0 …) return;` 就画完了），
+    // 本仓把"空矩形"的语义收在这里：退化矩形 / 非有限输入一律 (0,0)，不外抛 NaN。
+    if !map.is_positive()
+        || !(p.x.is_finite() && p.y.is_finite())
+        || !(world.0.is_finite() && world.1.is_finite())
+    {
+        return (0.0, 0.0);
+    }
+    let fx = ((p.x - map.left()) / map.width()).clamp(0.0, 1.0);
+    let fy = ((p.y - map.top()) / map.height()).clamp(0.0, 1.0);
+    (fx * world.0, fy * world.1)
 }
 
 /// 小地图里那块「地图块」矩形（200×138，水平/垂直居中于面板内容区）。
@@ -586,7 +627,7 @@ fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap) {
     );
     pt::fill(p, inner, t::ui().view_surround);
 
-    // 地图块 200×138（它只是"放小地图的地方"：本单没有真缩略图，如实不画假图）
+    // 地图块 200×138（尺寸/位置都不变；图按 `minimap_rects` fit 进块内每边内缩 6 的可用区）
     let block = minimap_block_rect(l);
     pt::fill(p, block, t::ui().canvas_bg);
     pt::border(p, block, t::ui().separator);
@@ -1178,12 +1219,40 @@ mod tests {
         assert!(minimap_rects(block, &MiniMap::new(Some((0, 0)), (0, 0, 10, 10))).is_none());
     }
 
-    /// 地图区按 `map.width/height` 的**世界像素长宽比**等比映射（不是拉满整块）。
+    /// **地图块（布局基线）不动**：200×138，左上 (1222, 107)。
+    ///
+    /// 这是"不动布局、不动人眼基线"的钉子：块尺寸/位置一变，
+    /// [`m::MINIMAP_MAP_W`] / [`m::MINIMAP_MAP_H`] 的截图基线就失效了。
     #[test]
-    fn 地图区保持地图长宽比() {
+    fn 地图块尺寸位置不变() {
         let l = Layout::compute(window());
         let block = minimap_block_rect(&l);
-        // 200×100 格 ⇒ 世界 9600×3200 px ⇒ 长宽比 3:1
+        assert_eq!(m::MINIMAP_MAP_W, 200.0, "地图块宽 200 是截图基线");
+        assert_eq!(m::MINIMAP_MAP_H, 138.0, "地图块高 138 是截图基线");
+        assert!(
+            (block.width() - 200.0).abs() < 0.01 && (block.height() - 138.0).abs() < 0.01,
+            "块必须是 200×138，实际 {:.3}×{:.3}",
+            block.width(),
+            block.height()
+        );
+        assert!(
+            (block.left() - 1222.0).abs() < 0.01
+                && (block.top() - 107.0).abs() < 0.01
+                && (block.right() - 1422.0).abs() < 0.01
+                && (block.bottom() - 245.0).abs() < 0.01,
+            "块的四边必须还在截图基线上：{block:?}"
+        );
+    }
+
+    /// 宽扁图（200×100 格 ⇒ 世界 9600×3200，3:1）等比 fit 进 `block.shrink(6)` 并居中。
+    ///
+    /// 四边用**具体数字**钉住（不是"非空"）：`block` 1222..1422 / 107..245，
+    /// `shrink(6)` ⇒ 可用区 1228..1416 / 113..239（188×126），3:1 比可用区更宽
+    /// ⇒ **宽度先顶满 188**，高度 188/3 ≈ 62.667 居中 ⇒ y 144.667..207.333。
+    #[test]
+    fn 宽扁地图等比fit并居中() {
+        let l = Layout::compute(window());
+        let block = minimap_block_rect(&l);
         let (map, _vb) = minimap_rects(block, &MiniMap::new(Some((200, 100)), (0, 0, 20, 20)))
             .expect("有地图就要有矩形");
         assert!(
@@ -1191,10 +1260,146 @@ mod tests {
             "地图区长宽比应为 3:1，实际 {:.3}",
             map.width() / map.height()
         );
-        // 完整落在 200×138 的地图块内，且水平方向正好铺满（3:1 比块更宽）
-        assert!(map.left() >= block.left() - 0.01 && map.right() <= block.right() + 0.01);
-        assert!(map.top() >= block.top() - 0.01 && map.bottom() <= block.bottom() + 0.01);
-        assert!((map.width() - block.width()).abs() < 0.01, "宽度方向先顶满");
+        // 左右顶满 shrink(6) 后的可用区；上下按比例居中
+        assert!((map.left() - 1228.0).abs() < 0.01, "左边 {}", map.left());
+        assert!((map.right() - 1416.0).abs() < 0.01, "右边 {}", map.right());
+        assert!((map.top() - 144.666_67).abs() < 0.01, "上边 {}", map.top());
+        assert!((map.bottom() - 207.333_33).abs() < 0.01, "下边 {}", map.bottom());
+        assert!((map.width() - 188.0).abs() < 0.01, "宽度 {}", map.width());
+        assert!((map.height() - 62.666_664).abs() < 0.01, "高度 {}", map.height());
+    }
+
+    /// 高窄图（10×100 格 ⇒ 世界 480×3200，0.15:1）⇒ **高度先顶满**，横向居中。
+    ///
+    /// 这条钉的是"两种极端比例都等比、都居中"：宽 188/世界 480 与 高 126/世界 3200
+    /// 取小者 ⇒ k = 126/3200，宽 18.9 居中 ⇒ x 1312.55..1331.45，y 113..239。
+    #[test]
+    fn 高窄地图等比fit并居中() {
+        let l = Layout::compute(window());
+        let block = minimap_block_rect(&l);
+        let (map, _vb) = minimap_rects(block, &MiniMap::new(Some((10, 100)), (0, 0, 20, 20)))
+            .expect("有地图就要有矩形");
+        assert!((map.top() - 113.0).abs() < 0.01, "上边 {}", map.top());
+        assert!((map.bottom() - 239.0).abs() < 0.01, "下边 {}", map.bottom());
+        assert!((map.left() - 1312.55).abs() < 0.01, "左边 {}", map.left());
+        assert!((map.right() - 1331.45).abs() < 0.01, "右边 {}", map.right());
+        assert!((map.height() - 126.0).abs() < 0.01, "高度 {}", map.height());
+        assert!((map.width() - 18.9).abs() < 0.01, "宽度 {}", map.width());
+        // 长宽比仍是世界的比例（480:3200 = 0.15）
+        assert!(
+            (map.width() / map.height() - 0.15).abs() < 1e-3,
+            "长宽比应为 0.15，实际 {:.4}",
+            map.width() / map.height()
+        );
+    }
+
+    /// `shrink(6)` **真的生效**：地图区最多 188×126，每边比旧块正好少 6。
+    ///
+    /// 旧实现是 fit 进整块（200×138），新实现 fit 进 `block.shrink(6)`（188×126）——
+    /// 判据不是"矩形变小了"，而是**两个方向各自顶满时，块与图之差恰好 12（= 6×2）**。
+    #[test]
+    fn 地图区每边内缩六像素() {
+        let l = Layout::compute(window());
+        let block = minimap_block_rect(&l);
+        let inner = block.shrink(m::MINIMAP_FIT_INSET);
+        assert_eq!(m::MINIMAP_FIT_INSET, 6.0, "上游 `(ActualWidth - 12)` 是两边合计");
+        // 宽扁图：宽度方向顶满 ⇒ 块宽 - 图宽 = 12（每边 6）
+        let (wide, _) = minimap_rects(block, &MiniMap::new(Some((200, 100)), (0, 0, 20, 20))).unwrap();
+        assert!(
+            (block.width() - wide.width() - 12.0).abs() < 0.01,
+            "宽扁图应每边内缩 6：块 {:.3} - 图 {:.3} = {:.3}",
+            block.width(),
+            wide.width(),
+            block.width() - wide.width()
+        );
+        assert!((wide.center().y - block.center().y).abs() < 0.01, "纵向居中");
+        // 高窄图：高度方向顶满 ⇒ 块高 - 图高 = 12（每边 6）
+        let (tall, _) = minimap_rects(block, &MiniMap::new(Some((10, 100)), (0, 0, 20, 20))).unwrap();
+        assert!(
+            (block.height() - tall.height() - 12.0).abs() < 0.01,
+            "高窄图应每边内缩 6：块 {:.3} - 图 {:.3} = {:.3}",
+            block.height(),
+            tall.height(),
+            block.height() - tall.height()
+        );
+        assert!((tall.center().x - block.center().x).abs() < 0.01, "横向居中");
+        // 任何比例都必须完整落在可用区里，且至少一个方向顶满（fit 的本义）
+        for (w, h) in [(200_u16, 100_u16), (10, 100), (100, 100), (700, 700), (1, 1)] {
+            let (map, _) = minimap_rects(block, &MiniMap::new(Some((w, h)), (0, 0, 20, 20)))
+                .expect("有地图就要有矩形");
+            assert!(
+                map.left() >= inner.left() - 0.01 && map.right() <= inner.right() + 0.01,
+                "{w}×{h} 横向越出可用区：{map:?}"
+            );
+            assert!(
+                map.top() >= inner.top() - 0.01 && map.bottom() <= inner.bottom() + 0.01,
+                "{w}×{h} 纵向越出可用区：{map:?}"
+            );
+            let fills_w = (map.width() - inner.width()).abs() < 0.05;
+            let fills_h = (map.height() - inner.height()).abs() < 0.05;
+            assert!(fills_w || fills_h, "{w}×{h} 两轴都没顶满：{map:?}");
+        }
+    }
+
+    /// `minimap_world_at`：四角 / 中心 / 区外四方向 / 空矩形（上游 `MapMinimap.Avalonia.cs:70-75`）。
+    ///
+    /// 用**真实**的 `minimap_rects` 输出当 `map`（不是另编一个矩形），
+    /// 于是"四角 ⇒ 世界四角"同时验证了 fit 与换算两段的组合。
+    #[test]
+    fn 小地图像素换算世界像素() {
+        let l = Layout::compute(window());
+        let block = minimap_block_rect(&l);
+        // 200×100 格 ⇒ 世界 9600×3200（与调用方给的口径一致：W*48, H*32）
+        let (map, _) = minimap_rects(block, &MiniMap::new(Some((200, 100)), (0, 0, 20, 20))).unwrap();
+        let world = (200.0 * m::CELL_W, 100.0 * m::CELL_H);
+        assert_eq!(world, (9600.0, 3200.0));
+
+        // ① 四角 ⇒ 恰好世界四角
+        let tl = minimap_world_at(pos2(map.left(), map.top()), map, world);
+        assert!((tl.0 - 0.0).abs() < 1e-3 && (tl.1 - 0.0).abs() < 1e-3, "左上角 {tl:?}");
+        let tr = minimap_world_at(pos2(map.right(), map.top()), map, world);
+        assert!((tr.0 - 9600.0).abs() < 1e-2 && (tr.1 - 0.0).abs() < 1e-3, "右上角 {tr:?}");
+        let bl = minimap_world_at(pos2(map.left(), map.bottom()), map, world);
+        assert!((bl.0 - 0.0).abs() < 1e-3 && (bl.1 - 3200.0).abs() < 1e-2, "左下角 {bl:?}");
+        let br = minimap_world_at(pos2(map.right(), map.bottom()), map, world);
+        assert!((br.0 - 9600.0).abs() < 1e-2 && (br.1 - 3200.0).abs() < 1e-2, "右下角 {br:?}");
+
+        // ② 中心 ⇒ 一半
+        let c = minimap_world_at(map.center(), map, world);
+        assert!(
+            (c.0 - 4800.0).abs() < 1e-2 && (c.1 - 1600.0).abs() < 1e-2,
+            "中心应为 (4800, 1600)，实际 {c:?}"
+        );
+
+        // ③ 区外四方向 ⇒ clamp 到边界（不许负值 / 不许越界）
+        let left = minimap_world_at(pos2(map.left() - 50.0, map.center().y), map, world);
+        let top = minimap_world_at(pos2(map.center().x, map.top() - 50.0), map, world);
+        let right = minimap_world_at(pos2(map.right() + 50.0, map.center().y), map, world);
+        let bottom = minimap_world_at(pos2(map.center().x, map.bottom() + 50.0), map, world);
+        assert!((left.0 - 0.0).abs() < 1e-3 && (left.1 - 1600.0).abs() < 1e-2, "左侧外 {left:?}");
+        assert!((top.0 - 4800.0).abs() < 1e-2 && (top.1 - 0.0).abs() < 1e-3, "上方外 {top:?}");
+        assert!((right.0 - 9600.0).abs() < 1e-2 && (right.1 - 1600.0).abs() < 1e-2, "右侧外 {right:?}");
+        assert!(
+            (bottom.0 - 4800.0).abs() < 1e-2 && (bottom.1 - 3200.0).abs() < 1e-2,
+            "下方外 {bottom:?}"
+        );
+        for (name, v) in [("左", left), ("上", top), ("右", right), ("下", bottom)] {
+            assert!(v.0 >= 0.0 && v.0 <= 9600.0, "{name}侧外 x 越界：{}", v.0);
+            assert!(v.1 >= 0.0 && v.1 <= 3200.0, "{name}侧外 y 越界：{}", v.1);
+        }
+
+        // ④ 空矩形（没打开地图）⇒ (0,0)，绝不除零
+        for empty in [
+            Rect::NOTHING,
+            Rect::from_min_size(pos2(10.0, 20.0), vec2(0.0, 0.0)),
+            Rect::from_min_size(pos2(10.0, 20.0), vec2(-5.0, 30.0)),
+        ] {
+            assert_eq!(
+                minimap_world_at(pos2(500.0, 500.0), empty, world),
+                (0.0, 0.0),
+                "空矩形 {empty:?} 必须返回 (0,0)"
+            );
+        }
     }
 
     /// 视口框 = 可见格窗口按同一比例映射（含"框随 pan 移动"这条 E10 验收）。

@@ -579,6 +579,22 @@ pub const MINIMAP_MAP_H: f32 = 138.0;
 /// 来源：截图 row y=150，内框 `x1146..1481`；面板内容左右边 = 1136/1491 ⇒ 各内缩 10。
 pub const MINIMAP_INNER_INSET: f32 = 10.0;
 
+/// Minimap 地图区在地图块内的**每边内缩** 6（块 200×138 ⇒ 图最多可用 188×126）。
+///
+/// 来源：上游 `MapMinimap.Avalonia.cs:19-21`（`_upstream/CrystalStudio/`，
+/// 文件 sha256 前 8 位 `11f92126`）的 `MapBounds`：
+///
+/// ```csharp
+/// double scale = Math.Min((ActualWidth - 12) / width, (ActualHeight - 12) / height);
+/// return new((ActualWidth - width * scale) / 2, (ActualHeight - height * scale) / 2, width * scale, height * scale);
+/// ```
+///
+/// `- 12` 是**两边合计**（可用区 = 控件每边内缩 6），居中由 `(ActualWidth - w*scale) / 2`
+/// 承担 ⇒ 等价于「把世界像素 fit 进 `块.shrink(6)` 再居中」。
+/// 本仓那个「控件」就是 [`MINIMAP_MAP_W`]×[`MINIMAP_MAP_H`] 的地图块：**块本身尺寸不变**
+/// （布局与人眼基线不动），变的只是图在块内的可用区。
+pub const MINIMAP_FIT_INSET: f32 = 6.0;
+
 // ⚠ 已删除 `MINIMAP_VIEWBOX = 14.0`（原「视口指示小方框 14×14」）。
 //
 // 删除理由（审计 E10，2026-11-04）：那个方块的位置恒为 `(块左上+2, 块左上+2)`、

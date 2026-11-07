@@ -219,6 +219,67 @@ impl CanvasView {
         self.snap();
     }
 
+    /// 把视口中心移到世界坐标（上游 `MapViewport.Minimap.cs:33-42` 的 `CenterOnWorld`，clamp 逐字）。
+    ///
+    /// 上游原文（`_upstream/CrystalStudio/`，文件 sha256 前 8 位 `b301ab1e`）：
+    ///
+    /// ```csharp
+    /// public void CenterOnWorld(Point point)
+    /// {
+    ///     if (!double.IsFinite(point.X) || !double.IsFinite(point.Y)) return;
+    ///     double width = Document.Width * 48.0, height = Document.Height * 32.0;
+    ///     double halfWidth = ActualWidth / Zoom / 2, halfHeight = ActualHeight / Zoom / 2;
+    ///     double x = halfWidth >= width / 2 ? width / 2 : Math.Clamp(point.X, halfWidth, width - halfWidth);
+    ///     double y = halfHeight >= height / 2 ? height / 2 : Math.Clamp(point.Y, halfHeight, height - halfHeight);
+    ///     origin = new(ActualWidth / 2 - x * Zoom, ActualHeight / 2 - y * Zoom);
+    ///     InvalidateVisual();
+    /// }
+    /// ```
+    ///
+    /// 换成本仓坐标（`pan` = 可见区左上角的**世界**像素）：`origin = 画布半宽 - x*Zoom`
+    /// ⇒ `pan = x - 画布半宽/Zoom`，即"把世界点 `x` 放到视口中心"。
+    ///
+    /// 三条规则（与上游同式）：
+    /// * `half = (canvas_w / 2 / scale, canvas_h / 2 / scale)` = 半个视口覆盖的世界像素；
+    /// * **图比视口窄**（`half >= world_size / 2`）⇒ 该轴取 `world_size / 2`（整图居中，
+    ///   左右留白相等，不会出现"图被推到左边"）；否则 `clamp(world, half, world_size - half)`
+    ///   —— 即视口不越出图外（贴边时停边，上游同）；
+    /// * 末尾 `snap()` 到整**屏幕**像素（量化步长 `1/scale` 世界像素），与
+    ///   [`Self::center_on_cell`] / [`Self::pan_by`] 同一收尾，避免半像素糊边。
+    ///
+    /// ⚠ 与派单书签名的差异（**有意**）：多一个 `canvas: Rect` 参数。`half` 必须用画布宽高算，
+    /// 而 [`CanvasView`] 不存画布矩形（画布由布局每帧给，见 [`Self::visible_cells`]），
+    /// 所以与既有 [`Self::center_on_cell`] 同形取值，不引入"上一帧画布"的隐藏状态。
+    ///
+    /// 不动 [`Self::center_on_cell`]：那条被 CheckMap 定位与「定位到格」用着（落格中心 + 抬缩放），
+    /// 语义不同，别合并。
+    pub fn center_on_world(&mut self, canvas: Rect, world: (f32, f32), world_size: (f32, f32)) {
+        // 上游第 35 行：非有限点直接忽略（不把视口推到 NaN）
+        if !world.0.is_finite() || !world.1.is_finite() || self.scale <= 0.0 {
+            return;
+        }
+        // `world_size` 由地图格数乘出来（`W*48, H*32`），正常恒有限；坏值同样忽略，
+        // 否则下面的 `clamp` 会因 NaN 上下界 panic
+        if !world_size.0.is_finite() || !world_size.1.is_finite() {
+            return;
+        }
+        let half_x = canvas.width() / 2.0 / self.scale;
+        let half_y = canvas.height() / 2.0 / self.scale;
+        let x = if half_x >= world_size.0 / 2.0 {
+            world_size.0 / 2.0
+        } else {
+            world.0.clamp(half_x, world_size.0 - half_x)
+        };
+        let y = if half_y >= world_size.1 / 2.0 {
+            world_size.1 / 2.0
+        } else {
+            world.1.clamp(half_y, world_size.1 - half_y)
+        };
+        self.pan_x = x - half_x;
+        self.pan_y = y - half_y;
+        self.snap();
+    }
+
     /// **按屏幕像素平移视口**（= 上游 `MapViewport.Minimap.cs:11-22` 的 `PanBy(offset)`）。
     ///
     /// 上游：`origin += offset`，而 `origin` 是**屏幕像素**（`VisibleWorldBounds =
@@ -1395,6 +1456,142 @@ mod tests {
             v.pan_y,
             老pan.0,
             老pan.1
+        );
+    }
+
+    /// `center_on_world` ①：图比视口大 + 目标在"中心区" ⇒ 视口中心**精确等于**目标。
+    ///
+    /// 容差取 `snap()` 的量化步长：末尾吸附到整**屏幕**像素 ⇒ 世界坐标网格是 `1/scale`
+    /// （与 `app.rs` 里 `center_on_cell` 用例同一口径，见那里的注释）。
+    #[test]
+    fn 居中到世界坐标落在目标() {
+        let c = canvas();
+        // 700×700 ⇒ 世界 33600×22400，远大于 987×815 视口
+        let world_size = (700.0 * CELL_W as f32, 700.0 * CELL_H as f32);
+        let target = (10000.0_f32, 8000.0_f32);
+        for scale in [1.0_f32, 2.0, 0.5] {
+            let mut v = CanvasView {
+                scale,
+                ..Default::default()
+            };
+            v.center_on_world(c, target, world_size);
+            let tol = 1.0 / scale + 1e-3;
+            let half_x = c.width() / 2.0 / scale;
+            let half_y = c.height() / 2.0 / scale;
+            assert!(
+                (v.pan_x - (target.0 - half_x)).abs() <= tol,
+                "scale={scale} pan_x {} 应为 {}（tol {tol}）",
+                v.pan_x,
+                target.0 - half_x
+            );
+            assert!(
+                (v.pan_y - (target.1 - half_y)).abs() <= tol,
+                "scale={scale} pan_y {} 应为 {}（tol {tol}）",
+                v.pan_y,
+                target.1 - half_y
+            );
+            // 另一面：目标点必须落在画布中心（误差 ≤ 1 屏幕像素，这才是"居中"的本义）
+            let sx = (target.0 - v.pan_x) * scale;
+            let sy = (target.1 - v.pan_y) * scale;
+            assert!(
+                (sx - c.width() / 2.0).abs() <= 1.0,
+                "scale={scale} 目标没落在画布中心 x：{sx} vs {}",
+                c.width() / 2.0
+            );
+            assert!(
+                (sy - c.height() / 2.0).abs() <= 1.0,
+                "scale={scale} 目标没落在画布中心 y：{sy} vs {}",
+                c.height() / 2.0
+            );
+        }
+    }
+
+    /// `center_on_world` ②③：贴左上 ⇒ 夹到 `half`；贴右下 ⇒ 夹到 `world - half`（视口不越出图外）。
+    ///
+    /// 1× 下 `half*2 = 画布`，所以两个端点正好是 `pan = (0,0)` 与 `pan = world - canvas`。
+    #[test]
+    fn 居中到世界坐标夹在边界() {
+        let c = canvas();
+        let world_size = (700.0 * CELL_W as f32, 700.0 * CELL_H as f32);
+        let mut v = CanvasView::default();
+        // ② 目标贴左上 (0,0)：clamp 到 half ⇒ 图左上角与画布左上角重合 ⇒ pan = (0,0)
+        v.center_on_world(c, (0.0, 0.0), world_size);
+        assert_eq!(
+            (v.pan_x, v.pan_y),
+            (0.0, 0.0),
+            "贴左上角时必须夹到 half（不是负坐标）"
+        );
+        // ③ 目标贴右下 (world)：clamp 到 world - half ⇒ pan = world - canvas
+        v.center_on_world(c, world_size, world_size);
+        let want = (world_size.0 - c.width(), world_size.1 - c.height());
+        assert!(
+            (v.pan_x - want.0).abs() <= 1.0 && (v.pan_y - want.1).abs() <= 1.0,
+            "贴右下角时应夹到 world-half：pan ({}, {}) vs {:?}",
+            v.pan_x,
+            v.pan_y,
+            want
+        );
+        // 两侧都不许越出图外
+        assert!(v.pan_x >= 0.0 && v.pan_y >= 0.0, "视口不许越过图左上");
+        assert!(
+            v.pan_x <= world_size.0 - c.width() + 1.0
+                && v.pan_y <= world_size.1 - c.height() + 1.0,
+            "视口不许越过图右下：({}, {})",
+            v.pan_x,
+            v.pan_y
+        );
+        // 上游 `MapViewport.Minimap.cs:35`：非有限点**直接忽略**，一个像素都不动
+        let before = (v.pan_x, v.pan_y);
+        v.center_on_world(c, (f32::NAN, 0.0), world_size);
+        assert_eq!((v.pan_x, v.pan_y), before, "NaN 目标必须被忽略");
+    }
+
+    /// `center_on_world` ④：图比视口小 ⇒ 该轴取世界中心（整图居中，四周留白相等）。
+    ///
+    /// 这条防的是"把 pan 夹成 0"那类假居中：图 500×300 比 987×815 小，
+    /// 真正居中的 `pan` **必然是负值**（图左上角在画布左上角的左上方），留白左右/上下相等。
+    #[test]
+    fn 图比视口小则整图居中() {
+        let c = canvas();
+        let world_size = (500.0_f32, 300.0_f32);
+        let mut v = CanvasView::default();
+        // 目标点故意给角落：图比视口小的时候目标点**无关**，两轴都该取世界中心
+        v.center_on_world(c, (0.0, 0.0), world_size);
+        let want = (
+            world_size.0 / 2.0 - c.width() / 2.0,
+            world_size.1 / 2.0 - c.height() / 2.0,
+        );
+        assert!(
+            (v.pan_x - want.0).abs() <= 1.0 && (v.pan_y - want.1).abs() <= 1.0,
+            "应居中到世界中心：pan ({}, {}) vs {:?}",
+            v.pan_x,
+            v.pan_y,
+            want
+        );
+        assert!(
+            v.pan_x < 0.0 && v.pan_y < 0.0,
+            "图比视口小 ⇒ pan 必为负（四周留白）：({}, {})",
+            v.pan_x,
+            v.pan_y
+        );
+        // 留白相等（±1 屏幕像素的 snap 误差）
+        let left = (0.0 - v.pan_x) * v.scale;
+        let right = c.width() - (world_size.0 - v.pan_x) * v.scale;
+        let top = (0.0 - v.pan_y) * v.scale;
+        let bottom = c.height() - (world_size.1 - v.pan_y) * v.scale;
+        assert!((left - right).abs() <= 1.0, "左右留白不等：{left} vs {right}");
+        assert!((top - bottom).abs() <= 1.0, "上下留白不等：{top} vs {bottom}");
+        // 0.5× 时 `half` 翻倍（覆盖更多世界像素），"图比视口小"的判据不变 ⇒ 仍居中
+        let mut v2 = CanvasView {
+            scale: 0.5,
+            ..Default::default()
+        };
+        v2.center_on_world(c, (0.0, 0.0), world_size);
+        let cx = (world_size.0 / 2.0 - v2.pan_x) * v2.scale;
+        let cy = (world_size.1 / 2.0 - v2.pan_y) * v2.scale;
+        assert!(
+            (cx - c.width() / 2.0).abs() <= 1.0 && (cy - c.height() / 2.0).abs() <= 1.0,
+            "0.5× 下图中心也必须在画布中心：({cx}, {cy})"
         );
     }
 }
