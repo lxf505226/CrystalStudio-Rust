@@ -102,17 +102,49 @@ fn slash_path(p: &std::path::Path) -> String {
     p.to_string_lossy().replace('\\', "/")
 }
 
-/// `1.2.3` → `[1, 2, 3, 0]`（`FILEVERSION` 要四个 u16）。
+/// 日期版本 `<YYYYMMDD>.<轮次>.<修正>` → Windows `FILEVERSION` 的四个 `u16`。
 ///
-/// 段数不足补 0；非数字段按 0 处理 —— 版本号真源是个 semver 字符串，
-/// 这里只负责把它折成 Windows 资源要求的四段整数（`x.y.z` 与 `x.y.z.0` 等价，
-/// 缺的段补 0；具体版本号一律由 `CARGO_PKG_VERSION` 现算，本文件不写死任何数字）。
+/// ⚠ 为什么不能直接把三段 parse 成 u16（2026-11-07 用户改用日期版本后暴露）：
+/// `20261107 > u16::MAX(65535)`，`parse::<u16>()` 会**静默失败再兜成 0** ⇒
+/// exe 属性里数值版本显示 `0.0.0.0`，字符串版本却是 `20261107.0.0`，自相矛盾。
+/// 而 Windows 资源只给四个 u16，装不下 8 位日期。
+///
+/// 本仓口径：把 8 位日期拆成「年(4) / 月日(4)」两个 u16，后两段照放：
+///   `20261107.1.2` ⇒ `[2026, 1107, 1, 2]`
+/// 这样数值版本既**不溢出**、又单调可比（同一年内日期递增 ⇒ 第二段递增），
+/// 字符串版本仍用完整的 `CARGO_PKG_VERSION`，两者在「属性」面板里各司其职。
+///
+/// 旧 `0.x.y` 版本号也兼容（历史 tag 仍可能从源码构建）：不足 8 位就原样放
+/// `[0, x, y, 0]`，不 panic、不造假数字。
 fn version_quad(v: &str) -> [u16; 4] {
-    let mut out = [0u16; 4];
-    for (i, part) in v.split(['.', '-', '+']).take(4).enumerate() {
-        out[i] = part.trim().parse::<u16>().unwrap_or(0);
+    let mut parts = v.split(['.', '-', '+']);
+    let first = parts.next().unwrap_or("0");
+    let second = parts.next().unwrap_or("0");
+    let third = parts.next().unwrap_or("0");
+
+    let to_u16 = |s: &str| -> u16 {
+        // 超 u16 的段一律折成 0，并在构建日志里如实说明（不静默）
+        match s.trim().parse::<u16>() {
+            Ok(n) => n,
+            Err(_) => {
+                println!("cargo:warning=[构建] 版本段 '{s}' 超出 u16，数值版本对应位记 0；字符串版本仍为 {v}");
+                0
+            }
+        }
+    };
+
+    if first.len() == 8 && first.bytes().all(|b| b.is_ascii_digit()) {
+        let year = &first[..4];
+        let month_day = &first[4..];
+        return [
+            to_u16(year),
+            to_u16(month_day),
+            to_u16(second),
+            to_u16(third),
+        ];
     }
-    out
+    // 旧 0.x.y：保持历史行为，第四段补 0
+    [to_u16(first), to_u16(second), to_u16(third), 0]
 }
 
 /// 生成 `.rc` 文本（纯函数；不含任何写死的版本号）。

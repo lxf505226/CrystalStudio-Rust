@@ -8,22 +8,24 @@
     三种用法（互斥）：
 
       -Check
-          只读校验：根 [workspace.package].version 可读且是合法 SemVer；crates/ 下 8 个 crate
-          都是 version.workspace = true；vendor/wil2atlas 作为 vendored 上游例外单独报（不参与比对）。
-          一致 ⇒ 退出码 0，不一致 ⇒ 退出码 1。
+          只读校验：根 [workspace.package].version 可读且是合法**日期版本**（<YYYYMMDD>.<轮次>.<修正>）；
+          crates/ 下 8 个 crate 都是 version.workspace = true；vendor/wil2atlas 作为
+          vendored 上游例外单独报（不参与比对）。一致 ⇒ 退出码 0，不一致 ⇒ 退出码 1。
 
       -Part patch|minor|major
-          按当前版本递增：patch 只升 Z；minor 升 Y 且 Z 归零；major 在 1.0 之前被拒绝
-          （0.x 阶段用 minor 表示 breaking），1.0 之后按正常 SemVer 升 X 并归零 Y/Z。
-          0.x 阶梯（VERSIONING.md §5.1）：0.0.1 -Part patch ⇒ 0.0.2（只修不增）；
-          0.0.1 -Part minor ⇒ 0.1.0（首个 MINOR 功能里程碑）。
+          日期版本递增（VERSIONING.md §二）：
+            patch  ⇒ <日期>.<轮次>.<修正+1>（同一轮内再推一次，只修不增）
+            minor  ⇒ <日期>.<轮次+1>.0        （当天另起一轮，通常夹带新能力）
+            major  ⇒ <今天日期>.0.0           （换一天；若今天日期与当前日期相同则拒绝，
+                                                避免同一天靠 major 重复发版）
+          三段都严格递增、可比大小；日期段用系统当天（yyyyMMdd，精确校验合法日历日）。
 
-      -Set X.Y.Z
-          显式设成指定三段版本（严格 SemVer 校验；-rc.N / +g<sha> 由发布流程另定，本脚本不处理）。
+      -Set <YYYYMMDD>.<轮次>.<修正>
+          显式设成指定日期版本（严格格式校验；date 必须是合法日历日，轮次/修正不带前导零）。
 
     -Part / -Set 只做两件事：
       1) 改根 Cargo.toml 的 [workspace.package].version（只改这一行，别的文件不碰）；
-      2) 把 CHANGELOG.md 的 `## [Unreleased]` 改成 `## [X.Y.Z] - <系统当天日期>`，
+      2) 把 CHANGELOG.md 的 `## [Unreleased]` 改成 `## [<日期版本>] - <系统当天日期>`，
          并在顶部重建一个空的 `## [Unreleased]`。
     脚本不伪造变更条目、不碰 git、不打 tag、不跑测试；写完会复读复核，最后打印发布清单。
 
@@ -48,7 +50,7 @@
     pwsh -File scripts/bump-version.ps1 -Part minor
 
 .EXAMPLE
-    pwsh -File scripts/bump-version.ps1 -Set 0.1.0
+    pwsh -File scripts/bump-version.ps1 -Set 20261107.0.0
 
 .NOTES
     退出码：0 = 成功；1 = 校验失败或前置条件不满足（含「根 Cargo.toml 缺 [workspace.package]」）。
@@ -86,8 +88,17 @@ $ExpectedCrateCount = 8
 # vendored 的上游解码器子集：保留它自己的版本，不随本仓 bump（VERSIONING.md §二/§3.1）
 $VendoredManifest = 'vendor/wil2atlas/Cargo.toml'
 
-# 严格三段 SemVer：不写前导零，不接受 -rc.N / +g<sha>
-$SemVerCorePattern = '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+# 日期版本：<YYYYMMDD>.<当天轮次>.<轮内修正>（VERSIONING.md §二，2026-11-07 用户拍板）
+#   - 第一段是 8 位合法日历日；后两段是不带前导零的十进制整数
+#   - 示例：20261107.0.0 → 20261107.0.1（同轮再修）→ 20261107.1.0（另起一轮）→ 20261108.0.0（换天）
+#   - 仍是合法 SemVer 三段数字（Cargo 接受），但语义不再是 0.x 的 major/minor/patch
+$DateVersionPattern = '^([0-9]{8})\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
+$DatePartFormat = 'yyyyMMdd'
+
+# 历史 0.x.y 三段版本号（2026-11-07 之前的旧方案）。
+# 只作为**切换起点**被 -Check 容忍；不许再用 -Part 递增（要切必须 -Set 到日期版本）。
+# 旧 tag / 旧 CHANGELOG 小节按用户拍板「不清理」，原样保留。
+$LegacyVersionPattern = '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 
 # 新 [Unreleased] 下的占位说明。逐字比对：下次 bump 时只清掉这一行，人写的备注一律保留。
 $UnreleasedPlaceholder = '> 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。'
@@ -143,7 +154,7 @@ function Assert-NoBom {
 # ───────────────────────────── TOML 读取（只认当前仓库用到的两种写法） ─────────────────────────────
 
 # 取指定表里的 version 键。返回 $null（表或键不存在），或：
-#   Kind = 'literal'    ⇒ version = "0.0.1"（写死，违反单一真源）
+#   Kind = 'literal'    ⇒ version = "20261107.0.0"（写死，符合单一真源）
 #   Kind = 'workspace'  ⇒ version.workspace = true（正确写法）
 #   Value = 版本号 / 'workspace'；Line = 行号（1 起）
 function Get-TomlVersionEntry {
@@ -175,21 +186,42 @@ function Get-TomlVersionEntry {
     return $null
 }
 
-# ───────────────────────────── SemVer ─────────────────────────────
+# ───────────────────────── 日期版本校验 / 递增 ─────────────────────────
 
 function Test-SemVerCore {
     param([string]$Text)
-    return [regex]::IsMatch($Text, $SemVerCorePattern)
+    $m = [regex]::Match($Text, $DateVersionPattern)
+    if (-not $m.Success) { return $false }
+    # 8 位日期必须能按 yyyyMMdd 精确解析成合法日历日（20261132 之类要挡掉）
+    $parsed = [datetime]::MinValue
+    return [datetime]::TryParseExact(
+        $m.Groups[1].Value,
+        $DatePartFormat,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::None,
+        [ref]$parsed
+    )
+}
+
+function Test-LegacyVersion {
+    param([string]$Text)
+    return [regex]::IsMatch($Text, $LegacyVersionPattern)
+}
+
+# -Check 的合法形状：日期版本（新方案）或历史 0.x.y（仅切换起点，不递增）
+function Test-AcceptedVersion {
+    param([string]$Text)
+    return (Test-SemVerCore $Text) -or (Test-LegacyVersion $Text)
 }
 
 function Get-SemVerParts {
     param([string]$Text)
-    $m = [regex]::Match($Text, $SemVerCorePattern)
+    $m = [regex]::Match($Text, $DateVersionPattern)
     if (-not $m.Success) { return $null }
     return [pscustomobject]@{
-        Major = [int]$m.Groups[1].Value
-        Minor = [int]$m.Groups[2].Value
-        Patch = [int]$m.Groups[3].Value
+        Date   = $m.Groups[1].Value
+        Round  = [int]$m.Groups[2].Value
+        Fix    = [int]$m.Groups[3].Value
     }
 }
 
@@ -197,19 +229,26 @@ function Get-NextVersion {
     param([string]$Current, [string]$Kind)
 
     $v = Get-SemVerParts $Current
-    if ($null -eq $v) { Stop-Failure "当前版本号 '$Current' 不是合法 SemVer，拒绝递增" }
+    if ($null -eq $v -or -not (Test-SemVerCore $Current)) {
+        Stop-Failure "当前版本号 '$Current' 不是合法日期版本，拒绝按 -Part 递增" @(
+            '2026-11-07 起版本号改为 <YYYYMMDD>.<轮次>.<修正>；',
+            '旧 0.x.y 只能作为切换起点，请用 -Set <YYYYMMDD>.0.0 显式切到日期版本。'
+        )
+    }
+    $today = (Get-Date).ToString($DatePartFormat, [System.Globalization.CultureInfo]::InvariantCulture)
 
     switch ($Kind) {
-        'patch' { return "$($v.Major).$($v.Minor).$($v.Patch + 1)" }
-        'minor' { return "$($v.Major).$($v.Minor + 1).0" }
+        'patch' { return "$($v.Date).$($v.Round).$($v.Fix + 1)" }
+        'minor' { return "$($v.Date).$($v.Round + 1).0" }
         'major' {
-            if ($v.Major -eq 0) {
-                Stop-Failure '1.0 之前不能用 major' @(
-                    "当前版本 $Current 还在 0.x：0.x 阶段请用 -Part minor 表示 breaking（VERSIONING.md §5.2）。",
-                    'major 只在 1.0 之后用来表示「破坏已发布的兼容性」。'
+            if ($today -eq $v.Date) {
+                Stop-Failure '今天已经用这个日期发过版，-Part major 拒绝' @(
+                    "当前版本 $Current 的日期段就是今天（$today）。",
+                    '同一天要再推一次请用 -Part minor（另起一轮）或 -Part patch（轮内修正）；',
+                    '换一天再发时脚本会自动把日期段改成当天。'
                 )
             }
-            return "$($v.Major + 1).0.0"
+            return "$today.0.0"
         }
         default { Stop-Failure "未知的递增段 '$Kind'" }
     }
@@ -261,8 +300,8 @@ function Invoke-Precheck {
     else {
         $info.RootVersion = $entry.Value
         $info.RootLine = $entry.Line
-        if (-not (Test-SemVerCore $entry.Value)) {
-            $problems.Add("根 Cargo.toml:$($entry.Line) 的 version = ""$($entry.Value)"" 不是合法三段 SemVer")
+        if (-not (Test-AcceptedVersion $entry.Value)) {
+            $problems.Add("根 Cargo.toml:$($entry.Line) 的 version = ""$($entry.Value)"" 既不是日期版本（<YYYYMMDD>.<轮次>.<修正>）也不是历史 0.x.y 切换起点")
         }
     }
 
@@ -393,7 +432,7 @@ function New-WorkspaceVersionText {
     return ($lines -join $nl)
 }
 
-# CHANGELOG.md：把 `## [Unreleased]` 搬成 `## [X.Y.Z] - 今天`，并在最上面重建空的 `## [Unreleased]`
+# CHANGELOG.md：把 `## [Unreleased]` 搬成 `## [<日期版本>] - 今天`，并在最上面重建空的 `## [Unreleased]`
 # 返回 @{ Text = 新全文; HadEntries = 这次是否真有条目; Today = 用到的日期 }
 # 纪律：只搬标题、只清掉脚本自己写的那句占位说明，绝不编造/改动任何变更条目
 function New-ChangelogText {
@@ -618,14 +657,14 @@ if ($PSBoundParameters.ContainsKey('Part')) {
 }
 else {
     if ($Set -match '[-+]') {
-        Stop-Failure "-Set 只接受正式三段版本 X.Y.Z" @(
+        Stop-Failure "-Set 只接受正式三段日期版本 <YYYYMMDD>.<轮次>.<修正>" @(
             "实得：$Set",
             '预发布 -rc.N 与构建元数据 +g<sha> 由发布流程另定（VERSIONING.md §二），本脚本不处理。'
         )
     }
     if (-not (Test-SemVerCore $Set)) {
-        Stop-Failure "-Set 的值不是合法三段 SemVer：$Set" @(
-            '要求：MAJOR.MINOR.PATCH，三段十进制整数，不写前导零（例：0.0.2 / 1.0.0）。'
+        Stop-Failure "-Set 的值不是合法日期版本：$Set" @(
+            '要求：<YYYYMMDD>.<轮次>.<修正>，日期 8 位且是合法日历日，后两段十进制整数不带前导零（例：20261107.0.0 / 20261107.1.2）。'
         )
     }
     $target = $Set

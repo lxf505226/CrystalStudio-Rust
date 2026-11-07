@@ -6,21 +6,49 @@
 
 ## 一、一句话
 
-版本号 = `MAJOR.MINOR.PATCH`，**唯一真源是根 `Cargo.toml` 的 `[workspace.package].version`**。
-一次发布只递增一次：先把内容记进 `CHANGELOG` 的 `[Unreleased]`，发布时改成带**真实日期**的版本标题，并把 tag `vX.Y.Z` 打在发布提交上。
+版本号 = `<YYYYMMDD>.<当天轮次>.<轮内修正>`，**唯一真源是根 `Cargo.toml` 的 `[workspace.package].version`**。
+一次发布只递增一次：先把内容记进 `CHANGELOG` 的 `[Unreleased]`，发布时改成带**真实日期**的版本标题，并把 tag `v<版本>` 打在发布提交上。
 
-## 二、版本号格式（SemVer 2.0.0）
+> **2026-11-07 方案变更（用户拍板）**：不再使用 `0.0.0` / `0.x.y` 递增。
+> 改为「日期 + 当天序号」，避免同一天多次发布时版本号撞车。
+> 旧的 `0.x.y` 版本、tag、CHANGELOG 小节**原样保留不清理**，历史可查。
+> 本文档里凡涉及「升 MINOR / 升 PATCH」的**分类判据仍然有效**，只是最终号段改按下表映射。
+
+## 二、版本号格式（日期版本）
 
 | 形态 | 何时用 | 示例 | 备注 |
 |---|---|---|---|
-| `MAJOR.MINOR.PATCH` | 正式发布 | `0.0.1`、`0.1.0`、`1.0.0` | 三段都是十进制整数，不写前导零 |
-| `X.Y.Z-rc.N` | 预发布 | `1.0.0-rc.1` | N 从 1 起；rc 期间**只修 rc 自身的缺陷**，不塞新功能；转正时改用无后缀版本号 |
-| `X.Y.Z+g<sha>` | 构建元数据，**只用于显示** | `0.0.1+g560a0dd` | `<sha>` 取 `git rev-parse --short HEAD`；**不进 `Cargo.toml`、不进 tag、不参与比较** |
+| `<YYYYMMDD>.0.0` | 当天**首次**发布 | `20261107.0.0` | 第一段是 8 位合法日历日（`yyyyMMdd`） |
+| `<YYYYMMDD>.R.0` | 当天**另起一轮**（通常夹带新能力） | `20261107.1.0` | R 从 0 起，每次 +1；修正段归零 |
+| `<YYYYMMDD>.R.F` | 同一轮内**再推一次的修正** | `20261107.1.2` | F 从 0 起，每次 +1；只修不增 |
+| `<YYYYMMDD+1>.0.0` | 换一天发布 | `20261108.0.0` | 日期段取系统当天，轮次/修正归零 |
 
-- 比较大小只看 `MAJOR.MINOR.PATCH`；`-rc.N` 小于同号正式版；`+g<sha>` 一律忽略。
-- 在 git 工作树之外构建（例如解压源码包）时**省略** `+g<sha>`，不要回填一个编造的 sha。
-- tag 名恒为 `v` + 版本号：正式 `v0.0.1`，预发布 `v1.0.0-rc.1`；**tag 里不带 `+g<sha>`**。
-- 版本号只描述**本仓的产品版本**；`vendor/wil2atlas` 是 vendored 的上游解码器，保留它自己的版本号，不跟本仓走（见 §三）。
+- 三段都是十进制整数、不写前导零；它仍是 Cargo 接受的 `MAJOR.MINOR.PATCH` 形状，但**语义不再是 SemVer 的兼容级别**。
+- 比较大小按三段数值：日期越大越新；同日轮次越大越新；同轮修正越大越新。
+- tag 名恒为 `v` + 版本号：`v20261107.0.0`。**tag 里不带其它后缀**。
+- `+g<sha>` 构建元数据**只用于显示**（取 `git rev-parse --short HEAD`），不进 `Cargo.toml`、不进 tag、不参与比较；git 工作树之外构建时省略，不回填编造的 sha。
+- 版本号只描述**本仓的产品版本**；`vendor/wil2atlas` 是 vendored 的上游解码器，保留自己的版本号，不跟本仓走（见 §三）。
+
+### 2.1 递增动作（机械口径，与改动分类的关系见 §四/§5.2）
+
+| 命令 | 结果 | 语义 |
+|---|---|---|
+| `-Part patch` | `<日期>.<轮次>.<修正+1>` | 同一轮内再推一次；只修不增 |
+| `-Part minor` | `<日期>.<轮次+1>.0` | 当天另起一轮（通常因为有新能力） |
+| `-Part major` | `<今天>.0.0` | 换一天；**今天已发过就拒绝**（防止一天两次靠日期段蒙混） |
+| `-Set <YYYYMMDD>.R.F` | 显式指定 | 用于方案切换首版、或手工纠偏；日期必须是合法日历日 |
+
+> 一次发布只 bump 一次，取本次全部改动里的**最高类别**（见 §5.2）：
+> `breaking` / `feature` ⇒ 用 `minor`（另起一轮）或 `major`（换天）；`fix` ⇒ 用 `patch`（轮内修正）；
+> 只动测试/注释 ⇒ 不 bump，随下一版带上。
+> **分类判据（什么算 breaking/feature/fix）与 §八 的兼容性承诺完全不变**，与版本号形态无关。
+
+### 2.2 Windows exe 数值版本（避免 u16 溢出）
+
+`FILEVERSION` / `PRODUCTVERSION` 只有四个 `u16`，装不下 `20261107`。`crates/miredit-gui/build.rs`
+把 8 位日期拆成「年 / 月日」：`20261107.1.2` ⇒ `[2026, 1107, 1, 2]`。
+字符串 `FileVersion` / `ProductVersion` 仍是完整的 `CARGO_PKG_VERSION`，两者各司其职；
+旧 `0.x.y` 构建时按 `[0, x, y, 0]` 兼容。
 
 ## 三、单一真源与展示面
 
@@ -30,7 +58,7 @@
 
 ```toml
 [workspace.package]
-version = "0.0.1"   # 数值示例，实际值以文件为准
+version = "20261107.0.0"   # 日期版本；数值以文件为准
 ```
 
 ```toml
@@ -79,7 +107,12 @@ version.workspace = true
    - 行为变化 = 同一个操作**结果不同**（例：印章层排序键改成 `(dy,dx)` 后，同样的放置动作写入的图号序列变了，但文件仍是同一种格式、旧版照样能打开）⇒ 属 PATCH，但**必须**在 `CHANGELOG` 的修复条目里明写「行为变化」，免得用户以为丢数据。
 2. **拿不准就取高级别。** 宁可按 MINOR 发并说明，也不要把可能影响存量数据的改动塞进 PATCH。
 
-## 五、0.x 阶段策略
+## 五、0.x 阶段策略（**历史方案，2026-11-07 起不再用于新版本号**）
+
+> ⚠ 本节记录 `0.0.1 → 0.7.0` 那段历史，**保留作历史依据**（旧 tag / 旧 CHANGELOG 不清理）。
+> 新版本号一律按 §二 的日期方案，**不要再按本节升 `0.x`**。
+> 下面提到的「PATCH 不动保存字节 / MINOR 允许含 breaking 但必须单列不兼容变更」等
+> **分类纪律仍然有效**，只是号段映射改为 §2.1。
 
 - 当前版本线为 `0.0.1`（**首个公开可用版本**，见 [`CHANGELOG.md`](CHANGELOG.md)；数值以根 `Cargo.toml` 的 `[workspace.package].version` 为准）。档位阶梯见 §5.1：`0.0.1` → `0.0.x`（只修不增）→ `0.1.0`（首个 MINOR 功能里程碑）→ `0.1.x`（该线补丁）→ `0.2.0`（后续 MINOR）→ `1.0.0`（稳定承诺）。
 - 0.x 阶段按 SemVer 原意"公共接口尚未定稿"执行：**MINOR 允许含破坏性变更**，但必须：
@@ -135,11 +168,11 @@ version.workspace = true
 
 | 命令 | 作用 |
 |---|---|
-| `pwsh -File scripts/bump-version.ps1 -Check` | 只读校验：根 `[workspace.package].version` 可读且是合法 SemVer、`crates/` 下 8 个 crate 都是 `version.workspace = true`、`vendor/wil2atlas` 作为 vendored 上游例外单独报；不一致 ⇒ 退出码 1 |
-| `... -Part patch` / `-Part minor` / `-Part major` | 按当前版本递增：`patch` 只升 Z、`minor` 升 Y 且 Z 归零、`major` 在 **1.0 之前直接拒绝**并提示改用 `-Part minor`（1.0 之后按正常 SemVer） |
-| `... -Set X.Y.Z` | 显式设成指定版本（严格三段 SemVer；`-rc.N` / `+g<sha>` 由发布流程另定，见 §二，本脚本不处理） |
+| `pwsh -File scripts/bump-version.ps1 -Check` | 只读校验：根 `[workspace.package].version` 可读且是合法日期版本（或旧 `0.x.y` 切换起点）、`crates/` 下 8 个 crate 都是 `version.workspace = true`、`vendor/wil2atlas` 作为 vendored 上游例外单独报；不一致 ⇒ 退出码 1 |
+| `... -Part patch` / `-Part minor` / `-Part major` | 按 §2.1 递增：`patch` 升轮内修正、`minor` 另起一轮并把修正归零、`major` 换一天（今天已发过直接拒绝） |
+| `... -Set <YYYYMMDD>.R.F` | 显式设成指定日期版本（严格格式校验：日期须为合法日历日；旧 `0.x.y` 不能再 `-Set`，只能切到日期版本） |
 
-脚本只做两件事：改根 `Cargo.toml` 的那一行、把 `[Unreleased]` 改成 `## [X.Y.Z] - <系统当天日期>` 并在顶部重建空的 `[Unreleased]`。**它不会替你写变更条目**（§九 第 3 条），也不碰 git、不打 tag，最后打印 §六 的发布清单供人执行。
+脚本只做两件事：改根 `Cargo.toml` 的那一行、把 `[Unreleased]` 改成 `## [<日期版本>] - <系统当天日期>` 并在顶部重建空的 `[Unreleased]`。**它不会替你写变更条目**（§九 第 3 条），也不碰 git、不打 tag，最后打印 §六 的发布清单供人执行。
 
 > 现状（2026-11-06 落地）：根 `Cargo.toml` 已有 `[workspace.package]`，`-Check` 退出码 0。它同时是 CI 门禁（`.github/workflows/ci.yml` 在 `cargo test` 之前执行）与发布门禁（§六 第 1 步）。
 
@@ -147,7 +180,7 @@ version.workspace = true
 
 1. **改版本号**：把根 `Cargo.toml` 的 `[workspace.package].version` 改成新版本（该段已按 §3.1 落地；8 个 crate 是 `version.workspace = true`）。除根这一处，其它文件不许出现版本数字。
    机械执行：先 `pwsh -File scripts/bump-version.ps1 -Check` 验真源——**必须退出码 0，这就是发布门禁**（CI 也跑同一条）；再用 `-Part patch|minor|major` 递增（判据见 §5.2，脚本说明见 §5.3）；它会顺带把 `[Unreleased]` 搬成带日期的版本标题，**但不会替你写变更条目**。
-2. **改 CHANGELOG**：把 `[Unreleased]` 下的条目整体归到新版本标题下，标题形如「`## [X.Y.Z] - ` + 当天真实日期」（**写实际发布那天的日期**，不写占位符），并在顶部重建空的 `## [Unreleased]`。
+2. **改 CHANGELOG**：把 `[Unreleased]` 下的条目整体归到新版本标题下，标题形如「`## [<日期版本>] - ` + 当天真实日期」（**写实际发布那天的日期**，不写占位符），并在顶部重建空的 `## [Unreleased]`。
 3. **跑门禁**（本仓不跑 `cargo fmt`，见 [`CONTRIBUTING.md`](CONTRIBUTING.md)）：
 
    ```bash
@@ -161,8 +194,9 @@ version.workspace = true
 4. **核对版本展示**：
    - 网页：`cargo run -p miredit-web --release` 后 `curl -s http://127.0.0.1:8080/api/health`，`version` 必须等于新版本；
    - 前端：连接状态显示同一版本；
-   - 包：`cargo pkgid -p miredit-web` 末段 `#X.Y.Z`；
-   - GUI：`miredit-gui --version` 必须输出 `Crystal Studio X.Y.Z`（源码树用 `cargo run -p miredit-gui -- --version`）；若这一版带「关于」对话框，必须实测它与 `--version` 是同一个版本串，没实测就别写成已核对。
+   - 包：`cargo pkgid -p miredit-web` 末段 `#<日期版本>`；
+   - GUI：`miredit-gui --version` 必须输出 `Crystal Studio <日期版本>`（源码树用 `cargo run -p miredit-gui -- --version`）；若这一版带「关于」对话框，必须实测它与 `--version` 是同一个版本串，没实测就别写成已核对。
+   - Windows exe：文件属性里字符串 `ProductVersion` = 完整 `<日期版本>`，数值版本按 §2.2 拆成 `[年, 月日, 轮次, 修正]`（不溢出）。
 5. **干净构建**（不复用工作区增量产物，确保"从零也能编出来"）：
 
    ```bash
@@ -173,20 +207,20 @@ version.workspace = true
    同时导出一份源码包给 Release 用（**从 tag 导出**，保证与发布提交逐字节一致）：
 
    ```bash
-   git archive --format=zip --prefix=CrystalStudio-X.Y.Z/ vX.Y.Z -o CrystalStudio-X.Y.Z.zip
+   git archive --format=zip --prefix=CrystalStudio-<日期版本>/ v<日期版本> -o CrystalStudio-<日期版本>.zip
    ```
 6. **提交并打 tag**（tag 打在**发布提交**上，不是之前某个提交）：
 
    ```bash
    git add -A
-   git commit -m "发布 vX.Y.Z：<一句话摘要>"
-   git tag -a vX.Y.Z -m "Crystal Studio vX.Y.Z"
+   git commit -m "发布 v<日期版本>：<一句话摘要>"
+   git tag -a v<日期版本> -m "Crystal Studio v<日期版本>"
    git push origin main --tags
    ```
 
-   预发布同理，tag 用 `vX.Y.Z-rc.N`，且**只用于验收**；转正时另打正式 tag。
-7. **GitHub Release**：只在**本仓** `CrystalStudio-Rust`（`https://github.com/lxf505226/CrystalStudio-Rust`）发布，标题 `Crystal Studio vX.Y.Z`，正文直接取 `CHANGELOG` 该版小节，末尾附「如何更新」（§七）。**不再向上游 `fluttergo/CrystalStudio` 提 PR、也不在其仓库发 Release。**
-8. **Docker 镜像 tag**：镜像构建出来后按 `vX.Y.Z` / `X.Y` / `latest` 三个标签发布（`crystalstudio/miredit`、`crystalstudio/miredit-front`）。
+   日期版本没有 `-rc.N` 预发布形态；要验收就按 §2.1 用同日更小轮次，正式发布另起一轮。
+7. **GitHub Release**：只在**本仓** `CrystalStudio-Rust`（`https://github.com/lxf505226/CrystalStudio-Rust`）发布，标题 `Crystal Studio v<日期版本>`，正文直接取 `CHANGELOG` 该版小节，末尾附「如何更新」（§七）。**不再向上游 `fluttergo/CrystalStudio` 提 PR、也不在其仓库发 Release。**
+8. **Docker 镜像 tag**：镜像构建出来后按 `v<日期版本>` / `latest` 两个标签发布（`crystalstudio/miredit`、`crystalstudio/miredit-front`）。
    ⚠ 现状：`docker/compose.yaml` 用的是 `:dev`，且整套编排**尚未在 CI 或任何机器上实跑验证**（见 [`docker/README.md`](docker/README.md)）。第一次真正出镜像前，这一步只能是"按规则待做"，不许写成已完成。
 9. **公告「如何更新」**：Release 正文与公告里给三条路径（源码 / Release 包 / Docker）并指向 §七，明确"要不要更新"的判据：看 `CHANGELOG` 里有没有你需要的那条修复。
 10. **收尾复核**：tag 指向的提交上 `/api/health` 版本 = tag 版本；`CHANGELOG` 无占位日期、无"待定"版本号；工作树干净（发布后不再有未提交改动混进同一版本）。
@@ -197,12 +231,12 @@ version.workspace = true
 
 ```bash
 git fetch --tags
-git checkout vX.Y.Z        # 把 vX.Y.Z 换成要装的 tag；跟最新开发线就 git pull 停在 main
+git checkout v<日期版本>    # 换成要装的 tag；跟最新开发线就 git pull 停在 main
 cargo build --release
 ```
 
-> ⚠ 这条路要求**那个 tag 已经存在**：本仓的 tag 只按 §六 第 6 步随发布打出（一个版本一个 tag，`vX.Y.Z`）。
-> tag 还没打出来的版本只能 `git pull` 跟 `main`；`git checkout vX.Y.Z` 会报「pathspec did not match」。
+> ⚠ 这条路要求**那个 tag 已经存在**：本仓的 tag 只按 §六 第 6 步随发布打出（一个版本一个 tag，`v<日期版本>`）。
+> tag 还没打出来的版本只能 `git pull` 跟 `main`；`git checkout v<日期版本>` 会报「pathspec did not match」。
 
 产物：`target/release/miredit-gui`（PC 版）、`target/release/miredit-web`（网页版后端，前端在 `web/`）。
 需要客户端素材才能出图，环境变量要求见 [`README.md`](README.md) §四/§五；**没配就是如实不可用（503/404），不会画占位图**。
@@ -233,7 +267,7 @@ docker compose -f docker/compose.yaml up -d
 ### 7.5 想回退
 
 ```bash
-git checkout <要回到的 tag>     # 例：git checkout v0.0.1
+git checkout <要回到的 tag>     # 例：git checkout v20261107.0.0
 cargo build --release
 ```
 
@@ -255,6 +289,6 @@ cargo build --release
 1. **不伪造版本号**：没发布就是没发布，不许提前把 `Cargo.toml` 改成"看得过去"的数字，也不许在文档里写一个与 `Cargo.toml` 不一致的版本。
 2. **不写日期占位**：`CHANGELOG` 里的日期只有两种状态——真实发布日期，或该条还在 `[Unreleased]` 下（没有日期）。禁止 `2024-XX-XX`、`待定`、`TBD`。
 3. **`[Unreleased]` 是唯一入口**：开发期改动先记这里；发布时整体搬进版本标题，不边发边补。
-4. **一版一 tag，一 tag 一提交**：tag 必须指向发布提交本身；发现打错就删 tag 重打（`git tag -d` + `git push origin :refs/tags/vX.Y.Z`），不许靠"下一个版本掩盖"。
+4. **一版一 tag，一 tag 一提交**：tag 必须指向发布提交本身；发现打错就删 tag 重打（`git tag -d` + `git push origin :refs/tags/v<日期版本>`），不许靠"下一个版本掩盖"。
 5. **只在自家仓发布**：`CrystalStudio-Rust` 是本仓唯一发布出口，不再 fork/PR 上游。
 6. **文档不写本机路径**：一律相对路径或公开 URL，避免把开发机目录带进公开仓。

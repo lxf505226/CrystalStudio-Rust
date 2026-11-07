@@ -997,7 +997,12 @@ impl MireditApp {
                 return;
             }
         }
-        // ③ 滚轮：只在地图区内；绕**画布中心**缩放（上游 `:89-92` + `MapViewport.cs:180-187`）
+        // ③ 滚轮：绕**画布中心**缩放（上游 `:89-92` + `MapViewport.cs:180-187`）。
+        //
+        // ⚠ 注释精度（复核指出）：上游 `OnPointerWheelChanged` **没有显式 `Contains` 检查** ——
+        //   「指针在小地图上」是 Avalonia **事件路由**的隐含前提（控件级事件只在指针位于其
+        //   渲染区时才送达）。本仓是立即模式，没有这套路由，所以这里用**显式**
+        //   `map_rect.contains(p)` 模拟那个隐含条件；行为等价，但别据此以为上游也写了判断。
         if scroll != 0.0 {
             if let Some(p) = pos {
                 if map_rect.contains(p) {
