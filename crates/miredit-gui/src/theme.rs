@@ -79,6 +79,32 @@ pub struct Palette {
     /// 状态栏底色。
     pub status_bar: Color32,
 
+    // ── 标签条（中列多地图标签，上游 `EditorControls.axaml:58-66` 的 `PaletteTabItem`） ──
+    /// 标签条**容器**底色（每张标签的 `Border#Chrome` 背景是 `Transparent`，透出的就是它）。
+    ///
+    /// 官方: `MainWindow.MapTabs.cs:36`
+    ///       `mapTabs.SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028")`；
+    ///       键定义 `App.axaml:8` `Theme1C2028` = `#1C2028`。
+    /// ⚠ 不复用 `menu_bar`：两者深色同值（都是 `Panel`/`Theme1C2028`），但**角色不同**
+    ///   （菜单条 vs 标签条容器），本仓历史上"借错角色"已出过多次缺陷
+    ///   （见 `status_bar` / `status_bar_text` / `check_box_border` 的订正记录）。
+    pub tab_strip_bg: Color32,
+    /// 标签**悬停**底色（上游 `:pointerover`）。
+    ///
+    /// 官方: `EditorControls.axaml:63`
+    ///       `^:pointerover /template/ Border#Chrome` 的 `Background = {DynamicResource Theme29313E}`；
+    ///       键定义 `App.axaml:14` `Theme29313E` = `#29313E`。
+    pub tab_hover_bg: Color32,
+    /// **选中**标签的底边线色（`BorderThickness="0,0,0,2"` 那 2px 的 bottom 边）。
+    ///
+    /// 官方: `EditorControls.axaml:64`
+    ///       `^:selected /template/ Border#Chrome` 的 `BorderBrush = {DynamicResource Theme8CA1FF}`；
+    ///       键定义 `App.axaml:47` `Theme8CA1FF` = `#8CA1FF`。
+    /// ⚠ **不是 `accent_dark`**：深色下 `accent_dark` 是 `Accent` `#8498FF`
+    ///   （`ThemeService.Avalonia.cs:51` 用 accent 覆盖了 `Theme6378DF`，与 `Theme8CA1FF` 无关）；
+    ///   上游这一条是**独立的键**，照抄才不丢 `#8CA1FF` 与 `#8498FF` 的色差。
+    pub tab_selected_underline: Color32,
+
     // ── 文字 ──
     /// 正文/常规文字色。
     pub text: Color32,
@@ -230,6 +256,37 @@ pub const LIGHT: Palette = Palette {
     //       B: 255 − 70×0.076341 = 249.656 → 249 = 0xF9   ⇒ **#F7F8F9**
     //   ⇒ 截图直方图与官方公式**逐字节相同**：源键无疑（同款手算已入用例 `官方浅色变换可复算`）。
     status_bar: Color32::from_rgb(0xF7, 0xF8, 0xF9),
+
+    // 标签条容器底。官方: `MainWindow.MapTabs.cs:36` 的 `Theme1C2028`（`App.axaml:8` = `#1C2028`），
+    //   浅色按 `ThemeService.Avalonia.cs:47` 现算（**非蓝键** B−R = 40−28 = 12 ≤ 35、lum < 0.4 那一支）：
+    //     lum    = (28×.2126 + 32×.7152 + 40×.0722)/255 = 31.7272/255 = 0.124420
+    //     amount = clamp(lum×1.4 − 0.07, 0, 0.65) = clamp(0.174188 − 0.07) = 0.104188
+    //     Blend(White, #A3ADB9, amount) = 255 − (255−通道)×amount
+    //       R: 255 − 92×0.104188 = 245.414 → 245 = 0xF5
+    //       G: 255 − 82×0.104188 = 246.457 → 246 = 0xF6
+    //       B: 255 − 70×0.104188 = 247.707 → 247 = 0xF7   ⇒ **#F5F6F7**
+    //   旁证（闭环）：参考截图页签条 (700, 66..103) 直方图 = `#F5F6F7`（见 `metrics::TABSTRIP_H` 的来源）。
+    //   ⚠ 与 `LIGHT.menu_bar` 同值 —— 那是**官方变换的结论**（两个键在深色同值），不是抄错角色。
+    tab_strip_bg: Color32::from_rgb(0xF5, 0xF6, 0xF7),
+    // 标签悬停底。官方: `EditorControls.axaml:63` 的 `Theme29313E`（`App.axaml:14` = `#29313E`），
+    //   浅色按 `:47` 现算（**非蓝键** B−R = 62−41 = 21 ≤ 35、lum < 0.4 那一支）：
+    //     lum    = (41×.2126 + 49×.7152 + 62×.0722)/255 = 48.2378/255 = 0.189168
+    //     amount = clamp(0.264835 − 0.07) = 0.194835
+    //       R: 255 − 92×0.194835 = 237.075 → 237 = 0xED
+    //       G: 255 − 82×0.194835 = 239.024 → 239 = 0xEF
+    //       B: 255 − 70×0.194835 = 241.362 → 241 = 0xF1   ⇒ **#EDEFF1**
+    tab_hover_bg: Color32::from_rgb(0xED, 0xEF, 0xF1),
+    // 选中标签下划线。官方: `EditorControls.axaml:64` 的 `Theme8CA1FF`（`App.axaml:47` = `#8CA1FF`），
+    //   浅色按 `:43`/`:46` 现算（**蓝键** B−R = 255−140 = 115 > 35、B−G = 255−161 = 94 > 12；
+    //   lum = (140×.2126 + 161×.7152 + 255×.0722)/255 = 163.322/255 = 0.640478 ≥ 0.4）
+    //   ⇒ `:46` 后半支 `Blend(accent, dark ? White : Black, dark ? 0.3 : 0.15)`
+    //   ⇒ 浅色 = **accent × 0.85**（本仓浅色 accent = 截图实测 `#CC9629`，见 `LIGHT.accent`）：
+    //     R: 204×0.85 = 173.4 → 173 = 0xAD
+    //     G: 150×0.85 = 127.5 → 127 = 0x7F
+    //     B:  41×0.85 =  34.85 → 34 = 0x22   ⇒ **#AD7F22**
+    //   旁证（闭环）：参考截图页签下划线 y=103..104 直方图 = `#AD7F22`（`metrics::TAB_W` 的来源），
+    //   与本字段**逐字节相同** ⇒ 源键无疑（同 `LIGHT.accent_dark` 的算式，两者同值、语义不同）。
+    tab_selected_underline: Color32::from_rgb(0xAD, 0x7F, 0x22),
 
     // 正文。左面板正文 (94,596)、层列表 (52,353)、状态栏 (104,924)、面板标题 (28,70)-(120,86) 均 `#434D5A`。
     text: Color32::from_rgb(0x43, 0x4D, 0x5A),
@@ -384,6 +441,18 @@ pub const DARK: Palette = Palette {
     //       消费点 `MainWindow.axaml:5/6/8/27`）⇒ 深色下状态栏与面板同色，丢掉官方那条更暗的横带。
     //       浅色侧按 `:47` 现算 = `#F7F8F9`，与截图直方图逐字节相同（算式见 `LIGHT.status_bar`）。
     status_bar: Color32::from_rgb(0x17, 0x1B, 0x22),
+
+    // 官方: `MainWindow.MapTabs.cs:36` `mapTabs.SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028")`；
+    //       键定义 `App.axaml:8` `Theme1C2028` = `#1C2028`（同 `Panel`，`ThemeService.Avalonia.cs:50`）。
+    //       浅色侧按 `:47` 现算 = `#F5F6F7`，与参考截图页签条直方图逐字节相同（算式见 `LIGHT.tab_strip_bg`）。
+    tab_strip_bg: Color32::from_rgb(0x1C, 0x20, 0x28),
+    // 官方: `EditorControls.axaml:63` `^:pointerover /template/ Border#Chrome` 的 `Background` = `Theme29313E`；
+    //       键定义 `App.axaml:14` = `#29313E`。
+    tab_hover_bg: Color32::from_rgb(0x29, 0x31, 0x3E),
+    // 官方: `EditorControls.axaml:64` `^:selected /template/ Border#Chrome` 的 `BorderBrush` = `Theme8CA1FF`；
+    //       键定义 `App.axaml:47` = `#8CA1FF`。
+    //       ⚠ 别改成 `accent_dark`（= `#8498FF`）：两者在深色下**不同色**，见字段文档。
+    tab_selected_underline: Color32::from_rgb(0x8C, 0xA1, 0xFF),
 
     // 官方: App.axaml:83 Window Foreground `#E5E9F0`。
     text: Color32::from_rgb(0xE5, 0xE9, 0xF0),
@@ -563,6 +632,13 @@ mod tests {
             ("view_surround", LIGHT.view_surround, DARK.view_surround),
             ("canvas_bg", LIGHT.canvas_bg, DARK.canvas_bg),
             ("status_bar", LIGHT.status_bar, DARK.status_bar),
+            ("tab_strip_bg", LIGHT.tab_strip_bg, DARK.tab_strip_bg),
+            ("tab_hover_bg", LIGHT.tab_hover_bg, DARK.tab_hover_bg),
+            (
+                "tab_selected_underline",
+                LIGHT.tab_selected_underline,
+                DARK.tab_selected_underline,
+            ),
             ("text", LIGHT.text, DARK.text),
             ("text_muted", LIGHT.text_muted, DARK.text_muted),
             ("status_bar_text", LIGHT.status_bar_text, DARK.status_bar_text),
@@ -597,7 +673,11 @@ mod tests {
             ("menu_popup_border", LIGHT.menu_popup_border, DARK.menu_popup_border),
             ("menu_popup_hover", LIGHT.menu_popup_hover, DARK.menu_popup_hover),
         ];
-        assert_eq!(pairs.len() + same_ok.len(), 45, "字段清单要覆盖全部 45 项（A-011 加了两条诊断色）");
+        assert_eq!(
+            pairs.len() + same_ok.len(),
+            48,
+            "字段清单要覆盖全部 48 项（A-011 加了两条诊断色；B1-FIX 加了标签条三色：容器底/悬停底/选中下划线）"
+        );
         for (name, l, d) in pairs {
             assert_ne!(l, d, "字段 {name} 两套色板相同（深色模式会漏变）");
         }
@@ -706,6 +786,10 @@ mod tests {
             ([0x17, 0x1B, 0x22], LIGHT.status_bar, "status_bar"),
             // 窗口外框：`App.axaml:83` `Selector="Window"` 的 `Theme14171D`（= `DARK.title_bar` 的源键）。
             ([0x14, 0x17, 0x1D], LIGHT.view_surround, "view_surround"),
+            // 标签条容器底：`MainWindow.MapTabs.cs:36` 的 `Theme1C2028`（B1-FIX 新增字段）。
+            ([0x1C, 0x20, 0x28], LIGHT.tab_strip_bg, "tab_strip_bg"),
+            // 标签悬停底：`EditorControls.axaml:63` 的 `Theme29313E`（B1-FIX 新增字段）。
+            ([0x29, 0x31, 0x3E], LIGHT.tab_hover_bg, "tab_hover_bg"),
         ] {
             assert_eq!(light_of(dark), c(light), "{name} 与官方公式算出的浅色不一致");
         }
@@ -764,6 +848,103 @@ mod tests {
         assert_ne!(
             DARK.status_bar_text, DARK.text,
             "深色下状态栏正文必须比 text 暗一档"
+        );
+    }
+
+    /// **标签条三色 = 上游三个键**（B1-FIX，2026-11-08）：深色逐字节等于 XAML 声明值，
+    /// 浅色逐字节等于 `ThemeService.Avalonia.cs:43-47` 现算值。
+    ///
+    /// 上游出处（逐条，照抄不推导）：
+    /// - 容器底 `MainWindow.MapTabs.cs:36` `SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028")`
+    ///   ⇒ `App.axaml:8` `#1C2028`；
+    /// - 悬停底 `EditorControls.axaml:63` `^:pointerover /template/ Border#Chrome` `Background`
+    ///   = `Theme29313E` ⇒ `App.axaml:14` `#29313E`；
+    /// - 选中下划线 `EditorControls.axaml:64` `^:selected /template/ Border#Chrome` `BorderBrush`
+    ///   = `Theme8CA1FF` ⇒ `App.axaml:47` `#8CA1FF`。
+    ///
+    /// ⚠ 为什么这条不能只靠 `两套色板逐字段不同`：那条只证"深浅不同"，**证不了抄对**。
+    /// 这里 `want` 一律**从官方键现算**（复刻 `:43` 判蓝 + `:46` 蓝键 / `:47` 非蓝键两支），
+    /// 不复用板里的字面量 —— 否则"色板和断言一起抄错"仍然全绿。
+    ///
+    /// ⚠ 第三条（下划线）在**蓝键**那一支：浅色 = `Blend(accent, Black, 0.15)` = accent×0.85，
+    /// 用的是本仓浅色 `accent`（截图实测 `#CC9629`）。它与 `accent_dark` 同值但**不是同一个键**，
+    /// 深色侧两者**不同色**（`#8CA1FF` vs `#8498FF`）—— 这条断言就是防"图省事改成 accent_dark"。
+    #[test]
+    fn 标签条三色取上游键与其浅色变换() {
+        let blend = |a: [u8; 3], b: [u8; 3], amount: f64| -> [u8; 3] {
+            let f = |x: u8, y: u8| (f64::from(x) * (1.0 - amount) + f64::from(y) * amount) as u8;
+            [f(a[0], b[0]), f(a[1], b[1]), f(a[2], b[2])]
+        };
+        let lum_of = |c: [u8; 3]| -> f64 {
+            (f64::from(c[0]) * 0.2126 + f64::from(c[1]) * 0.7152 + f64::from(c[2]) * 0.0722)
+                / 255.0
+        };
+        let blue_of = |c: [u8; 3]| -> bool {
+            i32::from(c[2]) - i32::from(c[0]) > 35 && i32::from(c[2]) - i32::from(c[1]) > 12
+        };
+        let c = |p: Color32| [p.r(), p.g(), p.b()];
+
+        // ── ①② 非蓝键：浅色 = Blend(White, #A3ADB9, clamp(lum×1.4 − 0.07, 0, 0.65)) ──
+        let accent = c(LIGHT.accent);
+        assert_eq!(accent, [0xCC, 0x96, 0x29], "浅色 accent 必须是截图实测 #CC9629");
+        for (src, got_dark, got_light, name) in [
+            (
+                [0x1C_u8, 0x20, 0x28],
+                DARK.tab_strip_bg,
+                LIGHT.tab_strip_bg,
+                "tab_strip_bg",
+            ),
+            (
+                [0x29_u8, 0x31, 0x3E],
+                DARK.tab_hover_bg,
+                LIGHT.tab_hover_bg,
+                "tab_hover_bg",
+            ),
+        ] {
+            assert_eq!(c(got_dark), src, "{name} 深色必须逐字节等于官方键");
+            assert!(!blue_of(src), "{name} 的源键不是蓝键 ⇒ 走 `:47` 非蓝分支");
+            let lum = lum_of(src);
+            assert!(lum < 0.4, "{name} 的 lum 应 < 0.4，实测 {lum}");
+            let want = blend(
+                [255, 255, 255],
+                [0xA3, 0xAD, 0xB9],
+                (lum * 1.4 - 0.07).clamp(0.0, 0.65),
+            );
+            assert_eq!(
+                c(got_light),
+                want,
+                "{name} 浅色必须等于 `:47` 非蓝分支现算值（官方源键 {src:?}）"
+            );
+        }
+
+        // ── ③ 蓝键：浅色 = Blend(accent, Black, 0.15) = accent×0.85 ──
+        let src = [0x8C_u8, 0xA1, 0xFF];
+        assert_eq!(
+            c(DARK.tab_selected_underline),
+            src,
+            "选中下划线深色必须逐字节等于 Theme8CA1FF（App.axaml:47）"
+        );
+        assert!(
+            blue_of(src),
+            "Theme8CA1FF 是蓝键（B−R=115>35、B−G=94>12）⇒ 走 `:46` 蓝键分支"
+        );
+        assert!(
+            lum_of(src) >= 0.4,
+            "Theme8CA1FF 的 lum 应 ≥ 0.4 才走 `Blend(accent, Black, 0.15)` 那一支"
+        );
+        assert_eq!(
+            c(LIGHT.tab_selected_underline),
+            blend(accent, [0, 0, 0], 0.15),
+            "选中下划线浅色必须等于 accent×0.85（`ThemeService.Avalonia.cs:46` 蓝键后半支）"
+        );
+        // 与 `accent_dark` 的关系：深色**不同色**（这是"独立键"的可执行证据），浅色同值。
+        assert_ne!(
+            DARK.tab_selected_underline, DARK.accent_dark,
+            "深色下 Theme8CA1FF(#8CA1FF) 与 accent_dark(#8498FF) 不同色 ⇒ 不许互相替代"
+        );
+        assert_eq!(
+            LIGHT.tab_selected_underline, LIGHT.accent_dark,
+            "浅色同值是 accent×0.85 的结果（官方变换的结论），不是抄错角色"
         );
     }
 

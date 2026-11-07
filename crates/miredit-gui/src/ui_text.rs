@@ -1732,11 +1732,45 @@ pub const FILL_ERR_TOO_LARGE: &str =
 // ───────────────────────── 中列：页签 / 缩放浮层 ─────────────────────────
 
 /// 页签标题模板（`{name}` = 地图文件名）。
+///
+/// 上游: `MainWindow.MapTabs.cs:120`
+/// `(map.Label).Text = string.Concat(MapDisplayName(map), (dirty ? " *" : ""));`
+/// —— 干净态就是 `MapDisplayName(map)` 原文，不加任何前后缀。
 pub const TAB_TITLE_TMPL: &str = "{name}"; // EN: {name}
 /// 页签标题模板（**有未保存修改**）。
+///
+/// 上游: `MainWindow.MapTabs.cs:120` 的 `(dirty ? " *" : "")`
+/// —— 脏标记是**直接拼接 `" *"`**（一个半角空格 + 一个星号），不是另起一套格式；
+/// 这里做成 `{name} *` 模板与之**逐字等价**（`fill` 替换后 = `string.Concat(name, " *")`）。
 pub const TAB_TITLE_DIRTY_TMPL: &str = "{name} *"; // EN: {name} *
+/// **未命名地图**的页签标题模板（`{n}` = 自增序号）。
+///
+/// 上游: `MainWindow.MapTabs.cs:125-131` `MapDisplayName`
+/// ```text
+/// if (map.Path != null) return Path.GetFileName(map.Path);
+/// string prefix = map.IsStamp ? "Untitled stamp " : "Untitled ";
+/// return ... LocalText.Format(map.IsStamp ? "Untitled stamp {0}" : "Untitled {0}", number) : map.Name;
+/// ```
+/// 序号来源：`MapTabs.cs:52` `$"Untitled {++untitledNumber}"`（宿主自增计数器，从 1 起）。
+///
+/// ⚠ **本仓暂不可达**（如实标注，不编造调用点）：本仓没有"新建空白地图"入口
+/// （`DocState.doc` 为 `None` 时标签条整张不画，见 `Tabs::显示信息` 的 `None` 分支），
+/// 所有文档都从 `.map` 文件装载 ⇒ `file_name` 恒等于 `Path::file_name`（`mapdoc.rs:456`）
+/// ⇒ 永远走上游的**有 Path** 那一支。等"新建空白图"落地时直接用本模板，别再另写一份格式。
+pub const TAB_TITLE_UNTITLED_TMPL: &str = "Untitled {n}"; // EN: Untitled {n} ｜ 官方: MainWindow.MapTabs.cs:130
 /// 页签右端的关闭符。
+///
+/// 上游: `MainWindow.MapTabs.cs:57` `Content = ("\u00d7")` —— **U+00D7 MULTIPLICATION SIGN**，
+/// 不是字母 `x`、也不是 `✕`(U+2715)。
 pub const TAB_CLOSE: &str = "×"; // EN: ×
+
+/// 切换标签失败（越界等）时的 stderr 诊断（R12-F3 B 段）。
+///
+/// 为什么会有这条：标签条的命中下标来自**本帧刚算出的**矩形，
+/// 正常路径下永远命中（`i < tabs.len()`）。真走到失败分支只有一种可能——
+/// 标签集合在"算矩形"与"activate"之间被改小了（后续单的关闭标签会引入这条时序）。
+/// 那时**如实报错**、不假装切过去了，与全仓「失败一律显式报错」的纪律一致。
+pub const DIAG_TAB_ACTIVATE_FAIL: &str = "[标签] 切换失败：{err}"; // EN: [tabs] switch failed: {err}
 
 /// 缩放浮层的减号。
 ///
@@ -2545,7 +2579,12 @@ pub const ALL: &[(&str, &str)] = &[
     ("FILL_ERR_TOO_LARGE", FILL_ERR_TOO_LARGE),
     ("TAB_TITLE_TMPL", TAB_TITLE_TMPL),
     ("TAB_TITLE_DIRTY_TMPL", TAB_TITLE_DIRTY_TMPL),
+    // B1-FIX：未命名地图的 `Untitled {n}`（上游 `MainWindow.MapTabs.cs:130`）。
+    // 本仓暂不可达（没有"新建空白图"入口），但文案真值先登记 —— 字形守卫与
+    // `清单覆盖所有常量` 都会一起扫到，等入口落地时不必再补一条。
+    ("TAB_TITLE_UNTITLED_TMPL", TAB_TITLE_UNTITLED_TMPL),
     ("TAB_CLOSE", TAB_CLOSE),
+    ("DIAG_TAB_ACTIVATE_FAIL", DIAG_TAB_ACTIVATE_FAIL),
     ("ZOOM_MINUS", ZOOM_MINUS),
     ("ZOOM_PCT_TMPL", ZOOM_PCT_TMPL),
     ("ZOOM_PLUS", ZOOM_PLUS),
@@ -2846,7 +2885,9 @@ mod tests {
     ("FILL_ERR_TOO_LARGE", FILL_ERR_TOO_LARGE),
             ("TAB_TITLE_TMPL", TAB_TITLE_TMPL),
             ("TAB_TITLE_DIRTY_TMPL", TAB_TITLE_DIRTY_TMPL),
+            ("TAB_TITLE_UNTITLED_TMPL", TAB_TITLE_UNTITLED_TMPL),
             ("TAB_CLOSE", TAB_CLOSE),
+            ("DIAG_TAB_ACTIVATE_FAIL", DIAG_TAB_ACTIVATE_FAIL),
             ("ZOOM_MINUS", ZOOM_MINUS),
             ("ZOOM_PCT_TMPL", ZOOM_PCT_TMPL),
             ("ZOOM_PLUS", ZOOM_PLUS),
@@ -3087,6 +3128,33 @@ mod tests {
         // 同一个占位符出现两次也要全替换
         let t = fill("{a}-{a}", &[("a", "7")]);
         assert_eq!(t, "7-7");
+    }
+
+    /// **页签标题文案 = 上游 `MainWindow.MapTabs.cs:120/130` 的拼接规则**（B1-FIX）。
+    ///
+    /// 钉的是两条字面真值：① 脏标记是 `string.Concat(name, " *")`（**空格 + 星号直接拼**，
+    /// 不是另起一套前后缀）；② 未命名地图是 `Untitled {n}`（序号从 1 起）。
+    /// 改一个空格、一个星号或大小写，本用例立刻红 —— 这正是"模板化改写"最容易漂的地方。
+    #[test]
+    fn 页签标题文案照抄上游拼接规则() {
+        // 干净态 = `MapDisplayName(map)` 原文
+        assert_eq!(fill(TAB_TITLE_TMPL, &[("name", "0.map")]), "0.map");
+        // 脏态 = 原文 + `" *"`
+        let 脏 = fill(TAB_TITLE_DIRTY_TMPL, &[("name", "0.map")]);
+        assert_eq!(
+            脏,
+            String::from("0.map") + " *",
+            "上游 MapTabs.cs:120 的 (dirty ? \" *\" : \"\") 是拼接，本模板必须逐字节等价"
+        );
+        // 未命名 = `Untitled {n}`（本仓暂不可达，见常量文档）
+        assert_eq!(
+            fill(TAB_TITLE_UNTITLED_TMPL, &[("n", "1")]),
+            "Untitled 1",
+            "上游 MapTabs.cs:130 的 \"Untitled {{0}}\""
+        );
+        // 关闭符是 U+00D7，不是字母 x
+        assert_eq!(TAB_CLOSE, "\u{d7}", "上游 MapTabs.cs:57 的 \"\\u00d7\"");
+        assert_ne!(TAB_CLOSE, "x", "不许把乘号写成字母 x");
     }
 
     /// **悬停浮层的三条官方词条**（上游 `Localization/Strings.json:153-155`）。

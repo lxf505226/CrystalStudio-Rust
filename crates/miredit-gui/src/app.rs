@@ -84,6 +84,7 @@ use crate::selection_ops::{self, Cmd as SelCmd, Drag as SelDrag};
 use crate::selfcheck;
 use crate::stamp_place::{self, Armed};
 use crate::statusbar;
+use crate::tab_strip;
 use crate::tabs::{TabState, Tabs};
 use crate::theme as t;
 use crate::titlebar;
@@ -3156,6 +3157,13 @@ impl eframe::App for MireditApp {
                 //     否则会被比视口还大的纹理顶掉）。内容 = `Document::edit_warning()` 原文，
                 //     不是 toast、不自动消失（见 [`crate::banner`]）。
                 banner::draw(&p, &l, &self.text);
+                // ⑦a3 **多标签标签条**（R12-F3 B 段）：每张标签的「文件名 + 脏标记」。
+                //
+                // 必须在 `canvas::draw` **之后**：`canvas` 画的是第 0 格（单标签态下
+                // 那就是唯一一张，本段整段跳过 ⇒ `--shot` 逐像素不变）；
+                // `active != 0` 时第 0 格被 `canvas` 画成了活跃标签的标题，
+                // 本段先铺底色盖掉、再按第 0 张的真实内容重画。
+                tab_strip::draw(&p, &l, &self.tabs, self);
                 // 库号号段（A-024）：与图源同源，都来自 `mapdoc::Assets`。
                 // 素材装载失败时兜底 `Wemade` —— 那时一格图都画不出来，号段只影响字节语义。
                 let 号段 = self
@@ -3509,6 +3517,25 @@ impl MireditApp {
         Some(tx::fill(tx::STAMP_ARMED_BADGE_TMPL, &[("name", &a.name)]))
     }
 
+    /// 切到第 `idx` 张标签（R12-F3 B 段：标签条点击的唯一落点）。
+    ///
+    /// # 为什么要有这一层薄包装
+    ///
+    /// [`Tabs::activate`] 的签名是 `(&mut Tabs, &mut MireditApp)` —— 两个**并列**的可变借用。
+    /// 在 `self.tabs.activate(self, i)` 这种写法里，`self.tabs` 与 `self` 会同时被可变借用，
+    /// 编译器直接 E0499 拒绝。这里用 `mem::replace` 把容器**整体换出来**：
+    /// 换出来的 `Tabs` 是独立局部量、`self` 仍是独占的 `&mut`，两者互不重叠；
+    /// 切完再换回去（`activate` 失败时状态不变，换回去的仍是原容器）。
+    ///
+    /// 不用 `std::mem::take`：`Tabs` 没有 `Default`（它恒 ≥ 1 张标签，
+    /// 造一个空容器当"默认值"就是编占位语义 —— 与 A 段拒绝给 `DocState` 加 `Default` 同一条纪律）。
+    pub(crate) fn activate_tab(&mut self, idx: usize) -> Result<(), String> {
+        let mut tabs = std::mem::replace(&mut self.tabs, Tabs::new(TabState::占位()));
+        let r = tabs.activate(self, idx);
+        self.tabs = tabs;
+        r
+    }
+
     /// 处理全部点击/拖拽。
     fn interact(&mut self, ui: &mut egui::Ui, l: &Layout) {
         if self.input_locked() {
@@ -3741,6 +3768,20 @@ impl MireditApp {
                 }
                 dock_left::LayerClick::Ignore => {}
             }
+        }
+
+        // ⑤b **多标签标签条**（R12-F3 B 段）：点非活跃标签 ⇒ `activate` 切过去。
+        //
+        // 位置有因果：它在页签条里（画布**之上**、不与 `l.viewport` 相交），
+        // 必须排在 ⑥ 画布之前 —— 否则同一次点击会被画布那条 `Sense::click_and_drag`
+        // 先吃掉（页签条与画布不重叠，但"先登记谁"决定 hover/click 的归属）。
+        if let Some(i) = tab_strip::interact(ui, l, &self.tabs) {
+            match self.activate_tab(i) {
+                Ok(()) => ui.ctx().request_repaint(),
+                // 越界/其它失败 ⇒ 如实打诊断，不假装切过去了
+                Err(e) => eprintln!("{}", tx::fill(tx::DIAG_TAB_ACTIVATE_FAIL, &[("err", &e)])),
+            }
+            return;
         }
 
         // ⑥ 画布：中键拖动 / 空格+左键拖动 → 平移；否则左键 = 工具落格；滚轮 → 以鼠标为中心缩放

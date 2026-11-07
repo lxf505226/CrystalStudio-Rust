@@ -52,6 +52,8 @@
 //!   九种格式合成样本全部能开且原样存回 / Type5 真装载路径 / 67 张带尾块图的黄条
 //!
 //! ### 界面骨架（原有）
+//! - [`tabs`]    多地图标签的 **capture/restore 纯数据层**（R12-F3 A 段；稳态契约见该模块文档）
+//! - [`tab_strip`] 多标签的**标签条**（R12-F3 B 段）：每张标签的「文件名 + 脏标记」+ 点击切换
 //! - [`ui_text`]  **界面文案总表**（全量中文，代码里不许再出现界面字面量）
 //! - [`fonts`]   中文字体加载（系统单面 TTF → egui 首选字体；拿不到即 exit(2)）
 //! - [`text_fit`] 文字标签的「位置 + 裁剪盒」（静态 [`text_fit::Label`] / 动态 [`text_fit::DynLabel`]）
@@ -110,6 +112,7 @@ pub mod stamp_panel;
 pub mod stamp_place;
 pub mod stamp_probe;
 pub mod statusbar;
+pub mod tab_strip;
 pub mod tabs;
 pub mod text_fit;
 pub mod theme;

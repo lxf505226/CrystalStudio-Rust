@@ -320,13 +320,49 @@ pub const INSPECTOR_ROW_GAP: f32 = 4.0;
 // ───────────────────────── 中列：页签条 / 画布 / 网格 ─────────────────────────
 
 /// 页签条高 38。来源：截图列 x=700，`y66..103` 为 `#F5F6F7`（页签条底），`y104` 起为 `#F9FAFB`（视口底）。
+///
+/// ⚠ **上游为 `GridLength.Auto`**（`MainWindow.MapTabs.cs:28` 给画布 `Grid` 加的第一行
+/// `new RowDefinition { Height = GridLength.Auto }`，高度由标签项内容撑开，没有固定值）；
+/// 本仓固定 38 是**既有截图基线**（`crystalstudio-main-runtime-1500x950.png` 的
+/// `y66..103` = 38px），不改 —— 改了 `Layout::viewport` 上边界就会动，`--shot` 基线全废。
 pub const TABSTRIP_H: f32 = 38.0;
 
 /// 页签高 30，宽 98。来源：截图页签 `Untitled 1 ×` 占 `x164..262`（98 宽）、`y66..102`。
 /// 下划线（选中指示）2px，取自截图 y=103..104 的 `#AD7F22`。
+///
+/// 宽度口径（B1-FIX 订正）：上游标签项是**内容自适应**（`MainWindow.MapTabs.cs:32` 的
+/// `StackPanel Horizontal` 里每个 `TabItem` 宽度由 `Padding="8,7"`
+/// （`EditorControls.axaml:59`）+ 标题实测宽 + `Label.Margin="4,2,8,2"`
+/// （`MainWindow.MapTabs.cs:54`）+ 关闭钮 `Padding="4,0,4,0"`（`:57`）算出）。
+/// `TAB_W = 98` 就是**参考标题 `Untitled 1 ×` 的那一份实测自然宽**（截图 x164..262）。
+/// 本仓不逐标题重量文本宽度：单标签态由 `canvas::draw` 按 `Layout::tab_rect()` 画，
+/// 那条几何是 `--shot` 基线与 `单标签矩形与旧版逐值相同` 用例共同钉死的（98×30），
+/// 逐标题自适应会把它撑开 ⇒ 本单不动（见回执「仍与上游不一致」第 2 条）。
 pub const TAB_W: f32 = 98.0;
 pub const TAB_H: f32 = 30.0;
+/// 选中下划线厚 2 = 上游 `BorderThickness="0,0,0,2"` 的 bottom 边
+/// （`EditorControls.axaml:60` 模板 / `:64` 选中态把它的 `BorderBrush` 换成 `Theme8CA1FF`）。
 pub const TAB_UNDERLINE_H: f32 = 2.0;
+
+// 已删除（B1-FIX，2026-11-08，**别再加回来**）：
+//
+// * `TAB_GAP = 2.0` —— 原注释自承「量不到、取 2」。上游**没有标签间距**：
+//   相邻 `Border#Chrome` 背景 `Transparent`、`BorderThickness="0,0,0,2"`
+//   （`EditorControls.axaml:60`）、`StackPanel Orientation="Horizontal"` 里没有 Margin
+//   （`MainWindow.MapTabs.cs:32`）⇒ 两个标签**边界相接**，视觉间隔全部由
+//   `Padding="8,7"`（`:59`）与 `Label.Margin="4,2,8,2"`（`MapTabs.cs:54`）在**标签内部**撑出来。
+// * `TAB_MIN_W = 40.0` —— 原注释自承「推导…留 8px」。上游没有最小宽：标签宽度就是内容宽，
+//   放不下时由 `ScrollViewer HorizontalScrollBarVisibility="Auto"`（`MapTabs.cs:34`）横向滚动。
+//   横向滚动不在本单范围（见回执），本仓溢出时退化为等分收窄且**不设下限**。
+
+/// 标签标题裁剪盒的**右边界内缩 = 上游 `Label.Margin` 的右边距 8**。
+///
+/// 上游: `MainWindow.MapTabs.cs:54` `map.Label.Margin = new Thickness(4, 2, 8, 2);`
+/// ⇒ 左 4 / 上 2 / **右 8** / 下 2。这里取的就是那个 **8**（不是"量出来的"）。
+///
+/// 旧名 `TAB_TITLE_CLIP_R`（语义是"自定的裁剪右边距"，值恰好也是 8）—— B1-FIX 归位为
+/// 上游语义并改名；值不变，所以绘制结果一个像素都没动。
+pub const TAB_LABEL_MARGIN_R: f32 = 8.0;
 
 /// 世界格尺寸 48 宽 × 32 高（**像素**）。
 ///

@@ -170,6 +170,21 @@ impl TabState {
     }
 }
 
+/// 一张标签**要显示的信息**（标签条用）：文案 + 生成它的模板 + 脏标记。
+///
+/// 为什么把 `tmpl` 也带出来：[`crate::text_fit::DynLabel`] 要求模板必须是
+/// [`crate::ui_text::ALL`] 里登记过的一行（排版自检按它核对），而"脏 / 净"两条模板
+/// 是**二选一**的 —— 只有产生这段文字的地方才知道选了哪条。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TabInfo {
+    /// 上屏文案（`0.map` / `0.map *`）。
+    pub text: String,
+    /// 生成 [`Self::text`] 的那条模板（`TAB_TITLE_TMPL` 或 `TAB_TITLE_DIRTY_TMPL`）。
+    pub tmpl: &'static str,
+    /// 这张标签有没有未保存修改。
+    pub dirty: bool,
+}
+
 /// 标签集合：`items[active]` 是占位，其余是真快照（见模块文档稳态契约）。
 pub struct Tabs {
     pub(crate) items: Vec<TabState>,
@@ -343,6 +358,53 @@ impl Tabs {
             }
         }
         None
+    }
+
+    /// **第 `i` 张标签要显示的信息**（文件名 + 脏标记），供标签条绘制。
+    ///
+    /// # 稳态契约（本方法存在的唯一理由）
+    ///
+    /// - `i == active` ⇒ **从宿主 `app.*` 读**（`app.doc.doc.file_name` / `app.edit.dirty()`），
+    ///   **绝不读 `items[active]`** —— 那是占位槽，读出来是空值/错值；
+    /// - `i != active` ⇒ 从 `items[i]` 的**真快照**读。
+    ///
+    /// `i` 越界、或那张标签没有打开地图 ⇒ `None`（标签条就**不画**它，
+    /// 而不是画一个 `—` 假名字；一张"没有文档的标签"在 B 段不存在，
+    /// 唯一可能出现的场合是占位槽被误传进来 —— 那时 `None` 正好把它挡住）。
+    ///
+    /// # 文案口径 = 上游 `MainWindow.MapTabs.cs:120` / `:125-131`
+    ///
+    /// - 名字：有 `Path` ⇒ `Path.GetFileName(path)`；本仓 `DocState.file_name` 就是它
+    ///   （`mapdoc.rs:456` 的 `file_name_of`，与内核 `Document::file_name` 同口径）。
+    /// - 脏标记：上游 `(dirty ? " *" : "")` —— 直接拼接，见
+    ///   [`crate::ui_text::TAB_TITLE_DIRTY_TMPL`]（`{name} *`，逐字节等价）。
+    /// - ⚠ 上游的**无 Path 分支**（`Untitled {n}` / `Untitled stamp {n}`，
+    ///   `MapTabs.cs:128-130`）在本仓**暂不可达**：没有"新建空白地图"入口，
+    ///   `DocState.doc` 为 `None` 时本函数走 `?` 返回 `None`（标签条整张不画），
+    ///   所有文档都从 `.map` 文件装载 ⇒ 恒有 `Path`。文案真值已备在
+    ///   [`crate::ui_text::TAB_TITLE_UNTITLED_TMPL`]，等入口落地时直接用，别另写格式。
+    pub fn 显示信息(&self, app: &MireditApp, i: usize) -> Option<TabInfo> {
+        if i >= self.items.len() {
+            return None;
+        }
+        let (name, dirty) = if i == self.active {
+            let d = app.doc.doc.as_ref()?;
+            (d.file_name.clone(), app.edit.dirty())
+        } else {
+            let t = &self.items[i];
+            let d = t.doc.doc.as_ref()?;
+            (d.file_name.clone(), t.edit.dirty())
+        };
+        let tmpl = if dirty {
+            crate::ui_text::TAB_TITLE_DIRTY_TMPL
+        } else {
+            crate::ui_text::TAB_TITLE_TMPL
+        };
+        Some(TabInfo {
+            text: crate::ui_text::fill(tmpl, &[("name", &name)]),
+            tmpl,
+            dirty,
+        })
     }
 }
 
