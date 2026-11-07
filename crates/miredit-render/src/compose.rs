@@ -18,9 +18,17 @@
 //! - **层序**：地表 → 中层 → 表层（后画的压前画的）。
 //!   出处：`map_view.gd:108-114`（`add_child` 顺序 = 绘制序：「中层先、表层后」）、
 //!   `map_overlay_layer.gd:22-24`。
-//! - **层内顺序**：**列优先**——`dx` 外层、`dy` 内层，同一列内 y 递增。
-//!   出处：`map_overlay_layer.gd:46-53`（`for dx in cells: for dy in cells:`，注释
-//!   `:14-16` 明确「绘制顺序 = 列优先 … 变尺寸物件互相遮挡由该顺序决定」）。
+//! - **层内顺序**：**行优先**——`dy` 外层、`dx` 内层，同一行内 x 递增。
+//!   出处：C# `MapViewport.cs:255`（`for cy` 外 / `for cx` 内）、`:362`（`for y` 外 /
+//!   `for x` 内）、`:271`（表层 `for y` 外 → `for cx` 内，`:279` 再 `for x`）；
+//!   原始 C++ `GameScene.cpp:3429-3433`（`j` 外 / `i` 内）、`:3545-3556`（同）。
+//!
+//!   ⚠ **历史依据（三源里的少数派，2026-11-08 按用户「上游 = C#」令订正）**——原文保留：
+//!   > **层内顺序**：**列优先**——`dx` 外层、`dy` 内层，同一列内 y 递增。
+//!   > 出处：`map_overlay_layer.gd:46-53`（`for dx in cells: for dy in cells:`，注释
+//!   > `:14-16` 明确「绘制顺序 = 列优先 … 变尺寸物件互相遮挡由该顺序决定」）。
+//!
+//!   Godot 客户端与 C#/C++ **相反**：三源里只有它列优先 ⇒ 按「上游 = C#」令跟 C#/C++。
 //!
 //! # 二·五、落格算式的唯一实现处
 //!
@@ -36,10 +44,19 @@
 //! 不可能各写一套落格口径。总览另需把位移换算到 level 尺度（`px / 2^level`），那是
 //! `crate::overview` 自己的事，换算完仍走同一批锚点函数。
 //!
-//! ⚠ **与任务书 §三.4 的差异**：任务书写「表层按 y 排序绘制」（= 原始 C++ 的行优先，
-//! `GameScene.cpp:3429-3431` 是 `j` 外层 / `i` 内层）。按「以源码为准」的口径，本实现取
-//! **Godot 客户端的列优先**：截图对照的基准就是 Godot 客户端，层内顺序必须以它为准。
-//! 两者只在**变尺寸表层帧互相重叠**时才看得出差别（0.map 表层多为 48×32，实际影响极小）。
+//! ⚠ **口径订正记录（2026-11-08）**——原文保留：
+//! > **与任务书 §三.4 的差异**：任务书写「表层按 y 排序绘制」（= 原始 C++ 的行优先，
+//! > `GameScene.cpp:3429-3431` 是 `j` 外层 / `i` 内层）。按「以源码为准」的口径，本实现取
+//! > **Godot 客户端的列优先**：截图对照的基准就是 Godot 客户端，层内顺序必须以它为准。
+//! > 两者只在**变尺寸表层帧互相重叠**时才看得出差别（0.map 表层多为 48×32，实际影响极小）。
+//!
+//! ⇒ **原判断「以 Godot 客户端为准」错，实为「以 C#/C++ 上游为准」**：错在把「截图基准」
+//! 当成了「口径真源」——截图基准只是比对工具，不是上游。上游 C#/C++ 两源都是行优先，
+//! 任务书 §三.4 写的本来就是对的。订正只换层内画家序，落格算式 / 锚点 / 帧号一个字节没动。
+//!
+//! 「只在变尺寸帧互相重叠时才看得出差别」这句仍然成立，机理：本仓真实语料里的帧都是
+//! 48×32（不溢出到相邻格），格与格不重叠 ⇒ 层内顺序不影响像素（2026-11-08 全语料 61 张
+//! `--shot` 逐字节比对：相同 61 / 不同 0）；一旦出现大帧、斜瓦、半格重叠，顺序就会显形。
 //!
 //! # 三、缺帧口径（禁假数据）
 //!
@@ -341,10 +358,10 @@ pub(crate) fn render(
 
     if mask.ground {
         // ---- 地表：只铺偶偶格（map_view.gd:199）；落格 = 世界格/2，像素位 = x*48 / y*32 ----
-        for dx in 0..cells_w {
-            let x = vp.origin_x + dx;
-            for dy in 0..cells_h {
-                let y = vp.origin_y + dy;
+        for dy in 0..cells_h {
+            let y = vp.origin_y + dy;
+            for dx in 0..cells_w {
+                let x = vp.origin_x + dx;
                 let Some(cell) = 取格(map, x, y) else {
                     continue; // 图外：不画也不计数
                 };
@@ -382,10 +399,10 @@ pub(crate) fn render(
 
     if mask.middle {
         // ---- 中层：逐格（含奇格）。锚点按 C#：tile 尺寸左上、其余底边（见 [`层放置`]）----
-        for dx in 0..cells_w {
-            let x = vp.origin_x + dx;
-            for dy in 0..cells_h {
-                let y = vp.origin_y + dy;
+        for dy in 0..cells_h {
+            let y = vp.origin_y + dy;
+            for dx in 0..cells_w {
+                let x = vp.origin_x + dx;
                 let Some(cell) = 取格(map, x, y) else {
                     continue;
                 };
@@ -418,10 +435,10 @@ pub(crate) fn render(
 
     if mask.front {
         // ---- 表层：逐格。非加性帧按 C#：tile 尺寸左上、非 tile 底边（`library==28` 特例只叠锚点）----
-        for dx in 0..cells_w {
-            let x = vp.origin_x + dx;
-            for dy in 0..cells_h {
-                let y = vp.origin_y + dy;
+        for dy in 0..cells_h {
+            let y = vp.origin_y + dy;
+            for dx in 0..cells_w {
+                let x = vp.origin_x + dx;
                 let Some(cell) = 取格(map, x, y) else {
                     continue;
                 };
