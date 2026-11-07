@@ -324,7 +324,7 @@ pub mod tiled;
 
 pub use types::{
     CollisionOverlay, LayerMask, RenderError, RenderOptions, RenderScale, RenderStats, Rendered,
-    Viewport, CELL_H, CELL_W, INTERMEDIATE_MAX_BYTES, SCALED_MAX_BYTES, TILE_H, TILE_W,
+    Viewport, CELL_H, CELL_W, INTERMEDIATE_MAX_BYTES, SCALED_MAX_BYTES,
 };
 
 pub use compare::{compare_blocks, BlockReport, CompareOptions};

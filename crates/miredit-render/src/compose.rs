@@ -16,8 +16,15 @@
 //! # 二、层序与层内顺序
 //!
 //! - **层序**：地表 → 中层 → 表层（后画的压前画的）。
-//!   出处：`map_view.gd:108-114`（`add_child` 顺序 = 绘制序：「中层先、表层后」）、
-//!   `map_overlay_layer.gd:22-24`。
+//!   出处（**主指 = 上游 C#**，按用户 2026-11-08「上游 = C#」令）：`MapViewport.cs:253`
+//!   的 `for (int layer = 0; layer < 3; layer++) if (VisibleLayers[layer])` —— `layer`
+//!   0/1/2 = 地表/中层/表层，同一循环里按序把 chunk / row 追加进 `scene.Children`
+//!   （`MapViewport.cs:260-262`，追加那一句在 `:261`；表层 `:276-277`，追加在 `:277`）
+//!   ⇒ 后层压前层；
+//!   `MinimapExporter.cs:29` 的 `for (int layer = 0; layer < 3; layer++)` 是同一序
+//!   （导出侧照抄编辑器的层序）。
+//!   历史依据（三源里的 Godot 客户端）：`map_view.gd:108-114`（`add_child` 顺序 = 绘制序：
+//!   「中层先、表层后」）、`map_overlay_layer.gd:22-24`。
 //! - **层内顺序**：**行优先**——`dy` 外层、`dx` 内层，同一行内 x 递增。
 //!   出处：C# `MapViewport.cs:255`（`for cy` 外 / `for cx` 内）、`:362`（`for y` 外 /
 //!   `for x` 内）、`:271`（表层 `for y` 外 → `for cx` 内，`:279` 再 `for x`）；

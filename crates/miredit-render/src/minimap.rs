@@ -84,7 +84,9 @@ pub enum MinimapPreset {
 }
 
 impl MinimapPreset {
-    /// 官方 `new[] { 4, 2, 1 }[Preset.SelectedIndex]` 的除数。
+    /// 官方 `new[] { 4, 2, 1 }[Preset.SelectedIndex]` 的除数
+    /// （`MinimapExportWindow.cs:36`；同处 `:37-38` 是
+    /// `checked(document.Width * 48 / divisor)` / `checked(document.Height * 32 / divisor)`）。
     pub const fn divisor(self) -> u32 {
         match self {
             MinimapPreset::Small => 4,
@@ -138,6 +140,8 @@ impl MinimapSize {
     /// 溢出返回中文原因，不静默截断。
     pub fn resolve(self, cells_w: u32, cells_h: u32) -> Result<(u32, u32), String> {
         let (width, height) = match self {
+            // 官方 `MinimapExporter.cs:20`：`width = outputWidth ?? checked(document.Width * 12)`、
+            // `height = outputHeight ?? checked(document.Height * 8)`（缺省值，不是 2048 长边）。
             Self::Default => (u64::from(cells_w) * 12, u64::from(cells_h) * 8),
             Self::Preset(p) => {
                 let d = u64::from(p.divisor());

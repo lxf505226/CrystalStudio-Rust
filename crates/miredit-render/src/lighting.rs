@@ -27,8 +27,13 @@
 //! | [`MapLighting::Day`] | 255 | **0** | 同左 `Day => 0` |
 //! | [`MapLighting::Night`] | 0 | **255** | 同左 `_ => 255`（默认分支 = Night） |
 //!
-//! `255-50=205` / `255-255=0` / `255-0=255` ⇒ 注释（`Presentation.cs:68-69`「dawn/evening = 50,
-//! day = 255, standard night = 0」）与字面量**双证自洽**。
+//! `255-50=205` / `255-255=0` / `255-0=255` ⇒ 注释（`MapViewport.Presentation.cs:75-76`
+//! 「dawn/evening = 50, day = 255, standard night = 0」）与同一函数的字面量（`:77`）
+//! **双证自洽**。
+//!
+//! ⚠ **行号订正（2026-11-08）**：原文两处引的都是 `Presentation.cs:68-69`，实为 `:75-76`
+//! —— `d66237b` 之后上游该文件行号漂移，注释**内容逐字未变**（原句仍是那两行）。
+//! 旧值保留作历史引用。真值不在 `MapLighting.cs` 里（那个文件只有 3 行，纯枚举定义）。
 //!
 //! ⚠ **本模块不生成任何衰减曲线**：三张光罩 PNG 是从官方目录**原样拷贝**的
 //! （`assets/lights/{445,685,925}.png`，SHA256 与 `CrystalStudio/CrystalStudio/PreviewLights/`
@@ -144,7 +149,11 @@ impl MapLighting {
         }
     }
 
-    /// 官方注释里的环境光值（`Presentation.cs:68-69`：dawn/evening = 50、day = 255、night = 0）。
+    /// 官方注释里的环境光值（`MapViewport.Presentation.cs:75-76`：dawn/evening = 50、
+    /// day = 255、night = 0）。
+    ///
+    /// ⚠ 行号订正（2026-11-08）：原引 `Presentation.cs:68-69`，实为 `:75-76`（`d66237b` 之后
+    /// 行号漂移，注释内容未变）。旧值保留作历史引用。
     ///
     /// 与 [`MapLighting::darkness`] 的关系恒为 `darkness == 255 - ambient`（测试钉住）。
     pub const fn ambient(self) -> u8 {
@@ -222,7 +231,10 @@ pub fn emits_light(cell: &Cell) -> bool {
 /// - **`index` 与 `index+1` 的错位**（`MapPreview.cs:24-25` 注释原文「The client creates
 ///   textures starting at LightSizes[1], but positions them using LightSizes[index].
 ///   Preserve that one-entry difference.」）；
-/// - **`-14` / `+11`** 这两个非对称常数；
+/// - **`-14` / `+11`** 这两个非对称常数（`MapPreview.cs:27-28` 逐字：
+///   `x * 48 - positionSize.Width / 2 - 14 + offset.X` /
+///   `y * 32 + 11 - positionSize.Height / 2 + offset.Y` —— 注意 `-14` 在 x 侧、`+11`
+///   在 y 侧，**不对称也不是同一个符号**，抄错一个就整束光偏）；
 /// - **`/2` 是整数除法**（C# `Size.Width` 是 `int` ⇒ `365/2 = 182`，不是 182.5）。
 ///
 /// `offset` = 该格前景帧的 [`mir2_assets::Frame::anchor`]（= 官方 `sprite.X / sprite.Y`）。

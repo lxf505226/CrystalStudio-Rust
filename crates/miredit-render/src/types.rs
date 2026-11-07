@@ -16,17 +16,6 @@ pub const CELL_W: u32 = 48;
 /// 出处：同上 `Grobal.h:1981` `UNITY`；`map_view.gd:91`（`y*32`）。
 pub const CELL_H: u32 = 32;
 
-/// 地表瓦片宽（像素）—— 覆盖 **2×2 世界格**。
-///
-/// 出处：`map_view.gd:11-12`（「地表瓦片 = 96×64 原生图，覆盖 2×2 世界格」）、
-/// `map_view.gd:101`（`Vector2i(96, 64)` 的 TileSet 格尺寸）。
-pub const TILE_W: u32 = 96;
-
-/// 地表瓦片高（像素）。
-///
-/// 出处：`map_view.gd:11-12`、`map_view.gd:101`。
-pub const TILE_H: u32 = 64;
-
 /// 单边像素上限（防御性护栏，不是语义限制）。
 ///
 /// 目的是让「`cells_w` 手抖写成 `4_000_000`」这类输入**明确报错**而不是先 OOM 再崩。
