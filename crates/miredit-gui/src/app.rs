@@ -140,6 +140,28 @@ struct PendingStamp {
     place_at: Option<(u16, u16)>,
 }
 
+/// **换到某一层 + 按上游纠正工具**（R12-F2 的唯一入口）。
+///
+/// 上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged`：换层后若当前工具与新层不兼容，
+/// **强制切铅笔**。判据是纯函数 [`edit::纠正工具`]（本仓槽位 ↔ 上游工具名的映射见那里），
+/// 这里只负责把结果**真正施加**到两处真源：槽位 `selected_tool` 与内核工具 `edit.select`。
+///
+/// 为什么是自由函数而不是 `MireditApp` 的方法：`--layer` 在 `MireditApp::new` 的**构造期**
+/// 就要生效（那时还没有 `self`），而面板点行发生在运行期 —— 一个函数两处调用，
+/// 判据与施力点都只有一份。
+///
+/// 只改"用哪个工具 / 写哪一层"这两个 UI 状态：**不碰地图、不置脏、不入撤销栈**。
+fn 换层并纠正(
+    edit: &mut edit::EditSession,
+    当前槽位: &mut usize,
+    层: miredit_core::EditLayer,
+) -> Option<usize> {
+    let 纠正 = edit.set_layer(层);
+    // 槽位真源在 `EditSession`，宿主的 `selected_tool` 只是工具条高亮的镜像 ⇒ 每次回填
+    *当前槽位 = edit.slot();
+    纠正
+}
+
 /// 编辑器应用状态。
 pub struct MireditApp {
     /// 文档 + 图库。
@@ -391,9 +413,12 @@ impl MireditApp {
         }
         let selected_tool = cli.tool.unwrap_or(0).min(crate::icons::TOOLS.len() - 1);
         edit.select(selected_tool);
-        // `--layer`：本次运行的**当前编辑层**（缺省 = 地表层）
+        // `--layer`：本次运行的**当前编辑层**（缺省 = 地表层）。
+        // ⚠ 换层要顺带按上游纠正工具（R12-F2）⇒ 走唯一入口 `换层并纠正`
+        //   （与左侧面板点行**同一个函数**，别在这里单独 `set_layer`）。
+        let mut selected_tool = selected_tool;
         if let Some(layer) = cli.layer {
-            edit.set_layer(layer);
+            换层并纠正(&mut edit, &mut selected_tool, layer);
         }
         // `--brush-size`：本次运行的**笔刷尺寸**（缺省 3；夹进 3..=31 的奇数）
         if let Some(n) = cli.brush_size {
@@ -2120,6 +2145,35 @@ impl MireditApp {
         }
     }
 
+    /// **换层**（运行期唯一入口）：层 + 工具纠正 + 清交互状态 + 回执 + 状态栏重建。
+    ///
+    /// 上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged` 除了纠正工具，还做了两件"清干净"的事
+    /// （`Viewport.Layer = …; Viewport.SpriteIndex = -1; page = 0;`）。本仓对应：
+    /// **清待放置印章（`armed`）与选区拖动（`sel_drag`）** —— 换层后这两样都失去意义
+    /// （印章只对物件层、选区拖动按的是旧层），留着会让下一次点击落错东西。
+    fn 换到层(&mut self, layer: miredit_core::EditLayer) {
+        let 纠正 = 换层并纠正(&mut self.edit, &mut self.selected_tool, layer);
+        self.armed = None;
+        self.sel_drag = None;
+        if let Some(槽) = 纠正 {
+            self.op = Some((
+                tx::fill(
+                    tx::STATUS_LAYER_TOOL_FIXED_TMPL,
+                    &[("layer", layer.name()), ("tool", edit::slot_label(槽))],
+                ),
+                false,
+            ));
+        }
+        // 状态栏的「当前层 / 落笔字段」要立刻跟着变
+        self.text = screen_text::build(
+            &self.doc,
+            &self.view,
+            self.hover,
+            &self.lines,
+            &self.edit,
+        );
+    }
+
     /// 「定位到格…」模态的**提交**（`menu::goto` 的 `Apply` 落到这里）。
     ///
     /// 合法 ⇒ `Ok(回执文案)`，视口/选区都已经改好（由 [`Self::locate_cell`] 做）；
@@ -2179,8 +2233,9 @@ impl MireditApp {
                 ],
             );
         }
-        // ② `CancelInteraction()`：退掉待放置印章、结算进行中的笔画
+        // ② `CancelInteraction()`：退掉待放置印章、选区拖动、结算进行中的笔画
         self.armed = None;
+        self.sel_drag = None;
         if self.edit.stroke_active() {
             let _ = self.edit.end();
         }
@@ -3244,15 +3299,8 @@ impl MireditApp {
                     }
                 }
                 dock_left::LayerClick::SetEditLayer(layer) => {
-                    self.edit.set_layer(layer);
-                    // 状态栏的「当前层 / 落笔字段」要立刻跟着变
-                    self.text = screen_text::build(
-                        &self.doc,
-                        &self.view,
-                        self.hover,
-                        &self.lines,
-                        &self.edit,
-                    );
+                    // 换层 + 工具纠正 + 清交互状态 + 回执：运行期唯一入口
+                    self.换到层(layer);
                     ui.ctx().request_repaint();
                 }
                 dock_left::LayerClick::Ignore => {}
@@ -5587,6 +5635,175 @@ mod tests {
         let (text, warn) = app.op.as_ref().expect("被拒的键盘填充必须给回执");
         assert!(*warn, "拒绝回执要警示色");
         assert!(!text.is_empty());
+    }
+
+    // ───────────────────── R12-F2：换层纠正工具 ─────────────────────
+
+    /// **换层会纠正工具**（R43 修正版）：只改 UI 状态；判据表在 `edit::tests::换层纠正逐条`。
+    ///
+    /// 这里验**施力点**与**清理**：槽位真源 `edit.slot()` 与宿主镜像 `selected_tool` 同步、
+    /// 换层清 `armed`（待放置印章）与 `sel_drag`（选区拖动）、回执点明"切到铅笔（本仓未接线）"。
+    #[test]
+    fn 换层纠正工具并清交互状态() {
+        let mut app = 尺寸应用(8, 8);
+        let 前字节 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+
+        // ① 通用印章（槽 5）在**物件层**：保留（规则②只管 Wall/SpecialBrush，槽 5 不是 TownStamp）
+        app.selected_tool = crate::selection_ops::TOOL_STAMP_IDX;
+        app.edit.select(app.selected_tool);
+        app.换到层(miredit_core::EditLayer::Front);
+        assert_eq!(app.selected_tool, crate::selection_ops::TOOL_STAMP_IDX, "物件层上印章可用");
+        assert_eq!(app.edit.layer(), miredit_core::EditLayer::Front);
+
+        // ② 通用印章在**地表层**也保留（R43 第 1 条的映射结论）
+        app.换到层(miredit_core::EditLayer::Ground);
+        assert_eq!(app.selected_tool, crate::selection_ops::TOOL_STAMP_IDX, "地表层上通用印章仍可用");
+
+        // ③ 切到**阻挡层**：印章不适用 ⇒ 强制切铅笔，且回执点明"未接线"
+        app.armed = Some(crate::stamp_place::Armed {
+            id: "mir_00000".to_string(),
+            name: "测试印章".to_string(),
+            bounds: None,
+            cells: None,
+        });
+        app.sel_drag = Some(SelDrag {
+            anchor: (0, 0),
+        });
+        app.换到层(miredit_core::EditLayer::LowCollision);
+        assert_eq!(app.selected_tool, edit::TOOL_PENCIL_IDX, "阻挡层上印章必须切成铅笔");
+        assert_eq!(app.edit.slot(), edit::TOOL_PENCIL_IDX, "槽位真源跟着改");
+        assert_eq!(app.edit.tool(), miredit_core::Tool::Unwired, "本仓铅笔未接线（如实）");
+        assert!(app.armed.is_none(), "换层必须清待放置印章");
+        assert!(app.sel_drag.is_none(), "换层必须清选区拖动");
+        let (text, warn) = app.op.as_ref().expect("纠正必须给回执");
+        assert!(text.contains("铅笔") && text.contains("未接线"), "回执要说清纠正到未接线铅笔：{text}");
+        assert!(!*warn, "这不是拒绝，别染警示色");
+        // 状态栏也要如实显示未接线（与 `铅笔与克隆在界面上显示未接线` 同一判据）
+        assert!(
+            app.text.status_tool.contains(miredit_core::TOOL_UNWIRED),
+            "状态栏工具段：{}",
+            app.text.status_tool
+        );
+
+        // ④ 墙笔刷（槽 8）在地表层 ⇒ 纠正（规则②）
+        app.selected_tool = 8; // Wall：official `H`；本仓未实现但仍占槽
+        app.edit.select(8);
+        app.换到层(miredit_core::EditLayer::Ground);
+        assert_eq!(app.selected_tool, edit::TOOL_PENCIL_IDX, "墙笔刷在地表层必须纠正");
+        // ⑤ 画笔（槽 0）任何层都不纠正
+        app.selected_tool = edit::TOOL_BRUSH_IDX;
+        app.edit.select(app.selected_tool);
+        for 层 in miredit_core::EditLayer::ALL {
+            app.换到层(层);
+            assert_eq!(app.selected_tool, edit::TOOL_BRUSH_IDX, "画笔在 {层:?} 上不该被换掉");
+        }
+
+        // ⑥ 只动 UI 状态：不脏 / 不入栈 / 字节不变
+        assert!(!app.edit.dirty(), "换层纠正不许置脏");
+        assert_eq!(app.edit.undo_len(), 0, "换层纠正不许入撤销栈");
+        assert_eq!(
+            app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节"),
+            前字节,
+            "换层纠正不许改地图字节"
+        );
+    }
+
+    /// **`Command::SetLayer` 也走同一纠正**（R43 第 3 条：脚本路径不另立门户）。
+    #[test]
+    fn 命令换层也纠正工具() {
+        let mut app = 尺寸应用(8, 8);
+        app.selected_tool = crate::selection_ops::TOOL_STAMP_IDX;
+        app.edit.select(app.selected_tool);
+        // 物件层：不纠正
+        let out = app.edit.apply_cmd_in(
+            &mut app.doc,
+            miredit_core::Command::SetLayer {
+                layer: "front".to_string(),
+            },
+        );
+        assert_eq!(out.changed, 0, "换层不改任何格");
+        assert_eq!(app.edit.slot(), crate::selection_ops::TOOL_STAMP_IDX);
+        // 阻挡层：纠正到铅笔（`apply_cmd_in` 内部先经 GUI 的 `set_layer`）
+        app.edit.apply_cmd_in(
+            &mut app.doc,
+            miredit_core::Command::SetLayer {
+                layer: "low_collision".to_string(),
+            },
+        );
+        assert_eq!(app.edit.layer(), miredit_core::EditLayer::LowCollision);
+        assert_eq!(app.edit.slot(), edit::TOOL_PENCIL_IDX, "命令换层也要纠正");
+        // 不认识的层名：不纠正、不猜（内核报 BadLayer，槽位保持）
+        let 前槽 = app.edit.slot();
+        let out = app.edit.apply_cmd_in(
+            &mut app.doc,
+            miredit_core::Command::SetLayer {
+                layer: "no_such_layer".to_string(),
+            },
+        );
+        assert!(out.note.unwrap_or_default().contains("no_such_layer"));
+        assert_eq!(app.edit.slot(), 前槽, "层名不认识不许动工具");
+    }
+
+    /// **定位到格也清选区拖动**（R43 第 4 条：`locate_cell` 要清 `sel_drag`）。
+    #[test]
+    fn 定位到格清选区拖动() {
+        let mut app = 尺寸应用(8, 8);
+        app.sel_drag = Some(SelDrag {
+            anchor: (1, 2),
+        });
+        app.armed = Some(crate::stamp_place::Armed {
+            id: "x".to_string(),
+            name: "y".to_string(),
+            bounds: None,
+            cells: None,
+        });
+        let _ = app.locate_cell(3, 3, 画布());
+        assert!(app.sel_drag.is_none(), "定位必须清选区拖动");
+        assert!(app.armed.is_none(), "定位必须清待放置印章");
+    }
+
+    /// **CLI `--layer` 与面板点行走同一个入口**（R12-F2 的单一入口）。
+    ///
+    /// 三组对照（R43 修正后的映射）：
+    /// - 墙笔刷（槽 8）+ 地表层：构造期就纠正成铅笔（规则②）；
+    /// - 通用印章（槽 5）+ 地表层：**保留**（槽 5 不是上游 `TownStamp`）；
+    /// - 通用印章（槽 5）+ 低位阻挡：纠正（规则③）。
+    #[test]
+    fn cli换层也纠正工具() {
+        let 造 = |tool: usize, layer: miredit_core::EditLayer| {
+            let a = MireditApp::new(&Cli {
+                map: Some(PathBuf::from(r"E:\__no_such_map__.map")),
+                tool: Some(tool),
+                layer: Some(layer),
+                ..Default::default()
+            });
+            (a.selected_tool, a.edit.slot(), a.edit.layer())
+        };
+        let (镜像, 真源, 层) = 造(8, miredit_core::EditLayer::Ground);
+        assert_eq!(
+            (镜像, 真源),
+            (edit::TOOL_PENCIL_IDX, edit::TOOL_PENCIL_IDX),
+            "墙笔刷在地表层必须纠正"
+        );
+        assert_eq!(层, miredit_core::EditLayer::Ground);
+        let (镜像, 真源, _) =
+            造(crate::selection_ops::TOOL_STAMP_IDX, miredit_core::EditLayer::Ground);
+        assert_eq!(
+            (镜像, 真源),
+            (
+                crate::selection_ops::TOOL_STAMP_IDX,
+                crate::selection_ops::TOOL_STAMP_IDX
+            ),
+            "地表层上通用印章保留（不是 TownStamp）"
+        );
+        let (镜像, 真源, 层) =
+            造(crate::selection_ops::TOOL_STAMP_IDX, miredit_core::EditLayer::LowCollision);
+        assert_eq!(
+            (镜像, 真源),
+            (edit::TOOL_PENCIL_IDX, edit::TOOL_PENCIL_IDX),
+            "阻挡层上印章必须纠正"
+        );
+        assert_eq!(层, miredit_core::EditLayer::LowCollision);
     }
 
     // ───────────────────── 视图 → 定位到格…（F-R13-2 / R42） ─────────────────────

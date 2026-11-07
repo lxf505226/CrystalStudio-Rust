@@ -314,6 +314,15 @@ pub const STATUS_CROP_NOOP: &str = "选区已覆盖整张地图，没有可裁�
 /// 没有选区就点「裁剪到选区」时的回执（上游是静默 `return false`，本仓必须说出来）。
 pub const STATUS_CROP_NEED_SELECTION: &str = "先在地图上框选要保留的部分再裁剪"; // EN: Select an area inside the map before cropping.
 
+// ───────────────────────── 换层纠正工具（R12-F2 / R43） ─────────────────────────
+
+/// **换层时纠正了工具**的回执（上游 `MainWindow.axaml.cs:648-657` 强制切 Pencil 的那条）。
+///
+/// 占位符：`{layer}` = 新层名（「地表图层」等）；`{tool}` = 被换下来的槽位名。
+/// ⚠ 点明「铅笔（本仓未接线）」：上游纠正到的是能画的 Pencil，本仓铅笔尚未接线 ——
+/// 用户按下去画布没反应时必须先知道为什么（R43 第 2 条要求写进状态）。
+pub const STATUS_LAYER_TOOL_FIXED_TMPL: &str = "已切到{layer}；该工具在此层不适用，已切到铅笔（本仓未接线）"; // EN: Switched to {layer}; tool not applicable here ⇒ switched to Pencil (not wired yet)
+
 // ───────────────────────── 视图 → 定位到格（F-R13-2 / R42） ─────────────────────────
 
 /// 视图 → **定位到格…**（本仓新增入口；上游同语义只有 `MapViewport.Navigation.cs:5-13`
@@ -2093,6 +2102,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_EXTRACT_OBJECTS", MENU_EXTRACT_OBJECTS),
     ("MENU_CROP_SELECTION", MENU_CROP_SELECTION),
     ("MENU_EXPAND_MAP", MENU_EXPAND_MAP),
+    ("STATUS_LAYER_TOOL_FIXED_TMPL", STATUS_LAYER_TOOL_FIXED_TMPL),
     ("MENU_LOCATE_CELL", MENU_LOCATE_CELL),
     ("GOTO_DLG_TITLE", GOTO_DLG_TITLE),
     ("GOTO_DLG_HINT", GOTO_DLG_HINT),

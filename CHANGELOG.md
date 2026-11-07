@@ -11,19 +11,19 @@
 
 ## [Unreleased]
 
-### 新增
-
-- **F-R13-2 定位到格**：视图菜单「定位到格…」（`view.locate_cell`，View 21 项/总 47）；X/Y 模态默认选区中心/hover/(0,0)，复用 `locate_cell`；成功 `scale=max(scale,0.5)`、格中心对画布中心、1×1 选区、清待放置/笔画；不脏/不入撤销/字节不变。CheckMap Locate 共用并自动获得最小 0.5。
+> 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。
 
 ## [0.6.0] - 2026-11-07
 
 ### 新增
 
 - **R9-F2 键位补齐**：`B/P/E/V/K` 切工具（P/K 为 Unwired 槽，只切槽并显式标未接线）、`C` 同切低/高阻挡、`WASD` 按屏幕 48px 平移；Ctrl+C/V/S 不被裸键吃掉；浮层新增三行并扩到 820px。
+- **F-R13-2 定位到格**：视图菜单「定位到格…」（`view.locate_cell`，View 21 项/总 47）；X/Y 模态默认选区中心/hover/(0,0)，复用 `locate_cell`；成功 `scale=max(scale,0.5)`、格中心对画布中心、1×1 选区、清待放置/笔画；不脏/不入撤销/字节不变。CheckMap Locate 共用并自动获得最小 0.5。
 
 ### 修复
 
 - R9-F2：`pan_by_screen` 统一换算，`scale=2` 时世界 ±24、屏幕 ±48；overlay/搜索焦点时裸键让位。
+- **R12-F2 换层纠正工具**：Eyedropper 只在 Ground/Middle；Wall/SpecialBrush 只在 Objects；碰撞层 + Stamp/Pickup/Clone 切 Pencil（槽 1，Unwired，状态显式「未接线」）；`--layer`/面板/`Command::SetLayer`/`--edit-layer` 四入口统一，清 `armed`/`sel_drag`。
 
 ### 已知缺口
 

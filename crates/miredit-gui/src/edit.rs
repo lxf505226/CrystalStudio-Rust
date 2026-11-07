@@ -236,12 +236,103 @@ fn 占位文档() -> miredit_core::Document {
         .expect("1×1 Old12 是合法地图（52+12=64 字节），占位文档必然可解析")
 }
 
+/// **换层时的工具纠正**（上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged` 三条判据）。
+///
+/// 上游原文（`@901dbe2f`）：
+///
+/// ```csharp
+/// if (Viewport.Tool == EditorTool.Eyedropper && Viewport.Layer is not (MapLayer.Ground or MapLayer.Middle))
+///     SetTool(EditorTool.Pencil);
+/// if (Viewport.Tool is EditorTool.SpecialBrush or EditorTool.Wall or EditorTool.TownStamp && Viewport.Layer != MapLayer.Objects
+///     || Viewport.IsCollisionLayer && Viewport.Tool is EditorTool.Stamp or EditorTool.Pickup or EditorTool.Clone)
+///     SetTool(EditorTool.Pencil);
+/// ```
+///
+/// 逐条映射到本仓（槽位 = [`crate::icons::TOOLS`] 下标，名字对应见下）：
+///
+/// | 上游工具 | 本仓槽位 | 判据 | 结果 |
+/// |---|---|---|---|
+/// | `Eyedropper`（吸管） | **6** | 层 ∉ {`Ground`, `Middle`} | ⇒ 铅笔（槽位 1） |
+/// | `Wall` / `SpecialBrush` | 8 / 9 | 层 ≠ `Front`（物件层） | ⇒ 铅笔 |
+/// | `Stamp` / `Pickup` / `Clone` | 5 / 6 / 7 | 层是**阻挡层**（`LowCollision`/`HighCollision`） | ⇒ 铅笔 |
+///
+/// # 槽位映射的证据（R43 复核，`@901dbe2f`）
+///
+/// 上游枚举有两个"像吸管"的工具，必须分清（`MapViewport.cs:4`）：
+/// `EditorTool { Brush, Pencil, Bucket, Eraser, Select, Stamp, Pickup, Clone, SpecialBrush,
+/// Wall, TownStamp, Eyedropper, Pan }`。
+///
+/// - **`Eyedropper`**：axaml `Tag="Eyedropper"`（工具条第 5 个），`MainWindow.axaml.cs:644`
+///   的提示是 "Click a ground or middle tile to select its source artwork"
+///   ⇒ **读格内容当笔刷** = 本仓**槽位 6**（内核 `Tool::Pickup` 的文档："吸管：把某格
+///   **当前编辑层**的内容取成笔刷"）。⇒ 规则 ① 适用于槽 6。
+/// - **`Pickup`**：axaml `Tag="Pickup"`（`V` 键），tooltip "Click a Remembered Stamp, Then
+///   Click to Move; Delete Removes It" = **拾取已放置的印章**（`DeletePicked`）——
+///   本仓**没有这个工具**（`Tool` 枚举里没有它，`stamp_place` 只有放置）。
+///   ⇒ 规则 ③ 里的 `Pickup` 在本仓落到槽 6 上，与规则 ① 结论相同（阻挡层 ⇒ 铅笔），无行为差异。
+/// - **`Stamp`**（通用印章）：axaml `Tag="Stamp"`（`O` 键），tooltip "StampO — Place an
+///   Imported .X Object" = 本仓**槽位 5**（印章面板选枚 → `place_stamp_by_id`）。
+/// - **`TownStamp`**（生成城镇）：`MainWindow.Town.cs` 的 `TownStampWindow` / `Viewport.Town`
+///   —— 本仓**没有**。
+///
+/// ⇒ 结论：**规则 ② 只含 `Wall`/`SpecialBrush`，不含槽 5**（槽 5 是通用 `Stamp`，不是
+/// `TownStamp`；在地表/中层放物件印章是合法的）；**槽 5 只在阻挡层被纠正**（规则 ③）。
+///
+/// 其余组合（画笔 / 铅笔 / 填充 / 橡皮 / 选择，以及上面各工具在**兼容层**上）一律 `None` = 保持原样。
+///
+/// # 为什么返回槽位而不是直接改工具
+///
+/// 槽位（`selected_tool`）的真源在宿主，`EditSession` 只认得内核 `Tool`；把判据做成
+/// **纯函数**（入参 = 当前槽位 + 新层）才能被 CLI / 面板 / 未来菜单共用一次实现，
+/// 也才好把 20 个组合逐条钉进单测。
+///
+/// # ⚠ 本仓差异（已记档）
+///
+/// 上游纠正到 `Pencil`（能画 1×1）；本仓的铅笔**尚未接线**（`Tool::Unwired`），
+/// 所以纠正到槽位 1 之后画布不会落笔、状态栏会如实说「未接线」。
+/// 这是"照上游判据纠正"与"本仓铅笔没实现"两件事的交点 —— 若要改成纠正到**画笔**
+/// （能画，但与上游工具不同），只改这里的返回值即可（一行）。
+#[must_use]
+pub fn 纠正工具(槽位: usize, 层: EditLayer) -> Option<usize> {
+    use miredit_core::TOOL_PICKUP_IDX;
+    let 阻挡层 = 层.is_collision();
+    let 纠正到 = TOOL_PENCIL_IDX;
+    // ① 吸管只在图号层（地表/中层）上说得通
+    if 槽位 == TOOL_PICKUP_IDX && !matches!(层, EditLayer::Ground | EditLayer::Middle) {
+        return Some(纠正到);
+    }
+    // ② 墙笔刷 / 特笔刷只对物件层有意义。
+    //   ⚠ **不含印章（槽 5）**：上游这条写的是 `TownStamp`（生成城镇那支，`MainWindow.Town.cs`
+    //   的 `Viewport.Town`），而本仓槽 5 的印章 = 上游**通用** `Stamp`
+    //   （axaml `Tag="Stamp"`，tooltip `StampO — Place an Imported .X Object`）
+    //   ⇒ 通用印章在地表/中层照样能用（放物件），不该被纠正。
+    //   印章只在**阻挡层**上被纠正（规则 ③）。
+    let 只对物件层 = [TOOL_WALL_IDX, TOOL_SPECIAL_IDX];
+    if 只对物件层.contains(&槽位) && 层 != EditLayer::Front {
+        return Some(纠正到);
+    }
+    // ③ 阻挡层上：印章 / 吸管 / 克隆都不适用
+    if 阻挡层
+        && (槽位 == crate::selection_ops::TOOL_STAMP_IDX
+            || 槽位 == TOOL_PICKUP_IDX
+            || 槽位 == TOOL_CLONE_IDX)
+    {
+        return Some(纠正到);
+    }
+    None
+}
+
 /// **铅笔**在工具图标表（[`crate::icons::TOOLS`]）里的下标。
 ///
 /// 对应官方 `MainWindow.axaml.cs:989` 的 `Key.P => EditorTool.Pencil`。⚠ 内核 `Tool` 目前
 /// **没有铅笔语义**（`Tool::from_index(1)` ⇒ `Tool::Unwired`）⇒ 按 `P` 只是选中该槽位，
 /// 状态栏与画布会如实说「未接线、不改地图」（与点该图标同一结果，不假装能画）。
 pub const TOOL_PENCIL_IDX: usize = 1;
+/// **墙笔刷**在工具图标表里的下标（官方 `EditorTool.Wall`，`H` 键；本仓未实现）。
+const TOOL_WALL_IDX: usize = 8;
+/// **特笔刷**在工具图标表里的下标（官方 `EditorTool.SpecialBrush`，`T` 键；本仓未实现）。
+const TOOL_SPECIAL_IDX: usize = 9;
+
 /// **克隆**在工具图标表里的下标（官方 `Key.K => EditorTool.Clone`）。
 ///
 /// 同 [`TOOL_PENCIL_IDX`]：本仓尚未接线 ⇒ 选中即 `Tool::Unwired`，如实报未接线。
@@ -254,12 +345,20 @@ pub const TOOL_CLONE_IDX: usize = 7;
 pub struct EditSession {
     /// 内核会话（持有文档；文档里的 `Map` 在每次调用前后与宿主地图交换）。
     core: miredit_core::EditSession,
+    /// **工具槽位**（[`crate::icons::TOOLS`] 下标）—— 工具选择的**唯一真源**。
+    ///
+    /// 为什么要在这里存：内核 `Tool` 只有四个真工具 + `Unwired`，看不见"选择/印章/铅笔/克隆/
+    /// 墙/特笔"这些槽位；而换层纠正（[`纠正工具`]）判的就是槽位。宿主
+    /// [`crate::app::MireditApp::selected_tool`] 只是画工具条高亮用的**镜像**，
+    /// 每次 [`Self::select`] / [`Self::set_layer`] 之后都要从 [`Self::slot`] 同步。
+    slot: usize,
 }
 
 impl Default for EditSession {
     fn default() -> Self {
         Self {
             core: miredit_core::EditSession::new(占位文档()),
+            slot: TOOL_BRUSH_IDX,
         }
     }
 }
@@ -572,15 +671,35 @@ impl EditSession {
 
     /// 选中第 `i` 个工具图标；返回该工具是否已接线。
     pub fn select(&mut self, i: usize) -> bool {
+        self.slot = i;
         self.core.set_tool(Tool::from_index(i))
+    }
+
+    /// **当前工具槽位**（[`crate::icons::TOOLS`] 下标；真源，宿主只做镜像）。
+    #[must_use]
+    pub fn slot(&self) -> usize {
+        self.slot
     }
 
     /// 选**当前编辑层**（写哪一层由它决定）。
     ///
     /// 切层会立刻重算「族不匹配」提示：上一层的笔刷很可能配不上新层，
     /// 那种情况下状态栏应当**马上**说出来，而不是等用户点下去才发现没反应。
-    pub fn set_layer(&mut self, layer: EditLayer) {
+    ///
+    /// ⚠ **工具纠正不在这里做**：判据要同时看「槽位」与「层」，而槽位（`selected_tool`）
+    /// 的真源在宿主 [`crate::app::MireditApp`]（`EditSession` 只认内核 `Tool`，看不见
+    /// 选择/印章这两个宿主工具）。所以纠正由 [`纠正工具`] 给判据、由宿主的单一入口
+    /// `MireditApp::换层并纠正` 施加（CLI `--layer` 与左侧面板点行都走它）。
+    /// 返回 `Some(槽位)` ⇒ 这次换层**纠正了工具**（判据见 [`纠正工具`]），调用方要据此
+    /// 同步自己的镜像（`selected_tool`）并可以说一句回执；`None` ⇒ 工具没动。
+    pub fn set_layer(&mut self, layer: EditLayer) -> Option<usize> {
         self.core.set_layer(layer);
+        // 上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged`：不兼容就强制切铅笔。
+        // 判据是纯函数；**施力点只有这里**，所以 `--layer`、面板点行、`Command::SetLayer`
+        // 三条路径天然一致（后两条见 `apply_cmd_in` 的拦截）。
+        let 纠正 = 纠正工具(self.slot, layer)?;
+        self.select(纠正);
+        Some(纠正)
     }
 
     /// 设**笔刷尺寸**；返回真正生效的尺寸（夹进 3..=31 的奇数）。
@@ -1256,7 +1375,16 @@ impl EditSession {
         cmd: miredit_core::Command,
     ) -> miredit_core::Outcome {
         match doc.doc.as_mut() {
-            Some(d) => match cmd {
+            Some(d) => {
+                // `Command::SetLayer` 要**顺带纠正工具**（R43 第 3 条：`--edit-layer` 与面板/CLI
+                // 同一判据）。做法：先经 GUI 侧的 [`Self::set_layer`]（层 + 纠正 + 槽位真源），
+                // 再让内核照原样走一遍拿标准回执（它 `set_layer` 是幂等的，不会多改东西）。
+                if let miredit_core::Command::SetLayer { ref layer } = cmd {
+                    if let Some(l) = miredit_core::EditLayer::from_key(layer) {
+                        let _ = self.set_layer(l);
+                    }
+                }
+                match cmd {
                 // ⚠ 撤销/重做**必须**走 `apply_undo_like`（它会同步尺寸变化的保存源）；
                 // 直接 `apply_cmd` 会让 `Command::Undo/Redo` 这条入口绕过那一步（R37 P2）。
                 miredit_core::Command::Undo => {
@@ -1278,6 +1406,7 @@ impl EditSession {
                     self.core_outcome(n, note)
                 }
                 other => self.apply_cmd(&mut d.map, other),
+            }
             },
             // 没有地图：什么都不做，但也要给一份"改了 0 格 + 原因"的回执（不静默）
             None => miredit_core::Outcome {
@@ -1345,6 +1474,75 @@ pub fn print_check(doc: &mut crate::mapdoc::DocState, orig: Option<&[u8]>, path:
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **换层纠正逐条**（R12-F2：上游 `MainWindow.axaml.cs:648-657` 三条判据 × 5 层 × 10 槽位）。
+    ///
+    /// 期望值直接按上游三条 if 手算成表，**不复用被测函数**：
+    /// - 吸管（6）只在图号层（地表 0 / 中层 1）保留，其余三层 ⇒ 铅笔（1）；
+    /// - 墙（8）/ 特笔（9）只在物件层（Front）保留，其余 ⇒ 铅笔；
+    /// - 印章（5）是上游**通用** `Stamp`（不是 `TownStamp`）⇒ 规则②不包含它，
+    ///   只在地表/中层/物件层都保留、**阻挡层**才纠正（规则③）；
+    /// - 克隆（7）只在**非阻挡层**保留（阻挡层 ⇒ 铅笔）；
+    /// - 画笔(0)/铅笔(1)/填充(2)/橡皮(3)/选择(4) 任何层都不纠正。
+    #[test]
+    fn 换层纠正逐条() {
+        use miredit_core::EditLayer as L;
+        let 层表 = [L::Ground, L::Middle, L::Front, L::LowCollision, L::HighCollision];
+        for 层 in 层表 {
+            let 阻挡 = 层.is_collision();
+            for 槽 in 0..10usize {
+                // 手算期望
+                let 期望 = match 槽 {
+                    // ① 吸管（= 上游 `Eyedropper` 语义，本仓槽 6）：不在图号层 ⇒ 纠正
+                    6 if !matches!(层, L::Ground | L::Middle) => Some(1),
+                    // ② 墙 / 特笔（= 上游 `Wall` / `SpecialBrush`）：不是物件层 ⇒ 纠正
+                    8 | 9 if 层 != L::Front => Some(1),
+                    // ③ 阻挡层上：印章（通用 Stamp）/ 吸管 / 克隆 ⇒ 纠正
+                    5..=7 if 阻挡 => Some(1),
+                    _ => None,
+                };
+                assert_eq!(
+                    纠正工具(槽, 层),
+                    期望,
+                    "槽位 {槽} × 层 {层:?}：期望 {期望:?}"
+                );
+            }
+        }
+        // 三条"兼容组合"的锚点（防止上面那圈表被整体写歪还能过）
+        assert_eq!(纠正工具(6, L::Ground), None, "吸管在地表：保留");
+        assert_eq!(纠正工具(6, L::Middle), None, "吸管在中层：保留");
+        assert_eq!(纠正工具(5, L::Front), None, "印章在物件层：保留");
+        assert_eq!(纠正工具(7, L::Front), None, "克隆在物件层：保留");
+        assert_eq!(纠正工具(7, L::Ground), None, "克隆在地表：保留");
+        // 槽位映射的证据锚点（R43 第 1 条：上游 `Pickup` 与本仓槽 6 **不是**同一个工具）
+        assert_eq!(纠正工具(6, L::Front), Some(1), "槽 6 = 吸管（上游 Eyedropper）：物件层要纠正");
+        assert_eq!(纠正工具(5, L::Ground), None, "槽 5 = 通用 Stamp：地表层**保留**（不是 TownStamp）");
+        assert_eq!(纠正工具(5, L::Middle), None, "槽 5 在中层也保留");
+        assert_eq!(纠正工具(5, L::Front), None, "槽 5 在物件层保留");
+        assert_eq!(纠正工具(5, L::LowCollision), Some(1), "槽 5 在阻挡层要纠正（规则③）");
+        assert_eq!(纠正工具(5, L::HighCollision), Some(1), "槽 5 在阻挡层要纠正（规则③）");
+    }
+
+    /// `set_layer` 是**纠正的唯一施力点**：返回被纠正成的槽位、槽位真源跟着改、内核工具同步。
+    #[test]
+    fn set_layer顺带纠正并返回槽位() {
+        let mut ed = EditSession::default();
+        ed.select(crate::selection_ops::TOOL_STAMP_IDX);
+        assert_eq!(ed.slot(), crate::selection_ops::TOOL_STAMP_IDX);
+        // 物件层：印章可用 ⇒ 不纠正
+        assert_eq!(ed.set_layer(EditLayer::Front), None);
+        assert_eq!(ed.slot(), crate::selection_ops::TOOL_STAMP_IDX);
+        assert_eq!(ed.layer(), EditLayer::Front);
+        // 阻挡层：印章不适用 ⇒ 切铅笔（槽 1），内核 `Tool` 是 Unwired
+        assert_eq!(ed.set_layer(EditLayer::LowCollision), Some(TOOL_PENCIL_IDX));
+        assert_eq!(ed.slot(), TOOL_PENCIL_IDX);
+        assert_eq!(ed.tool(), miredit_core::Tool::Unwired);
+        assert_eq!(ed.layer(), EditLayer::LowCollision);
+        // 切回物件层也不会把印章"变回来"（纠正不可逆；用户想用印章要自己再点）
+        assert_eq!(ed.set_layer(EditLayer::Front), None);
+        assert_eq!(ed.slot(), TOOL_PENCIL_IDX);
+    }
+
     use mir2_map::HEADER_LEN;
 
     /// 资产根缺省值：本机真实根（**整个测试模块里只出现这一处**）。换机器用 `MIREDIT_ASSET_ROOT`。
