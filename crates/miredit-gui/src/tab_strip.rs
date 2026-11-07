@@ -54,6 +54,12 @@
 //!
 //! 这样单标签路径**零像素变化**（`--shot` 哈希不变），多标签路径也不会出现
 //! "第 0 格显示的是活跃图名字"这种错位。
+//!
+//! ⚠ **但"谁画第 0 张"也决定了"谁画它的悬停底"**：本段循环整段跳过第 0 张 ⇒ 那张的
+//! 悬停底只能由 `canvas::draw` 画。B 单修的就是这条漏账：原先 `canvas::draw` 只画了
+//! 关闭符悬停底（[`paint_close_hover`]），**整格悬停底**（[`paint_tab_hover`]）只有本段
+//! 循环里那一处 ⇒ `active == 0` 时第 0 张（含单标签态那唯一一张）没有整格悬停底。
+//! 现在两个悬停底都是「一个函数 + 两个调用点」，判据与几何各只有一份。
 
 
 use egui::{pos2, vec2, Align2, Painter, Rect, Sense};
@@ -110,6 +116,10 @@ pub fn rects(l: &Layout, n: usize) -> Vec<Rect> {
 /// 单标签态（`len == 1` 且 `active == 0`，也是 CLI / `--shot` 的常态）⇒ 返回空表
 /// ⇒ **本模块一个像素都不动**，`--shot` 哈希与 A 段逐字节相同。
 ///
+/// ⚠ 反过来说：**被这张表跳过的标签，它的一切都由 `canvas::draw` 负责** —— 包括
+/// 整格悬停底 [`paint_tab_hover`]（B 单修的正是这条漏账）。往这里加过滤条件时，
+/// 必须同时确认 `canvas.rs` 那边把被跳过的像素全画了。
+///
 /// ⚠ **B2 单已修掉的两处旧值**（`canvas.rs`，同一写域）：单标签态那张由 `canvas.rs` 画，
 /// 原先 ① 关闭符前景取 `text_muted`、② 选中下划线取 `accent_dark`；现在按上游换成
 /// `ui.text`（`QuietButton` ⇒ `Button` 前景 `ThemeE5E9F0`，`EditorControls.axaml:4`）与
@@ -131,8 +141,13 @@ pub fn 要画的标签(tabs: &Tabs) -> Vec<usize> {
 /// var close = new Button { Content = ("\u00d7"), Padding = new Thickness(4, 0, 4, 0), … };
 /// ```
 /// ⇒ 按钮盒 = 字形盒左右各加 **4**（上下 0）。字形在本仓是 `Align2::RIGHT_CENTER`
-/// 锚在 `r.right() - TAB_TITLE_INSET`（[`draw`] 与 `canvas::labels` 同一处几何），
-/// 所以按钮盒的**左边界** = `r.right() - TAB_TITLE_INSET - TAB_CLOSE_GLYPH_W - TAB_CLOSE_PAD`。
+/// 锚在 `r.right() - TAB_CLOSE_INSET`（[`draw`] 与 `canvas::labels` 同一处几何），
+/// 所以按钮盒的**左边界** = `r.right() - TAB_CLOSE_INSET - TAB_CLOSE_GLYPH_W - TAB_CLOSE_PAD`。
+///
+/// ⚠ 这里是 **`TAB_CLOSE_INSET`（15）**，不是标题那个 `TAB_TITLE_INSET`（12）：
+/// `×` 外侧还多一道 Button 从基主题继承来的 `Margin=3`
+/// （`EditorControls.axaml:7`；`MainWindow.MapTabs.cs:57` 的关闭钮没覆盖它）。
+/// 推导见 [`m::TAB_CLOSE_INSET`] 的文档 —— 两者**不是同一个数，别合并**。
 ///
 /// # 纵向：**整格高**（本仓放大的命中盒，见下）
 ///
@@ -147,16 +162,16 @@ pub fn 要画的标签(tabs: &Tabs) -> Vec<usize> {
 /// ⚠ **待拍板**：命中盒比上游按钮高（30 vs 11）是本仓的**产品取舍**，已登记在回执
 /// 「待用户拍板」；若要严格照抄上游 11 高，把本函数改成返回 [`close_button_rect`] 即可。
 pub fn close_rect(r: Rect) -> Rect {
-    let 左 = r.right() - m::TAB_TITLE_INSET - m::TAB_CLOSE_GLYPH_W - m::TAB_CLOSE_PAD;
+    let 左 = r.right() - m::TAB_CLOSE_INSET - m::TAB_CLOSE_GLYPH_W - m::TAB_CLOSE_PAD;
     Rect::from_min_max(pos2(左.max(r.left()), r.top()), r.max)
 }
 
 /// **上游那个关闭按钮的绘制盒**（悬停底就画这么大）：15.34375 × 11，垂直居中。
 ///
 /// = `TAB_CLOSE_PAD*2 + TAB_CLOSE_GLYPH_W` 宽、`TAB_CLOSE_GLYPH_H` 高，右边界落在
-/// `r.right() - TAB_TITLE_INSET + TAB_CLOSE_PAD`（= 字形右边界 + 4，与 [`close_rect`] 同一处横向基准）。
+/// `r.right() - TAB_CLOSE_INSET + TAB_CLOSE_PAD`（= 字形右边界 + 4，与 [`close_rect`] 同一处横向基准）。
 pub fn close_button_rect(r: Rect) -> Rect {
-    let 右 = r.right() - m::TAB_TITLE_INSET + m::TAB_CLOSE_PAD;
+    let 右 = r.right() - m::TAB_CLOSE_INSET + m::TAB_CLOSE_PAD;
     let 左 = 右 - (m::TAB_CLOSE_PAD * 2.0 + m::TAB_CLOSE_GLYPH_W);
     let 半高 = m::TAB_CLOSE_GLYPH_H / 2.0;
     let cy = r.center().y;
@@ -198,6 +213,49 @@ pub fn paint_close_hover(p: &Painter, r: Rect) -> bool {
     true
 }
 
+/// 标签**整格**的悬停底（上游 `:pointerover /template/ Border#Chrome` 的 `Background`）。
+///
+/// # 上游真值：`:pointerover` 与 `:selected` 是两条**独立**选择器
+///
+/// `EditorControls.axaml:63`：
+/// `Style Selector="^:pointerover /template/ Border#Chrome"` ⇒ `Background = Theme29313E`
+/// （`App.axaml:14` = `#29313E` = 本板 `ui.tab_hover_bg`）；
+/// `EditorControls.axaml:64`：
+/// `Style Selector="^:selected /template/ Border#Chrome"` ⇒ 只改 `BorderBrush = Theme8CA1FF`
+/// （`App.axaml:47`），**不动 `Background`**。
+///
+/// 两条选择器改的是**不同属性**、且 Avalonia 里 `:pointerover` 与 `:selected` 可以同时成立
+/// ⇒ **选中项悬停时同样有 `#29313E` 整格底**，只是**额外**多一条 2px 选中下划线
+/// （`BorderThickness="0,0,0,2"`，`:60`）。
+///
+/// ⚠ 本仓原先只有 [`draw`] 的循环里画这块底，而 [`要画的标签`] 把「第 0 张且它是活跃标签」
+/// 整张跳过 ⇒ **`active == 0` 时第 0 张（含单标签态那唯一一张）永远没有整格悬停底**。
+/// 修法与 [`paint_close_hover`] 同一套分工：`canvas::draw` 画第 0 格、本模块循环画自己那几张，
+/// 两边调**同一个**函数 ⇒ 判据只有一份、几何同源。
+///
+/// # 层次（必须由调用方保证）
+///
+/// 整格底画在**标题 / 关闭符字形之前**、选中下划线**之前** ⇒ 底在下、字形与下划线在上。
+///
+/// # 判据
+///
+/// 与 `Ui::rect_contains_pointer` **同一条实现** —— `egui-0.33.3/src/ui.rs:1236-1239` 就是
+/// `ctx().rect_contains_pointer(layer_id, clip_rect().intersect(rect))`，
+/// 本函数只拿到 `Painter`（没有 `Ui`），所以按同一式子直接调 `Painter::layer_id()`
+/// / `Painter::clip_rect()`（`painter.rs:162-171`）把这两项补上，语义完全一致
+/// （含"指针所在图层必须是本图层"这一条，弹层压住时不会误亮）。
+///
+/// 返回 `true` = 画了（调用方据此决定要不要再铺常态底）。
+pub fn paint_tab_hover(p: &Painter, r: Rect) -> bool {
+    let 层 = p.layer_id();
+    let 区 = p.clip_rect();
+    if !p.ctx().rect_contains_pointer(层, 区.intersect(r)) {
+        return false;
+    }
+    pt::fill(p, r, t::ui().tab_hover_bg);
+    true
+}
+
 /// 画整条标签栏（顺序 = [`rects`] 顺序）。
 ///
 /// `app` 只用于**活跃标签**的真值（见模块文档的稳态契约）。
@@ -217,20 +275,15 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
     let rects = rects(l, tabs.len());
     let ps = p.with_clip_rect(l.tab_strip);
     let ui = t::ui();
-    // 悬停判据：与 `Ui::rect_contains_pointer` **同一条实现** ——
-    // `egui-0.33.3/src/ui.rs:1236-1239` 就是
-    // `ctx().rect_contains_pointer(layer_id, clip_rect().intersect(rect))`，
-    // 本函数只拿到 `Painter`（没有 `Ui`），所以按同一式子直接调 `Painter::layer_id()`
-    // / `Painter::clip_rect()`（`painter.rs:162-171`）把这两项补上，语义完全一致
-    // （含"指针所在图层必须是本图层"这一条，弹层压住时不会误亮）。
-    let 悬停层 = ps.layer_id();
-    let 悬停区 = ps.clip_rect();
     // ⓪ **关闭符悬停底的分工**（本函数只负责它亲自画的那几张）：
     // 「第 0 张且它就是活跃标签」那一张由 `canvas::draw` 画，而 `canvas::draw` 在本函数
     // **之前**跑（`app.rs` 的 ⑥ 画布 / ⑦a3 标签条）⇒ 若在这里再盖一块底色，会把
     // `canvas` 已经画好的 `×` 字形盖掉。所以那一张的悬停底由 `canvas.rs` 在**字形之前**
     // 调同一个 [`paint_close_hover`]；本函数只在本循环里给**自己画的那几张**画悬停底
     // （见循环内的 `paint_close_hover(&ps, *r)`）。实现只有一份，绘制顺序各随其主。
+    //
+    // ⚠ **整格悬停底同理**（[`paint_tab_hover`]）：`canvas::draw` 也调它，
+    // 否则 `active == 0` 时第 0 张一个 hover 底都没有（B 单修的就是这一条）。
     for i in 要画的标签(tabs) {
         let Some(r) = rects.get(i) else { continue };
         let 活跃 = i == tabs.active();
@@ -251,17 +304,11 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
 
         // 底色：常态 = 容器底（上游 `Border#Chrome` 背景是 `Transparent`，透出的就是它）；
         // `:pointerover` = `Theme29313E`。**没有"活跃/非活跃"两档底色** ——
-        // 上游选中态只改底边 `BorderBrush` 与前景，不改 Background（`EditorControls.axaml:60-65`）。
-        let 悬停 = p.ctx().rect_contains_pointer(悬停层, 悬停区.intersect(*r));
-        pt::fill(
-            &ps,
-            *r,
-            if 悬停 {
-                ui.tab_hover_bg
-            } else {
-                ui.tab_strip_bg
-            },
-        );
+        // 上游选中态只改底边 `BorderBrush` 与前景，不改 Background（`EditorControls.axaml:60-65`）
+        // ⇒ 活跃那张悬停时**也**换成悬停底（与 `canvas::draw` 调的是同一个函数）。
+        if !paint_tab_hover(&ps, *r) {
+            pt::fill(&ps, *r, ui.tab_strip_bg);
+        }
 
         // 标题：左内边距与 `canvas::dyn_labels` 的 `canvas.tab_title` 同口径；
         // 右边界按上游 `Label.Margin` 的右边距 8 内缩（`MainWindow.MapTabs.cs:54`）。
@@ -289,10 +336,12 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
         // 上游 `close.Theme = QuietButton` ⇒ 前景 `ThemeE5E9F0` = `ui.text`（`EditorControls.axaml:4`）。
         // 悬停底先画、字形后画（底在字下面）：上游 `:pointerover` 只换 `Border#Chrome` 的
         // `Background`，前景不变（`EditorControls.axaml:12` 只设 Background/BorderBrush）。
+        //
+        // 右锚用 `TAB_CLOSE_INSET`（15）而不是标题的 `TAB_TITLE_INSET`（12）—— 见 [`m::TAB_CLOSE_INSET`]。
         paint_close_hover(&ps, *r);
         pt::text(
             &ps,
-            pos2(r.right() - m::TAB_TITLE_INSET, r.center().y),
+            pos2(r.right() - m::TAB_CLOSE_INSET, r.center().y),
             Align2::RIGHT_CENTER,
             tx::TAB_CLOSE,
             m::TAB_FONT,
@@ -649,11 +698,182 @@ mod tests {
 
     /// 图元里有没有"恰好这块矩形、恰好这个填充色"的一条。
     fn 有填充(图元: &[(Rect, egui::Color32)], r: Rect, c: egui::Color32) -> bool {
-        图元.iter()
-            .any(|(rr, cc)| *cc == c && (rr.left() - r.left()).abs() < 0.01
+        填充序(图元, r, c).is_some()
+    }
+
+    /// [`有填充`] 的下标版：返回**第几条**图元（= 绘制顺序），用于断言叠放层次。
+    fn 填充序(图元: &[(Rect, egui::Color32)], r: Rect, c: egui::Color32) -> Option<usize> {
+        图元.iter().position(|(rr, cc)| {
+            *cc == c
+                && (rr.left() - r.left()).abs() < 0.01
                 && (rr.top() - r.top()).abs() < 0.01
                 && (rr.right() - r.right()).abs() < 0.01
-                && (rr.bottom() - r.bottom()).abs() < 0.01)
+                && (rr.bottom() - r.bottom()).abs() < 0.01
+        })
+    }
+
+    /// 跑一帧**合成**（`canvas::draw` → `tab_strip::draw`，顺序照抄 `app.rs` 的 ⑥ / ⑦a3），
+    /// 收集 `(矩形, 填充色)`。
+    ///
+    /// 为什么必须合成而不能只跑 [`draw`]：`active == 0` 时第 0 张**整张由 `canvas::draw` 画**
+    /// （[`要画的标签`] 把它过滤掉）⇒ 只跑 [`draw`] 的用例**永远看不到第 0 张**，
+    /// 任何"第 0 张画了什么"的断言都会静默空转。本单 B 项漏的就是这个缝。
+    fn 画一帧合成(
+        l: &Layout,
+        tabs: &Tabs,
+        app: &MireditApp,
+        ptr: Option<egui::Pos2>,
+    ) -> Vec<(Rect, egui::Color32)> {
+        let ctx = egui::Context::default();
+        let mut events = Vec::new();
+        if let Some(q) = ptr {
+            events.push(egui::Event::PointerMoved(q));
+        }
+        // 文案只喂给 `canvas::draw` 的 `canvas.tab_title` / `canvas.zoom_percent`，
+        // 与本用例断言的底色矩形无关 ⇒ 用最小夹具即可。
+        let 文案 = crate::canvas::测试文案("0.map");
+        let out = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(
+                    pos2(0.0, 0.0),
+                    vec2(m::WINDOW_W, m::WINDOW_H),
+                )),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::NONE)
+                    .show(ctx, |ui| {
+                        let p = ui.painter();
+                        crate::canvas::draw(
+                            p,
+                            l,
+                            &crate::canvas::CanvasCtx {
+                                tex: None,
+                                view: &app.view,
+                                text: &文案,
+                                hover: None,
+                                has_map: false,
+                                grid: false,
+                                map_w: 0,
+                                map_h: 0,
+                                selection: None,
+                                stamp_preview: None,
+                                armed_badge: None,
+                            },
+                        );
+                        draw(p, l, tabs, app);
+                    });
+            },
+        );
+        let mut 图元 = Vec::new();
+        for cs in &out.shapes {
+            if let egui::epaint::Shape::Rect(r) = &cs.shape {
+                图元.push((r.rect, r.fill));
+            }
+        }
+        图元
+    }
+
+    /// **B 单**：`active == 0` 时第 0 张（活跃那张）的**整格悬停底**必须与其它张同源。
+    ///
+    /// # 上游真值（`EditorControls.axaml:63` + `:64`）
+    ///
+    /// `:63` `^:pointerover /template/ Border#Chrome` ⇒ `Background = Theme29313E`
+    /// （`App.axaml:14` = `#29313E`）；
+    /// `:64` `^:selected /template/ Border#Chrome` ⇒ **只**改 `BorderBrush = Theme8CA1FF`
+    /// （`App.axaml:47`），不动 `Background`。
+    ///
+    /// 两条选择器改**不同属性**、且在 Avalonia 里 `:pointerover` 与 `:selected` 可同时成立
+    /// ⇒ **选中项悬停时同样有 `#29313E` 整格底**，只是**额外**多一条 2px 选中下划线
+    /// （`BorderThickness="0,0,0,2"`，`:60`）。
+    ///
+    /// # 修前的代码级原因（本用例能红的前提）
+    ///
+    /// [`要画的标签`] 把「第 0 张且它是活跃标签」整张过滤掉 ⇒ [`draw`] 的底色分支
+    /// （**修前是全仓唯一**画 `ui.tab_hover_bg` 的地方）根本不为第 0 张执行；
+    /// 而 `canvas::draw` 那时只调了 [`paint_close_hover`]（关闭符那 15×11 的小盒），
+    /// 没有整格底 ⇒ `active == 0` 时第 0 张**一个整格 hover 底都没有**。
+    ///
+    /// ⚠ 本仓生产代码 `tabs.push` **零调用**（窗口恒 1 张标签）⇒ 本用例是
+    /// **单测证据**；`--shot` 是单标签态且无指针，两侧都不该变（见回执「无像素证据」）。
+    #[test]
+    fn 第零张活跃标签也有整格悬停底() {
+        let l = Layout::compute(窗());
+        let ui = t::ui();
+
+        // ── ① `active == 0`：第 0 张由 `canvas::draw` 画 ──
+        let f = 双标签夹具(0);
+        let (app, tabs) = (&f.app, &f.app.tabs);
+        let rs = rects(&l, 2);
+        assert_eq!(tabs.active(), 0, "夹具前提：活跃的是第 0 张");
+        assert_eq!(
+            要画的标签(tabs),
+            vec![1],
+            "前提：第 0 张不由本模块画（正是漏账的缝）"
+        );
+        assert_eq!(
+            rs[0],
+            l.tab_rect(),
+            "几何同源：第 0 张的矩形必须 = canvas 的绘制几何 `Layout::tab_rect()`"
+        );
+
+        // 指针压在第 0 张（活跃那张）上 ⇒ 整格悬停底必须画出来，且与第 1 张同色同源
+        // （同一个 `paint_tab_hover`、同一个 `ui.tab_hover_bg`、几何同取 `rects[i]`）。
+        let 图元 = 画一帧合成(&l, tabs, app, Some(rs[0].center()));
+        let 悬停序 = 填充序(&图元, rs[0], ui.tab_hover_bg).unwrap_or_else(|| {
+            panic!(
+                "active == 0 时第 0 张（活跃）悬停必须有整格底 {:?}\
+                 —— 上游 :63 对选中项同样生效（:64 只改 BorderBrush）",
+                ui.tab_hover_bg
+            )
+        });
+        // 叠放顺序：整格底在下、选中下划线在上（下划线不许被盖掉）。
+        // ⚠ 第 0 张的下划线由 `canvas::draw` 按 `Layout::tab_underline()` 画
+        // （页签条底 2px，不是 `rs[0].bottom()-2` —— 两套口径是**既有**差异，见回执）。
+        let 下划序 = 填充序(&图元, l.tab_underline(), ui.tab_selected_underline)
+            .expect("活跃标签的选中下划线必须还在（hover 底不许盖掉它）");
+        assert!(
+            悬停序 < 下划序,
+            "叠放顺序错：整格悬停底（图元 #{悬停序}）必须画在选中下划线（#{下划序}）**之前**"
+        );
+
+        // 指针压在第 1 张（非活跃）上 ⇒ 第 0 张不该有悬停底
+        let 图元 = 画一帧合成(&l, tabs, app, Some(rs[1].center()));
+        assert!(
+            有填充(&图元, rs[1], ui.tab_hover_bg),
+            "第 1 张悬停时必须画整格底（本用例的阳性对照：这一条必须能红能绿）"
+        );
+        assert!(
+            !有填充(&图元, rs[0], ui.tab_hover_bg),
+            "指针不在第 0 张上时它不该被画成悬停底"
+        );
+
+        // 没有指针 ⇒ 一张悬停底都不许有（`--shot` 无指针 ⇒ 零像素影响的前提）
+        let 图元 = 画一帧合成(&l, tabs, app, None);
+        assert!(
+            !图元.iter().any(|(_, c)| *c == ui.tab_hover_bg),
+            "没有指针时不许出现悬停底"
+        );
+
+        // ── ② `active == 1`：两张都由本模块画，验"活跃那张悬停时下划线仍在最上" ──
+        let f = 双标签夹具(1);
+        let (app, tabs) = (&f.app, &f.app.tabs);
+        assert_eq!(要画的标签(tabs), vec![0, 1], "前提：active == 1 时两张都归本模块");
+        let 图元 = 画一帧合成(&l, tabs, app, Some(rs[1].center()));
+        let 悬停序 = 填充序(&图元, rs[1], ui.tab_hover_bg)
+            .expect("活跃标签（第 1 张）悬停时同样要有整格底");
+        let 本模块下划 = Rect::from_min_max(
+            pos2(rs[1].left(), rs[1].bottom() - m::TAB_UNDERLINE_H),
+            rs[1].max,
+        );
+        let 下划序 = 填充序(&图元, 本模块下划, ui.tab_selected_underline)
+            .expect("活跃标签的选中下划线必须还在");
+        assert!(
+            悬停序 < 下划序,
+            "叠放顺序错：整格悬停底（#{悬停序}）必须在选中下划线（#{下划序}）之前"
+        );
     }
 
     /// ③ **活跃标签的标题取自宿主 `app.*`，不读占位槽**（本架构最容易踩的坑）。
@@ -886,13 +1106,21 @@ mod tests {
         );
     }
 
-    /// ③d **标题左边界 = `r.left() + TAB_TITLE_INSET`、关闭符右边界 = `r.right() − TAB_TITLE_INSET`**。
+    /// ③d **标题左边界 = `r.left() + TAB_TITLE_INSET`、关闭符右边界 = `r.right() − TAB_CLOSE_INSET`**。
+    ///
+    /// # 两个常量不是同一个数（A12-b 订正）
+    ///
+    /// * 标题侧 **12** = `Padding` 左 8 + `Label.Margin` 左 4（`EditorControls.axaml:59` +
+    ///   `MainWindow.MapTabs.cs:54`）；
+    /// * `×` 侧 **15** = `Padding` 右 8 + Button `Margin` **3** + Button `Padding` 右 4
+    ///   （`EditorControls.axaml:7` 的基主题 `Margin=3`，`MapTabs.cs:57` 的关闭钮**没有**覆盖它）。
+    ///
+    /// A12-a 单曾用一个 12 同时表达两侧 ⇒ `×` 右偏 3px（A12-b 订正）。
     ///
     /// # 为什么这条只能靠单测（**无像素证据**）
     ///
-    /// `TAB_TITLE_INSET` 有两个消费族：
     /// * **单标签态** —— 第 0 格由 `canvas::draw` 画（`canvas::labels` / `canvas::dyn_labels`）
-    ///   ⇒ 能被 `--shot` 拍到（A12-a 单已拍：标题 +1px、`×` −1px，见回执）；
+    ///   ⇒ 能被 `--shot` 拍到（A12-a 单已拍：标题 +1px；A12-b 单再拍 `×` −3px）；
     /// * **多标签态** —— 第 0 格以外由本模块 [`draw`] 画，而 `MireditApp` **只放一个占位槽**
     ///   （`app.rs` 的 `tabs: Tabs::new(TabState::占位())`，生产代码从不 `push`）
     ///   ⇒ CLI 开不出第二张标签 ⇒ **这条路径永远拍不到**。
@@ -900,19 +1128,24 @@ mod tests {
     /// 所以这里读 **egui 真要栅格化的那个 galley**（`Shape::Text` 的 `pos` / `galley.size()`）
     /// 把两个边界钉住：`Painter::text` 是 `anchor.anchor_size(pos, size).min` 落 `galley`
     /// （`egui-0.33.3/src/painter.rs:518-520`）⇒ `pos.x` 就是排版盒左边。
-    ///
-    /// 上游推导（`12` 的真值，见 [`m::TAB_TITLE_INSET`] 的文档）：
-    /// `EditorControls.axaml:59` 的 `Padding="8,7"` + `MainWindow.MapTabs.cs:54` 的
-    /// `Label.Margin=(4,2,8,2)` ⇒ 左 8+4；`MapTabs.cs:57` 的关闭钮 `Padding=(4,0,4,0)`
-    /// ⇒ 右 8+4。
     #[test]
     fn 标题左边界与关闭符右边界都取内缩常量() {
-        // ⓪ 常量本身的值：上游 8+4 的推导值。改回 11（旧截图量值）或别的数 ⇒ 这里当场红。
+        // ⓪ 两个常量本身的值：各自的上游推导值。改回旧值/合并成一个数 ⇒ 这里当场红。
         assert!(
             (m::TAB_TITLE_INSET - 12.0).abs() < 0.01,
-            "TAB_TITLE_INSET 必须是上游推导值 12（Padding 左 8 + Label.Margin 左 4；\
-             右侧同理 8 + 关闭钮 Padding 右 4），实得 {}",
+            "TAB_TITLE_INSET 必须是上游推导值 12（Padding 左 8 + Label.Margin 左 4），实得 {}",
             m::TAB_TITLE_INSET
+        );
+        assert!(
+            (m::TAB_CLOSE_INSET - 15.0).abs() < 0.01,
+            "TAB_CLOSE_INSET 必须是上游推导值 15（Padding 右 8 + Button Margin 3 + Button Padding 右 4），\
+             实得 {}",
+            m::TAB_CLOSE_INSET
+        );
+        assert!(
+            (m::TAB_CLOSE_INSET - m::TAB_TITLE_INSET - 3.0).abs() < 0.01,
+            "两侧相差正好是那道 Button Margin=3（EditorControls.axaml:7）；\
+             若有人把两个常量合并成一个数，这条会红"
         );
 
         let l = Layout::compute(窗());
@@ -961,20 +1194,20 @@ mod tests {
             );
         }
 
-        // ② 关闭符 `×`：右边界 = 各自标签的 `r.right() − TAB_TITLE_INSET`
+        // ② 关闭符 `×`：右边界 = 各自标签的 `r.right() − TAB_CLOSE_INSET`
         //   （`RIGHT_CENTER` ⇒ 排版盒右边 = pos.x + 宽；两张标签各查各的，不许串到隔壁）
         for (i, r) in rs.iter().enumerate() {
-            let 应 = r.right() - m::TAB_TITLE_INSET;
+            let 应 = r.right() - m::TAB_CLOSE_INSET;
             let 命中 = 文本
                 .iter()
                 .filter(|(s, x, w)| s == tx::TAB_CLOSE && (x + w - 应).abs() < 0.01)
                 .count();
             assert!(
                 命中 >= 1,
-                "标签 {i} 的关闭符右边界必须是 r.right({}) − TAB_TITLE_INSET({}) = {应}；\
+                "标签 {i} 的关闭符右边界必须是 r.right({}) − TAB_CLOSE_INSET({}) = {应}；\
                  实际提交：{文本:?}",
                 r.right(),
-                m::TAB_TITLE_INSET
+                m::TAB_CLOSE_INSET
             );
         }
     }
@@ -1143,7 +1376,7 @@ mod tests {
             "上游 VerticalContentAlignment=Center ⇒ 按钮必须垂直居中"
         );
         assert!(
-            (按.right() - (r.right() - m::TAB_TITLE_INSET + m::TAB_CLOSE_PAD)).abs() < 0.01,
+            (按.right() - (r.right() - m::TAB_CLOSE_INSET + m::TAB_CLOSE_PAD)).abs() < 0.01,
             "按钮右边界 = 字形右边界 + padding 右 4，实得 {}",
             按.right()
         );

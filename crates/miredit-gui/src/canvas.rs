@@ -123,15 +123,20 @@ pub fn labels(l: &Layout) -> Vec<Label> {
     let mut out = Vec::with_capacity(4);
 
     // ① 页签右端的关闭符（标题是动态的，见 dyn_labels）
+    //
+    // ⚠ 右锚用 `m::TAB_CLOSE_INSET`（**15**），不是标题那个 `TAB_TITLE_INSET`（12）：
+    // `×` 外侧还多一道 Button 从基主题继承来的 `Margin=3`
+    // （`EditorControls.axaml:7`；`MainWindow.MapTabs.cs:57` 的关闭钮没覆盖它）——
+    // 推导见 [`m::TAB_CLOSE_INSET`] 的文档，两者**不是同一个数，别合并**。
     let tab = l.tab_rect();
     out.push(Label {
         name: "canvas.tab_close",
         text: tx::TAB_CLOSE,
         font: m::TAB_FONT,
-        pos: pos2(tab.right() - m::TAB_TITLE_INSET, tab.center().y),
+        pos: pos2(tab.right() - m::TAB_CLOSE_INSET, tab.center().y),
         anchor: Align2::RIGHT_CENTER,
         clip: Rect::from_min_max(
-            pos2(tab.right() - m::TAB_TITLE_INSET - 13.0, tab.top()),
+            pos2(tab.right() - m::TAB_CLOSE_INSET - 13.0, tab.top()),
             tab.max,
         ),
         // 上游 `close.Theme = QuietButton`（`MainWindow.MapTabs.cs:58`）⇒ 继承 `Button`
@@ -192,6 +197,12 @@ pub fn dyn_labels(l: &Layout, d: &DocText) -> Vec<DynLabel> {
     let mut out = Vec::with_capacity(2);
 
     // ① 页签标题：左对齐，右边界留出关闭符的位置（关闭符自 tab.right - 11 往左排，约 9px 宽）
+    //
+    // 裁剪盒右边界内缩 = `m::TAB_LABEL_MARGIN_R`（上游 `Label.Margin` 的右边距 8，
+    // `MainWindow.MapTabs.cs:54`），与 `tab_strip::draw` 里那行**同一个常量**
+    // （`tab_strip.rs` 的 `r.right() - m::TAB_TITLE_INSET - m::TAB_LABEL_MARGIN_R`）
+    // —— 这里原先写死 `8.0`，两处口径不一致（一处硬编码、一处用常量），本单归位。
+    // 值不变 ⇒ 零像素影响。
     let tab = l.tab_rect();
     out.push(DynLabel::new(
         "canvas.tab_title",
@@ -203,7 +214,7 @@ pub fn dyn_labels(l: &Layout, d: &DocText) -> Vec<DynLabel> {
             Align2::LEFT_CENTER,
             Rect::from_min_max(
             pos2(tab.left() + m::TAB_TITLE_INSET, tab.top()),
-            pos2(tab.right() - m::TAB_TITLE_INSET - 8.0, tab.bottom()),
+            pos2(tab.right() - m::TAB_TITLE_INSET - m::TAB_LABEL_MARGIN_R, tab.bottom()),
         ),
             t::ui().text,
         ),
@@ -234,11 +245,23 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
     // ── 页签条 ──
     let ps = p.with_clip_rect(l.tab_strip);
     pt::fill(&ps, l.tab_strip, t::ui().menu_bar);
-    // 关闭符悬停底（上游 `QuietButton` 继承的 `:pointerover` 底 = `Theme394354`）：
-    // 单标签态那张标签由本函数画，而 `tab_strip::draw` 在它**之后**跑、只补画
-    // 「不由 canvas 画」的那几张 ⇒ 这里的悬停底必须由本函数画在**字形之前**
-    // （否则 `tab_strip` 补画时会把已经画好的 `×` 盖掉）。实现只有一份：
-    // [`crate::tab_strip::paint_close_hover`]。
+    // 第 0 格的两块悬停底（上游 `:pointerover` 只换 `Background`，前景不变）：
+    //
+    // 单标签态与 `active == 0` 的多标签态，第 0 张都**由本函数画**
+    // （`tab_strip::draw` 只补画「不由 canvas 画」的那几张，见
+    // [`crate::tab_strip::要画的标签`]）⇒ 这两块底必须由本函数画，
+    // 且都画在**字形之前**（否则 `tab_strip` 补画时会把已经画好的 `×` 盖掉）。
+    // 实现各只有一份，两边调同一个函数：
+    //
+    // ① **整格**悬停底 `Theme29313E`（`EditorControls.axaml:63`；`:64` 的 `:selected`
+    //    只改 `BorderBrush`，两条选择器独立 ⇒ 选中项悬停时同样有这块底）
+    //    —— [`crate::tab_strip::paint_tab_hover`]；
+    // ② 关闭符悬停底 `Theme394354`（`QuietButton` 继承基模板 `:pointerover`）
+    //    —— [`crate::tab_strip::paint_close_hover`]。
+    //
+    // 顺序有因果：整格底在下、关闭符底在上（上游按钮压在 `TabItem` 之上），
+    // 选中下划线在最后（`:64` 的 `BorderBrush` 是 `Border` 的底边，压在底色之上）。
+    crate::tab_strip::paint_tab_hover(&ps, l.tab_rect());
     crate::tab_strip::paint_close_hover(&ps, l.tab_rect());
     for lab in labels(l) {
         if lab.name.starts_with("canvas.tab") {
@@ -343,6 +366,46 @@ fn draw_zoom_pill(p: &Painter, l: &Layout, d: &DocText) {
     }
 }
 
+/// 单测用的最小 [`DocText`]（`tab` 由调用方给，其余字段留空串）。
+///
+/// 为什么需要它：`DocText` 没有 `Default`（每个字段都由 `screen_text::build` 现算），
+/// 而"只关心标签条/缩放浮层几何与配色"的用例不需要真的装配一份文案 ——
+/// 空串是"没有内容"，不是伪造业务值。
+///
+/// 放在 `mod tests` **之外**（只 `#[cfg(test)]`）：`tab_strip` 的用例要跑
+/// **合成一帧**（`canvas::draw` → `tab_strip::draw`，见 B 单的悬停底用例），
+/// 而 `mod tests` 是私有的、跨模块够不到。
+#[cfg(test)]
+pub(crate) fn 测试文案(tab: &str) -> DocText {
+    DocText {
+        title: String::new(),
+        tab: tab.to_string(),
+        pill: String::new(),
+        brush_size: 3,
+        status_left: String::new(),
+        status_tool: String::new(),
+        status_layer: String::new(),
+        status_brush: String::new(),
+        status_hint: String::new(),
+        status_hint_warn: false,
+        status_coord: String::new(),
+        status_lib: String::new(),
+        status_format: String::new(),
+        banner: None,
+        ground_locked: false,
+        status_stamp: None,
+        status_fill: None,
+        status_op: None,
+        status_op_warn: false,
+        status_sel: None,
+        status_sel_tmpl: None,
+        zoom: "100%".to_string(),
+        page: String::new(),
+        inspector_head: String::new(),
+        inspector_values: Default::default(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,33 +413,7 @@ mod tests {
     use crate::screen_text::DocText;
 
     fn 空文案() -> DocText {
-        DocText {
-            title: String::new(),
-            tab: "0.map".to_string(),
-            pill: String::new(),
-            brush_size: 3,
-            status_left: String::new(),
-            status_tool: String::new(),
-            status_layer: String::new(),
-            status_brush: String::new(),
-            status_hint: String::new(),
-            status_hint_warn: false,
-            status_coord: String::new(),
-            status_lib: String::new(),
-            status_format: String::new(),
-            banner: None,
-            ground_locked: false,
-        status_stamp: None,
-            status_fill: None,
-            status_op: None,
-            status_op_warn: false,
-            status_sel: None,
-            status_sel_tmpl: None,
-            zoom: "100%".to_string(),
-            page: String::new(),
-            inspector_head: String::new(),
-            inspector_values: Default::default(),
-        }
+        测试文案("0.map")
     }
 
     /// 缩放浮层的三个静态标签与两个动态标签必须**共用同一套几何**（加减号与百分比不能错位）。

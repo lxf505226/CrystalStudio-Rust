@@ -538,45 +538,70 @@ pub const ZOOM_ORIGINAL_R: f32 = 288.0;
 /// `−` / `+` 字形字号 13（截图两符号明显大于 `100%` 那行正文）。
 pub const ZOOM_SIGN_FONT: f32 = 13.0;
 
-/// 页签的**内缩 12** —— 同时是「标题的左内缩」与「关闭符 `×` 的右内缩」，两侧同值。
+/// 页签**标题**的左内缩 **12** = `Padding` 左 8 + `Label.Margin` 左 4。
 ///
-/// # 标题侧：`Padding` 左 8 + `Label.Margin` 左 4 = 12
+/// # 上游推导
 ///
 /// * `EditorControls.axaml:59`（`PaletteTabItem`）：`<Setter Property="Padding" Value="8,7"/>`
 ///   ⇒ 左 **8**（`:60` 的 `Border#Chrome Padding="{TemplateBinding Padding}"` 把它透到内容盒）；
 /// * `MainWindow.MapTabs.cs:54`：`map.Label.Margin = new Thickness(4, 2, 8, 2);` ⇒ 左 **4**；
 ///   ⇒ 标题文字左边缘 = 标签左沿 + 8 + 4 = **+12**。
 ///
-/// # 关闭符侧：`Padding` 右 8 + 关闭钮 `Padding` 右 4 = 12（同值）
+/// ⚠ **只给标题用**。`×` 的右内缩是 **15**，见 [`TAB_CLOSE_INSET`] ——
+/// 两者**不是同一个数，别合并**：`×` 外侧还多一道 Button 继承来的 `Margin=3`。
 ///
-/// * 同上 `Padding="8,7"` ⇒ 右 **8**；
-/// * `MainWindow.MapTabs.cs:57`：`new Button { Content = "\u00d7", Padding = new Thickness(4, 0, 4, 0), … }`
-///   ⇒ 右 **4**（`BorderThickness` 为 0 ⇒ 字形右沿 = 按钮盒右沿 − 4）；
-///   ⇒ `×` 字形右边缘 = 标签右沿 − 8 − 4 = **−12**。
-///
-/// 所以一个常量能同时表达两件事，两个消费族各自用同一式子：
-/// `r.left() + TAB_TITLE_INSET`（标题左锚）与 `r.right() - TAB_TITLE_INSET`（`×` 右锚）。
+/// 消费点（全部是"标题左锚 / 标题裁剪盒"）：`canvas::dyn_labels` 的 `canvas.tab_title`、
+/// `tab_strip::draw` 的标题裁剪盒。
 ///
 /// # 右侧那 16（`Label.Margin` 右 8 + `Padding` 右 8）为什么没有折进这个常量
 ///
 /// 上游标题的排版右界**不是**「标签右沿 −16」：`Label` 后面还跟着关闭钮，
 /// 标题右界 = 关闭钮左沿 − `Margin` 右 8（`MapTabs.cs:54`），
-/// 而关闭钮左沿 = 标签右沿 − 8（`Padding` 右）− 4（按钮 `Padding` 右）− 字形 advance
-/// − 4（按钮 `Padding` 左）。
+/// 而关闭钮左沿 = 标签右沿 − 8（`Padding` 右）− 3（按钮 `Margin`）− 4（按钮 `Padding` 右）
+/// − 字形 advance − 4（按钮 `Padding` 左）。
 ///
 /// 本仓不逐标题量宽（`TAB_W` 固定 98），标题裁剪盒取
 /// `r.right() - TAB_TITLE_INSET - TAB_LABEL_MARGIN_R` ⇒ 只扣「`Padding` 右 8 + 按钮
-/// `Padding` 右 4 = 12」与「`Margin` 右 8」，**没有**再扣按钮左内边距 4 与字形 advance
-/// （≈7.34，见 [`TAB_CLOSE_GLYPH_W`]）⇒ 比上游宽约 11.34px。
+/// `Padding` 右 4 = 12」与「`Margin` 右 8」，**没有**再扣按钮 `Margin` 3、按钮左内边距 4
+/// 与字形 advance（≈7.34，见 [`TAB_CLOSE_GLYPH_W`]）⇒ 比上游宽约 14.34px。
 /// 这是**已知且偏宽松**的差异：标题左对齐 + `TAB_W` 固定，参考标题 `Untitled 1`（≈50px）
 /// 在 66px 可用宽里触不到裁剪 ⇒ 当前不产生像素差。严格照抄要先做"逐标题量宽 + 内容自适应"，
 /// 那会撑开 `Layout::tab_rect` 的 98×30 ⇒ 属另一步（见回执「未做/待拍板」）。
 ///
 /// ⚠ **旧值 11 是截图量值**（`Untitled 1` 文字起 x=175、页签左 x=164 ⇒ 11），不是上游推导值；
 /// A12-a 单按上游真值订正为 **12**（1px 的差来自像素量读的取整/字侧距）。
-/// 该改动**会**改 `--shot` 像素（标题右移 1px、`×` 左移 1px，都在标签条内），
-/// 见回执「--shot」段的差异像素数与包围盒。
 pub const TAB_TITLE_INSET: f32 = 12.0;
+
+/// 关闭符 `×` 的**右内缩 15** = `Padding` 右 8 + Button `Margin` 3 + Button `Padding` 右 4。
+///
+/// # 上游推导（三段，漏掉中间那段就差 3px）
+///
+/// 1. `EditorControls.axaml:59`：`Padding="8,7"`（`:60` `Border#Chrome Padding="{TemplateBinding Padding}"`）
+///    ⇒ 标签内容盒右沿 = 标签右沿 − **8**；
+/// 2. `EditorControls.axaml:7`（`{x:Type Button}` 基主题）：`<Setter Property="Margin" Value="3"/>`
+///    —— `MainWindow.MapTabs.cs:57` 的关闭钮**只覆盖** `Padding` / `Background` / `BorderThickness`，
+///    **没有覆盖 `Margin`**；`:58` 换的 `QuietButton`（`EditorControls.axaml:17`）也是
+///    `BasedOn="{StaticResource {x:Type Button}}"` 且只覆盖 `Background`/`BorderBrush`
+///    ⇒ `Margin = 3` **照样生效** ⇒ 按钮盒右沿 = 内容盒右沿 − **3**；
+/// 3. `MainWindow.MapTabs.cs:57`：`Padding = new Thickness(4, 0, 4, 0)`
+///    ⇒ 字形右沿 = 按钮盒右沿 − **4**；
+///
+/// ⇒ `×` 字形右边缘 = 标签右沿 − 8 − 3 − 4 = **−15**。
+///
+/// # 为什么不能复用 [`TAB_TITLE_INSET`]（12）
+///
+/// 标题侧是 `8 + 4`（`Label.Margin` 左 4），`×` 侧是 `8 + 3 + 4`（Button `Margin` 3 + `Padding` 右 4）
+/// —— **多了那道 3**。A12-a 单曾把两者当同一个数（用 12 锚 `×`），`×` 因此**右偏 3px**。
+///
+/// # 参考截图佐证（`layout/refs/crystalstudio-main-runtime-1500x950.png`）
+///
+/// 实测：标签框 `x164..262`（选中下划线 `x164..261` / `y102..103`）；
+/// `×` 墨迹 `x240..244`（中心 242.0）。按 15 推得字形右沿 247、扣字侧距后落在 `x245` 附近
+/// ⇒ 差 ≈1px（跨字体/跨渲染器量读的正常残差）；按 12 推则要落在 `x248` 附近 ⇒ 差 ≈4px。
+///
+/// 消费点（全部是"`×` 右锚 / 命中盒 / 悬停盒"）：`canvas::labels` 的 `canvas.tab_close`、
+/// `tab_strip::{close_rect, close_button_rect, draw}`。
+pub const TAB_CLOSE_INSET: f32 = 15.0;
 
 /// 关闭符命中盒的**左右内边距 4** —— 上游 `MainWindow.MapTabs.cs:57`
 /// `new Button { Content = "\u00d7", Padding = new Thickness(4, 0, 4, 0), … }`
