@@ -4886,6 +4886,131 @@ mod tests {
             );
         }
     }
+    // ───────────────────── 工具 → 裁剪到选区（A-015 Crop / R36） ─────────────────────
+
+    /// 造一个 `w×h` 的 Old12 应用：格的 `bk_img` = 格序 + 1（列优先，便于断言搬格）。
+    fn 尺寸应用(w: u16, h: u16) -> MireditApp {
+        let mut app = 空应用();
+        let mut b = vec![0u8; 52 + 12 * (w as usize * h as usize)];
+        b[0..2].copy_from_slice(&w.to_le_bytes());
+        b[2..4].copy_from_slice(&h.to_le_bytes());
+        for i in 0..(w as usize * h as usize) {
+            let base = 52 + i * 12;
+            b[base..base + 2].copy_from_slice(&((i as u16) + 1).to_le_bytes());
+        }
+        app.doc.doc = Some(
+            crate::mapdoc::MapDoc::from_bytes(std::path::Path::new(r"E:\x\crop.map"), b)
+                .expect("合成图应能解析"),
+        );
+        app.doc.map_error = None;
+        app.doc.assets = crate::mapdoc::Assets::Failed("测试：不装载图库".to_owned());
+        if let Some(d) = app.doc.doc.as_ref() {
+            let _ = app.edit.bind_document(&d.path, d.orig_bytes());
+        }
+        app
+    }
+
+    /// 裁剪：尺寸变小、状态栏回执、`map_gen` +1、选区清空、视口重新 fit、**保存字节能读回新尺寸**。
+    #[test]
+    fn 裁剪到选区改尺寸并重拟合() {
+        let mut app = 尺寸应用(8, 8);
+        let 画布矩形 = 画布();
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(2, 2, 5, 5)
+        ));
+        let gen = app.doc.map_gen;
+        app.dispatch_menu(menu::model::Action::CropSelection, 画布矩形);
+        let d = app.doc.doc.as_ref().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (4, 4), "8×8 裁 2..5 ⇒ 4×4");
+        let (text, warn) = app.op.as_ref().expect("必须有回执");
+        assert_eq!(text, &tx::fill(tx::STATUS_CROP_OK_TMPL, &[("w", "4"), ("h", "4")]));
+        assert!(!*warn, "成功回执不是警示色");
+        assert!(app.doc.map_gen > gen, "改尺寸必须让地图代号 +1（画布缓存要失效）");
+        assert!(app.edit.selection().is_none(), "裁剪后选区必须清掉");
+        // 视口重新 fit：缩放应等于「整张新图塞进画布」的 fit 比例
+        let want = crate::canvas_view::CanvasView::fit_scale(画布矩形, 4, 4);
+        assert!((app.view.scale - want).abs() < 1e-4, "裁剪后要重新 fit（{} vs {want}）", app.view.scale);
+        // 保存字节：能按 Old12 读回 4×4，且格按 (left, top) 平移过
+        let bytes = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        // 读回走内核的同一套解析（GUI 不依赖 mir2-format）
+        let 回读 = miredit_core::Document::from_bytes(
+            std::path::Path::new(r"E:\x\crop-readback.map"),
+            bytes,
+        )
+        .expect("读回应成功");
+        assert_eq!(回读.size(), (4, 4));
+        for x in 0..4u16 {
+            for y in 0..4u16 {
+                let idx = x as usize * 4 + y as usize;
+                let want = ((2 + x) as usize * 8 + (2 + y) as usize) as u32 + 1;
+                assert_eq!(回读.raw().cells[idx].bk_img, want, "回读 ({x},{y})");
+            }
+        }
+    }
+
+    /// 没有选区 ⇒ 明确拒绝、地图一个字节不动、`map_gen` 不变。
+    #[test]
+    fn 裁剪无选区时拒绝() {
+        let mut app = 尺寸应用(8, 8);
+        let 前 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        let gen = app.doc.map_gen;
+        app.dispatch_menu(menu::model::Action::CropSelection, 画布());
+        let (text, warn) = app.op.as_ref().expect("必须有回执");
+        assert_eq!(text, tx::STATUS_CROP_NEED_SELECTION);
+        assert!(*warn, "拒绝回执要警示色");
+        assert_eq!(app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节"), 前);
+        assert_eq!(app.doc.map_gen, gen, "没改图 ⇒ 代号不变");
+        assert_eq!(app.overlay, Overlay::None, "不该弹任何浮层");
+    }
+
+    /// 选区已覆盖整图 ⇒ 什么都不做（上游 `CropSelection` 返回 false 的那条）。
+    #[test]
+    fn 整图裁剪不动作() {
+        let mut app = 尺寸应用(4, 4);
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(0, 0, 3, 3)
+        ));
+        let gen = app.doc.map_gen;
+        app.dispatch_menu(menu::model::Action::CropSelection, 画布());
+        let (text, warn) = app.op.as_ref().expect("必须有回执");
+        assert_eq!(text, tx::STATUS_CROP_NOOP);
+        assert!(*warn);
+        assert_eq!(app.doc.map_gen, gen, "整图裁剪不许改地图代号");
+        assert_eq!(app.edit.undo_len(), 0, "整图裁剪不许入撤销栈");
+        assert!(app.edit.selection().is_some(), "没改动就不该清选区");
+    }
+
+    /// 裁剪可撤销、可重做（撤销后保存字节逐字节回原）。
+    #[test]
+    fn 裁剪可撤销可重做() {
+        let mut app = 尺寸应用(8, 8);
+        let 前 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(2, 2, 5, 5)
+        ));
+        app.dispatch_menu(menu::model::Action::CropSelection, 画布());
+        assert_eq!(app.doc.doc.as_ref().expect("有图").map.width, 4);
+        // 撤销 ⇒ 回 8×8，且保存源也回旧尺寸（否则保存会因形状不符被拒）
+        app.dispatch_menu(menu::model::Action::Undo, 画布());
+        let d = app.doc.doc.as_mut().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (8, 8), "撤销回原尺寸");
+        assert_eq!(d.to_bytes().expect("出字节"), 前, "撤销后保存字节必须逐字节回原");
+        // 重做 ⇒ 又回 4×4
+        app.dispatch_menu(menu::model::Action::Redo, 画布());
+        let d = app.doc.doc.as_mut().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (4, 4), "重做回新尺寸");
+        let bytes = d.to_bytes().expect("出字节");
+        let 回读 = miredit_core::Document::from_bytes(
+            std::path::Path::new(r"E:\x\crop-redo.map"),
+            bytes,
+        )
+        .expect("读回");
+        assert_eq!(回读.size().0, 4, "重做后保存字节读回 4 宽");
+    }
+
     // ───────────────────── 工具 → 检查地图（A-015 / R32-R33） ─────────────────────
 
     /// 造一个「有图且带 2 条门警告」的应用：4×4，全图不可走，`(1, 2)` 是门格。

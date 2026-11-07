@@ -293,6 +293,30 @@ pub const MENU_IDENTIFY_OBJECTS: &str = "识别物体(I)…"; // EN: _Identify O
 /// 工具 → 提取地图物体。
 pub const MENU_EXTRACT_OBJECTS: &str = "提取地图物体"; // EN: Extract Map Objects ｜ 官方: ExtractMapObjects_1151B2C9
 
+// ───────────────────────── 工具 → 裁剪到选区 / 地图扩边（A-015 / R36） ─────────────────────────
+
+/// 工具 → **裁剪到选区**（官方 `CropToSelection`，Strings.json 中文「裁剪到选区」）。
+///
+/// 官方 XAML 里它是 Tools 组**第一项**，之后就是「地图扩边」，再一条分隔线进生成器组。
+pub const MENU_CROP_SELECTION: &str = "裁剪到选区"; // EN: Crop to Selection ｜ 官方: CropToSelection
+
+/// 工具 → **地图扩边**（官方 `ExpandMap`，Strings.json 中文「地图扩边」）。
+pub const MENU_EXPAND_MAP: &str = "地图扩边"; // EN: Expand Map ｜ 官方: ExpandMap
+
+/// 裁剪成功后的状态栏回执（官方 `"Cropped map to {0} × {1} cells"`）。
+///
+/// 占位符：`{w}` / `{h}` = **裁剪后**的尺寸；上游那对空格是 `×` 两侧各一个。
+pub const STATUS_CROP_OK_TMPL: &str = "已裁剪为 {w} × {h} 格"; // EN: Cropped map to {w} × {h} cells ｜ 官方: Cropped map to {0} × {1} cells
+
+/// 选区覆盖整图、裁剪等于没改（上游 `CropSelection` 返回 `false`）时的回执。
+pub const STATUS_CROP_NOOP: &str = "选区已覆盖整张地图，没有可裁剪的余地"; // EN: Selection already covers the whole map.
+
+/// 没有选区就点「裁剪到选区」时的回执（上游是静默 `return false`，本仓必须说出来）。
+pub const STATUS_CROP_NEED_SELECTION: &str = "先在地图上框选要保留的部分再裁剪"; // EN: Select an area inside the map before cropping.
+
+/// 地图不支持改尺寸 / 有尾块 / 尺寸越界时的拒绝前缀（详细原因接在后面）。
+pub const STATUS_RESIZE_REFUSED_TMPL: &str = "改尺寸失败：{why}"; // EN: Resize failed: {why}
+
 // ───────────────────────── 工具 → 检查地图（A-015 / R32-R33） ─────────────────────────
 
 /// 工具 → **检查地图**（插在「识别物体」之前，带一条分隔线；官方 `CheckMap` 无快捷键）。
@@ -1924,6 +1948,12 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_GEN_DUNGEON", MENU_GEN_DUNGEON),
     ("MENU_IDENTIFY_OBJECTS", MENU_IDENTIFY_OBJECTS),
     ("MENU_EXTRACT_OBJECTS", MENU_EXTRACT_OBJECTS),
+    ("MENU_CROP_SELECTION", MENU_CROP_SELECTION),
+    ("MENU_EXPAND_MAP", MENU_EXPAND_MAP),
+    ("STATUS_CROP_OK_TMPL", STATUS_CROP_OK_TMPL),
+    ("STATUS_CROP_NOOP", STATUS_CROP_NOOP),
+    ("STATUS_CROP_NEED_SELECTION", STATUS_CROP_NEED_SELECTION),
+    ("STATUS_RESIZE_REFUSED_TMPL", STATUS_RESIZE_REFUSED_TMPL),
     ("MENU_CHECK_MAP", MENU_CHECK_MAP),
     ("CHECK_MAP_TITLE", CHECK_MAP_TITLE),
     ("CHECK_MAP_SUMMARY_TMPL", CHECK_MAP_SUMMARY_TMPL),

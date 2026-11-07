@@ -33,6 +33,7 @@
 
 use std::collections::HashSet;
 
+use crate::document::DocSnapshot;
 use mir2_map::{Cell, Map};
 
 use crate::document::cell_mut;
@@ -50,13 +51,59 @@ pub struct Change {
     pub after: Cell,
 }
 
-/// 一步 = 一次拖动（按下到松开）或一次填充产生的全部变更。来源：`edit.rs:569-576`。
+/// 一步的**内容**：逐格 delta 或整档快照。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum StepKind {
+    /// 逐格 delta（拖动 / 填充 / 印章 / 选区操作）—— 撤销靠写回 `before` 格。
+    Cells(Vec<Change>),
+    /// **尺寸变化**（裁剪 / 扩边）：撤销/重做靠整档快照。
+    ///
+    /// 为什么不能只记逐格 delta：尺寸一变，旧坐标在新图里根本没有对应格
+    /// （裁剪后 `(0,0)` 是原来的 `(left, top)`），逐格回写会把图写错位。
+    /// 上游同形：`History.Resize` 压的是 `Capture(document)` 整份快照（`Document.cs`）。
+    ///
+    /// 装箱理由：载荷是两份整档快照（`RawMap` + `view`），比 `Cells` 那支大一个量级；
+    /// 不装箱会让**每一步**（含普通落笔）都按最大变体的尺寸占用栈/枚举空间。
+    Resize(Box<ResizeStep>),
+}
+
+/// 一次尺寸变化的两份快照。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ResizeStep {
+    /// 改尺寸**之前**的整档快照（撤销用；压步时就必须有）。
+    pub before: DocSnapshot,
+    /// 改尺寸**之后**的整档快照（重做用）。
+    ///
+    /// `None` = 还没被撤销过（"改后"就是当前状态）；第一次撤销时由
+    /// [`UndoStack::undo_resize`] 把当前状态填进来，重做才有东西可回。
+    /// 这样空闲时一步只占**一份**地图（而不是 before+after 两份）。
+    pub after: Option<DocSnapshot>,
+}
+
+/// 一步 = 一次拖动（按下到松开）/ 一次填充 / 一次尺寸变化。
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Step {
     /// 单调递增的步号（`0` 保留给"文件刚打开时的状态"）。
     pub seq: u64,
-    /// 本步改过的格（同格只出现一次，按经过顺序）。
-    pub changes: Vec<Change>,
+    /// 这一步干了什么。
+    pub kind: StepKind,
+}
+
+impl Step {
+    /// 逐格 delta 本步改了几格（`Resize` 恒 `0`）。
+    #[must_use]
+    pub fn cell_count(&self) -> usize {
+        match &self.kind {
+            StepKind::Cells(changes) => changes.len(),
+            StepKind::Resize(_) => 0,
+        }
+    }
+
+    /// 本步是不是尺寸变化。
+    #[must_use]
+    pub fn is_resize(&self) -> bool {
+        matches!(self.kind, StepKind::Resize(_))
+    }
 }
 
 /// 撤销栈上限 100 步。来源：`edit.rs:578-579`（任务书 §三.2）。
@@ -182,7 +229,7 @@ impl UndoStack {
         self.redo.clear();
         self.undo.push(Step {
             seq: self.seq,
-            changes,
+            kind: StepKind::Cells(changes),
         });
         while self.undo.len() > UNDO_LIMIT {
             // 丢最老的一步；`saved_pos` 可能因此变得不可达 ⇒ `dirty` 恒为真（保守但不会骗人）
@@ -202,6 +249,88 @@ impl UndoStack {
         self.begin();
         self.stroke = changes;
         self.end()
+    }
+
+    // ── 整档步骤（尺寸变化） ──
+
+    /// 压一步**整档快照**（地图尺寸变化）。返回新步号。
+    ///
+    /// 上游 `History.Resize`（`Document.cs`）：`Commit()` → 压快照 → 改文档 → 清重做。
+    /// 这里同样：① 未结算的笔画先收掉；② 压 `StepKind::Resize { before, after: None }`；
+    /// ③ 清空重做栈。
+    pub fn push_resize(&mut self, before: DocSnapshot) -> u64 {
+        if !self.stroke.is_empty() {
+            self.end();
+        }
+        self.stroking = false;
+        self.stroke_seen.clear();
+        self.seq += 1;
+        self.redo.clear();
+        self.undo.push(Step {
+            seq: self.seq,
+            kind: StepKind::Resize(Box::new(ResizeStep {
+                before,
+                after: None,
+            })),
+        });
+        while self.undo.len() > UNDO_LIMIT {
+            self.undo.remove(0);
+        }
+        self.seq
+    }
+
+    /// 顶步（撤销栈）是不是**尺寸变化**步骤。
+    ///
+    /// 是 ⇒ 撤销必须走文档级路径（[`UndoStack::undo_resize`] + `Document::restore_snapshot`），
+    /// 不能走 [`UndoStack::undo_with`]（那个只认逐格 delta）。
+    #[must_use]
+    pub fn top_is_resize(&self) -> bool {
+        self.undo.last().is_some_and(Step::is_resize)
+    }
+
+    /// 顶步（**重做**栈）是不是尺寸变化步骤。
+    #[must_use]
+    pub fn redo_top_is_resize(&self) -> bool {
+        self.redo.last().is_some_and(Step::is_resize)
+    }
+
+    /// 撤销一步尺寸变化：返回要还原的**改前快照**（把当前状态记进这一步的 `after` 供重做）。
+    ///
+    /// `current` = 调用方**现在**手里的整档快照（撤销前拍一张）。
+    /// 顶步不是尺寸变化 / 空栈 ⇒ `None`（**不动栈**）。
+    pub fn undo_resize(&mut self, current: DocSnapshot) -> Option<DocSnapshot> {
+        if !self.top_is_resize() {
+            return None;
+        }
+        let mut step = self.undo.pop()?;
+        let StepKind::Resize(payload) = &mut step.kind else {
+            self.undo.push(step);
+            return None;
+        };
+        let before = payload.before.clone();
+        payload.after = Some(current);
+        self.redo.push(step);
+        Some(before)
+    }
+
+    /// 重做一步尺寸变化：返回要还原的**改后快照**（并把这一步放回撤销栈）。
+    ///
+    /// 顶步不是尺寸变化 / 空栈 / 没有 `after`（没被撤销过）⇒ `None`。
+    pub fn redo_resize(&mut self) -> Option<DocSnapshot> {
+        if !self.redo_top_is_resize() {
+            return None;
+        }
+        let mut step = self.redo.pop()?;
+        let StepKind::Resize(payload) = &mut step.kind else {
+            self.redo.push(step);
+            return None;
+        };
+        let Some(after) = payload.after.take() else {
+            self.redo.push(step);
+            return None;
+        };
+        self.undo.push(step);
+        Some(after)
     }
 
     /// 撤销一步；返回还原了几格（0 = 没有可撤销的步骤）。来源：`edit.rs:1289-1305`。
@@ -224,12 +353,21 @@ impl UndoStack {
     where
         F: FnMut(u16, u16, Cell, Cell),
     {
+        // 整档步骤（尺寸变化）不能走逐格路径 —— 旧坐标在新图里没有对应格。
+        // 宿主必须先用 `top_is_resize()` / `undo_resize()` 走文档级路径。
+        if self.top_is_resize() {
+            return 0;
+        }
         let Some(step) = self.undo.pop() else {
+            return 0;
+        };
+        let StepKind::Cells(changes) = &step.kind else {
+            self.undo.push(step);
             return 0;
         };
         let mut n = 0;
         // 逆序还原：同一格在一步里只出现一次，这里的顺序只是为了让"后写的先退"
-        for c in step.changes.iter().rev() {
+        for c in changes.iter().rev() {
             if let Some(slot) = cell_mut(map, c.x, c.y) {
                 let prev = *slot;
                 *slot = c.before;
@@ -253,11 +391,18 @@ impl UndoStack {
     where
         F: FnMut(u16, u16, Cell, Cell),
     {
+        if self.redo_top_is_resize() {
+            return 0;
+        }
         let Some(step) = self.redo.pop() else {
             return 0;
         };
+        let StepKind::Cells(changes) = &step.kind else {
+            self.redo.push(step);
+            return 0;
+        };
         let mut n = 0;
-        for c in step.changes.iter() {
+        for c in changes.iter() {
             if let Some(slot) = cell_mut(map, c.x, c.y) {
                 let prev = *slot;
                 *slot = c.after;

@@ -11,7 +11,10 @@
 
 ## [Unreleased]
 
-> 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。
+### 新增
+
+- **A-015 Crop 裁剪到选区**：Tools 最前项；选区按 2 格偶数对齐（右/下可留奇数），只拷区内格；整图同尺寸 no-op；支持 7 档，Mir3Wemade/CrystalCs/trailer 明确拒绝；`Step::Resize` 整文档一步 undo/redo；成功后清选区、重 fit、保存按新尺寸回读。Expand 下一笔。
+- core `Document::replace_resized`：先同步未保存编辑、改头部宽高、搬格/空白边框、重建视图与计数；校验全在赋值前，失败不写/不压步/不脏。
 
 ## [0.4.0] - 2026-11-07
 

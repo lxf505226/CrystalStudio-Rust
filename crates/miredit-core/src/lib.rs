@@ -118,6 +118,7 @@ mod layer_counts;
 mod map_check;
 mod metadata;
 mod paint;
+mod resize;
 mod save;
 mod selection;
 mod session;
@@ -148,7 +149,7 @@ pub use convert::{
     FIELD_MAP, LOST_IN_VIEW,
 };
 pub use document::{
-    byte_diff, byte_diff_bytes, cell_at, cell_mut, index_of, ByteDiff, Document,
+    byte_diff, byte_diff_bytes, cell_at, cell_mut, index_of, ByteDiff, DocSnapshot, Document,
 };
 pub use error::{CoreError, SaveStage};
 pub use fill::{
@@ -172,6 +173,7 @@ pub use map_check::{
     UNCHECKED_SIZE_MISMATCH,
 };
 pub use metadata::{clamp_area, no_door_bytes_reason, Area};
+pub use resize::{crop_bounds, expand_target, ResizeError};
 pub use paint::{
     paint, PaintOutcome, Tool, TOOL_BRUSH, TOOL_BRUSH_IDX, TOOL_BUCKET, TOOL_BUCKET_IDX,
     TOOL_ERASER, TOOL_ERASER_IDX, TOOL_PICKUP, TOOL_PICKUP_IDX, TOOL_UNWIRED,

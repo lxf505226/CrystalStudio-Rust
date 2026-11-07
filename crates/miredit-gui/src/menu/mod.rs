@@ -1035,11 +1035,11 @@ mod tests {
     use super::*;
     use crate::menu::model::{find_by_id, item_count};
 
-    /// 44 项、5 菜单（`dump` 的计数与静态表必须一致）。
+    /// 45 项、5 菜单（`dump` 的计数与静态表必须一致）。
     #[test]
     fn 表与常量一致() {
         assert_eq!(MENUS.len(), 5);
-        assert_eq!(item_count(), 44);
+        assert_eq!(item_count(), 45);
         assert!(find_by_id("view.dark_mode").is_some());
     }
 
@@ -1691,9 +1691,11 @@ mod tests {
         //   `[regex]::Matches($axaml,'<Separator\s*/>').Count == 8`，代码追加 3 条），
         //   本仓 `sep_before` 的 11 处才是对的 —— 以代码实测为准，报告那个数已过期。
         let seps = rows.iter().filter(|l| l.contains("sep=yes")).count();
+        // 2026-11-07：Tools 组补「裁剪到选区」后，官方那条「Crop/Expand 之后」的分隔线
+        // 也落地了 ⇒ 官方 11 → 12，加本仓「关于」前 1 条 = **13**。
         assert_eq!(
-            seps, 12,
-            "分隔线 12 条（官方 11 + 本仓「关于」前 1 条）"
+            seps, 13,
+            "分隔线 13 条（官方 12 + 本仓「关于」前 1 条）"
         );
         // ③ 子项行
         let subs: Vec<&&String> = rows.iter().filter(|l| !l.contains("parent=- ")).collect();

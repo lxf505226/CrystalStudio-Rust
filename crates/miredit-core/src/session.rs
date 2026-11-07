@@ -1531,6 +1531,76 @@ impl EditSession {
         Some(b)
     }
 
+    // ── 地图尺寸：裁剪 / 扩边（A-015 Crop/Expand） ──
+
+    /// **裁剪到选区**（工具 → 裁剪到选区）。返回新尺寸 `(宽, 高)`。
+    ///
+    /// 语义全在 [`crate::resize`]：边界四边**偶数对齐**（上游 `AlignSelection`）、
+    /// 整次裁剪 = **一步撤销**；尺寸没变（选区已经覆盖整图）⇒ **什么都不做、不入栈**
+    /// （上游 `MapViewport.Crop.cs:22` 的同一条早退）。
+    ///
+    /// 落地后**清掉选区**：旧坐标在新图里含义全变了（上游 `RefreshAfterResize` →
+    /// `SetDocument` 同样把 `Selection` 置空）。
+    ///
+    /// # Errors
+    ///
+    /// 见 [`crate::ResizeError`]（空选区 / 尾块 / 不支持该格式 / 尺寸越界）。
+    pub fn crop_to(&mut self, area: Selection) -> Result<(u16, u16), crate::ResizeError> {
+        let (w, h) = self.doc.size();
+        let (left, top, right, bottom) = crate::resize::crop_bounds(w, h, area)?;
+        let (nw, nh) = (right - left, bottom - top);
+        if nw == w && nh == h {
+            // 上游：`if (cropped.Width == Width && cropped.Height == Height) return false;`
+            return Ok((w, h));
+        }
+        self.装入尺寸变化(nw, nh, i32::from(left), i32::from(top))
+    }
+
+    /// **四向扩边**（工具 → 地图扩边）。返回新尺寸 `(宽, 高)`。
+    ///
+    /// 上游 `MapDimensions.CanExpand` 的判据（四向 ≥0、全偶数、不能全 0、尺寸上限）
+    /// 在 [`crate::resize::expand_target`] 里逐条对照；整次扩边 = **一步撤销**。
+    ///
+    /// # Errors
+    ///
+    /// 见 [`crate::ResizeError`]。
+    pub fn expand_by(
+        &mut self,
+        left: i32,
+        top: i32,
+        right: i32,
+        bottom: i32,
+    ) -> Result<(u16, u16), crate::ResizeError> {
+        let (w, h) = self.doc.size();
+        let (nw, nh) = crate::resize::expand_target(w, h, left, top, right, bottom)?;
+        self.装入尺寸变化(nw, nh, -left, -top)
+    }
+
+    /// 尺寸变化的公共落地：改字节层 + 视图 ⇒ 压一步整档撤销 ⇒ 清选区/回执 ⇒ 重算脏标记。
+    fn 装入尺寸变化(
+        &mut self,
+        width: u16,
+        height: u16,
+        off_x: i32,
+        off_y: i32,
+    ) -> Result<(u16, u16), crate::ResizeError> {
+        // ① 未结算的一笔先收掉（上游 `History.Resize` 的第一句就是 `Commit()`）
+        if self.undo.stroke_active() || self.undo.stroke_pending() {
+            self.undo.end();
+        }
+        // 先拍照（撤销用），再改；`replace_resized` 失败时一个字段都不写 ⇒ 这里也不会压步
+        let before = self.doc.snapshot();
+        self.doc.replace_resized(width, height, off_x, off_y)?;
+        self.undo.push_resize(before);
+        // ② 旧选区/旧回执都作废（坐标含义变了）
+        self.sel.sel = None;
+        self.last_fill = None;
+        self.last_clear = None;
+        self.note = None;
+        self.sync_dirty();
+        Ok((width, height))
+    }
+
     // ── 撤销 / 重做 ──
 
     /// 撤销一步；返回还原了几格（0 = 没有可撤销的步骤）。来源：`edit.rs:1289-1305`。
@@ -1538,6 +1608,21 @@ impl EditSession {
     /// 撤销会**同时**把五层计数改回去：拆出「视图 + 计数更新器」两笔不重叠的借用，
     /// 由 [`UndoStack::undo_with`] 每写回一格回调一次（`document.rs` 模块文档第六节）。
     pub fn undo(&mut self) -> usize {
+        // 尺寸变化是「整档步骤」：旧坐标在新图里没有对应格 ⇒ 走文档级还原
+        if self.undo.top_is_resize() {
+            let current = self.doc.snapshot();
+            let Some(before) = self.undo.undo_resize(current) else {
+                return 0;
+            };
+            let n = before.raw.cells.len();
+            self.doc.restore_snapshot(before);
+            self.sel.sel = None;
+            self.last_fill = None;
+            self.last_clear = None;
+            self.note = None;
+            self.sync_dirty();
+            return n;
+        }
         let (view, mut keeper) = self.doc.view_and_keeper();
         let n = self
             .undo
@@ -1552,6 +1637,20 @@ impl EditSession {
     ///
     /// 与 [`Self::undo`] 对称：每写回一格都把计数增量改回去。
     pub fn redo(&mut self) -> usize {
+        // 尺寸变化的重做：整档还原（撤销时已经把"改后"那份拍进这一步了）
+        if self.undo.redo_top_is_resize() {
+            let Some(after) = self.undo.redo_resize() else {
+                return 0;
+            };
+            let n = after.raw.cells.len();
+            self.doc.restore_snapshot(after);
+            self.sel.sel = None;
+            self.last_fill = None;
+            self.last_clear = None;
+            self.note = None;
+            self.sync_dirty();
+            return n;
+        }
         let (view, mut keeper) = self.doc.view_and_keeper();
         let n = self
             .undo

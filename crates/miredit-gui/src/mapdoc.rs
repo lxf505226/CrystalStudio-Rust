@@ -178,6 +178,26 @@ impl MapDoc {
         d
     }
 
+    /// **尺寸变化之后同步保存源**：裁剪 / 扩边 / 它们的撤销与重做都走这里。
+    ///
+    /// `session` = 内核会话（`crate::edit::EditSession` 背后那份 `miredit_core::EditSession`
+    /// 的文档）—— 尺寸变化之后**它**才是权威的字节层真值：`replace_resized` 会先把
+    /// "当前编辑"同步进字节层再改尺寸，`restore_snapshot` 则整档还原。
+    ///
+    /// 判据：**只在保存源尺寸 ≠ 宿主视图尺寸时才动手**（普通撤销/重做零成本：一次比较，
+    /// 不 clone 那张 30 MB 的格表）。
+    ///
+    /// 同步之后 `document.raw` 与 `map` 的尺寸/格/头部宽高全部一致 ⇒ `to_bytes` 不会再
+    /// 因形状不符被拒。
+    pub fn adopt_resized(&mut self, session: &miredit_core::Document) {
+        let (w, h) = (self.map.width, self.map.height);
+        if self.document.size() == (w, h) {
+            return;
+        }
+        self.document
+            .replace_raw_after_resize(session.raw().clone());
+    }
+
     /// **把文档的出处路径改成新路径**（「另存为」成功后调，2026-11-05）。
     ///
     /// 改三处，**必须一起改**：

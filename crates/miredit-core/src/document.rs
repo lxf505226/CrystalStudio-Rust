@@ -73,6 +73,22 @@ use crate::convert::{ground_paint_supported, sync_view_into_raw, view_from_raw};
 use crate::error::CoreError;
 use crate::layer_counts::{cell_mask_ext, count_map, CountKeeper, LayerCounts, MaskContext};
 
+/// **整档快照**（字节层 + 视图）：尺寸变化的撤销/重做单位。
+///
+/// 为什么要连视图一起存：撤销一次裁剪要回到"旧尺寸 + 旧格 + 旧视图"。只存 `RawMap`
+/// 虽然能用 [`crate::convert::view_from_raw`] 重建视图，但视图里还有**投影档位**
+/// （`Map::format` / 视图头）这类不属于字节层的东西；存两份最省心，代价是内存约两倍地图。
+///
+/// 上游同形：`History.Resize` 压的就是 `MapRecoveryStore.Capture(document)` 整份快照
+/// （`Document.cs` 的 `PushUndo(new([], null, state, Capture(document)))`）。
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DocSnapshot {
+    /// 字节层真值（`format` / `header_raw` / `cells` / `trailer`）。
+    pub raw: RawMap,
+    /// 编辑视图（`width`/`height`/`format`/`header_raw`/`cells`）。
+    pub view: Map,
+}
+
 /// 一张已解析的地图 + 它的出处信息。抽取自 `mapdoc.rs:22-44`。
 #[derive(Debug)]
 pub struct Document {
@@ -117,6 +133,30 @@ impl Document {
             detail: e.to_string(),
         })?;
         Document::from_bytes(path, bytes)
+    }
+
+    /// **从字节层直接构造**（crate 内部 / 测试用）：视图由 `view_from_raw` 现算，
+    /// `orig_bytes` 取该格式 writer 出的字节（"打开时那份"的等价物）。
+    ///
+    /// 为什么需要它：`from_bytes` 要先过 `read_any_tolerant` 的**格式判别**（魔数/标题），
+    /// 而合成夹具的头部通常没有那些签名。本构造器跳过判别，只用于已经把 `RawMap` 拿在手里的
+    /// 调用方（改尺寸的单元测试、将来可能的"从内存图新建"）。
+    #[cfg(test)]
+    pub(crate) fn from_raw(raw: RawMap) -> Document {
+        let path = std::path::PathBuf::from(r"I:\__miredit_internal__\raw.map");
+        let orig_bytes = format_by_id(raw.format).write(&raw).unwrap_or_default();
+        let view = view_from_raw(&raw);
+        let tolerant_trailer = raw.trailer_len();
+        Document {
+            raw,
+            view,
+            path,
+            file_name: "raw.map".to_string(),
+            orig_bytes,
+            dirty: false,
+            tolerant_trailer,
+            counts: LayerCounts::default(),
+        }
     }
 
     /// 从已有字节构造（网页版上传一份字节、或测试用内存图）。
@@ -192,6 +232,14 @@ impl Document {
         let mut raw = self.raw.clone();
         crate::convert::sync_view_into_raw(view, &mut raw)?;
         Ok(raw)
+    }
+
+    /// **字节层真值**（可变，**crate 内部**）：只有 `resize`（改尺寸）用它整体替换。
+    ///
+    /// 通用编辑路径**不许**用它 —— 改格要走 [`Document::write_view_cell`]（维护五层计数），
+    /// 出字节要走 [`Document::try_to_bytes`]（在 clone 上同步视图）。
+    pub(crate) fn raw_mut(&mut self) -> &mut RawMap {
+        &mut self.raw
     }
 
     /// **编辑/渲染视图**（只读）。渲染层要的就是它。
@@ -300,6 +348,48 @@ impl Document {
     /// 依据 `mir2-format/src/model.rs:419-461`。
     pub fn caps(&self) -> FormatCaps {
         format_by_id(self.raw.format).caps()
+    }
+
+    /// 取一份**整档快照**（尺寸变化的撤销/重做用）。
+    ///
+    /// 只读：`self` 一格不变。
+    #[must_use]
+    pub fn snapshot(&self) -> DocSnapshot {
+        DocSnapshot {
+            raw: self.raw.clone(),
+            view: self.view.clone(),
+        }
+    }
+
+    /// **整体替换字节层**（宿主在**尺寸变化之后**同步保存源用）。
+    ///
+    /// 只做三件事：换 `raw`、按它重建视图（就地）、重算五层计数。**不校验、不置脏**。
+    ///
+    /// ⚠ 只许在「刚做完尺寸变化 / 尺寸变化的撤销重做」之后调用，且 `raw` 必须来自
+    /// 同一个内核会话（[`crate::EditSession::document`]）—— 那是唯一知道新尺寸的权威来源。
+    /// 通用编辑路径**不许**用它（改格要走 [`Document::write_view_cell`]）。
+    pub fn replace_raw_after_resize(&mut self, raw: RawMap) {
+        self.raw = raw;
+        self.rebuild_view_in_place();
+        self.rebuild_layer_counts();
+    }
+
+    /// 用整档快照还原（**就地**换视图字段，不换 `Map` 结构体）。
+    ///
+    /// 视图就地换的理由同 [`Document::replace_resized`]：宿主把同一个 `Map` 对象
+    /// 换进换出，换结构体会让新尺寸的视图留在文档里、宿主拿到旧的那份。
+    ///
+    /// 脏标记**不在这里定**：撤销/重做后由 [`crate::EditSession::sync_dirty`] 按
+    /// 「当前步号 vs 保存步号」重算（与本 crate 其它改格路径同一条纪律）。
+    pub fn restore_snapshot(&mut self, snap: DocSnapshot) {
+        self.raw = snap.raw;
+        let v = snap.view;
+        self.view.width = v.width;
+        self.view.height = v.height;
+        self.view.format = v.format;
+        self.view.header_raw = v.header_raw;
+        self.view.cells = v.cells;
+        self.rebuild_layer_counts();
     }
 
     /// 宽 × 高（世界格）。来源：`mapdoc.rs:36-38`。

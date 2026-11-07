@@ -301,6 +301,30 @@ impl EditSession {
         }
     }
 
+    /// **裁剪到选区**（工具 → 裁剪到选区）：改地图尺寸 + 一步撤销。
+    ///
+    /// 语义全在内核 [`miredit_core::EditSession::crop_to`]（偶数对齐公式、拒绝原因、
+    /// 整档撤销）；宿主地图经 [`Self::with_map`] 换进内核视图 ⇒ 内核**就地**换视图字段，
+    /// 所以调用之后 `map` 已经是新尺寸（画布下一帧直接按新尺寸贴）。
+    ///
+    /// # Errors
+    ///
+    /// 见 [`miredit_core::ResizeError`]（空选区 / 尾块 / 该格式不支持 / 尺寸越界）。
+    /// **内核文档**（只读）：尺寸变化之后宿主用它同步保存源
+    /// （[`crate::mapdoc::MapDoc::adopt_resized`] 的入参）。
+    #[must_use]
+    pub fn document(&self) -> &miredit_core::Document {
+        self.core.document()
+    }
+
+    pub fn crop_to(
+        &mut self,
+        map: &mut Map,
+        area: miredit_core::Selection,
+    ) -> Result<(u16, u16), miredit_core::ResizeError> {
+        self.with_map(map, |core| core.crop_to(area))
+    }
+
     /// 把**宿主的地图**换进内核会话 → 执行 `f` → 换回。
     ///
     /// `std::mem::swap` 只交换 `Map` 的 `Vec` 指针与宽高档位，**不拷格数据**

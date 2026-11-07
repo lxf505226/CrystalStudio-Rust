@@ -342,7 +342,14 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         // ───────────── 编辑 ─────────────
         Action::Undo => {
             let n = match cx.doc.doc.as_mut() {
-                Some(d) => cx.edit.undo(&mut d.map),
+                Some(d) => {
+                    let n = cx.edit.undo(&mut d.map);
+                    // 撤销的可能是**尺寸变化**（整档步骤）⇒ 保存源要跟着回旧尺寸
+                    if n > 0 {
+                        d.adopt_resized(cx.edit.document());
+                    }
+                    n
+                }
                 None => 0,
             };
             if n > 0 {
@@ -356,7 +363,13 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         }
         Action::Redo => {
             let n = match cx.doc.doc.as_mut() {
-                Some(d) => cx.edit.redo(&mut d.map),
+                Some(d) => {
+                    let n = cx.edit.redo(&mut d.map);
+                    if n > 0 {
+                        d.adopt_resized(cx.edit.document());
+                    }
+                    n
+                }
                 None => 0,
             };
             if n > 0 {
@@ -558,6 +571,59 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         Action::LightNight => {
             *cx.lighting = MapLighting::Night;
             Outcome::ok(tx::MENU_LIGHT_NIGHT.to_owned())
+        }
+        // ───────────── 工具：裁剪到选区（A-015 Crop） ─────────────
+        //
+        // 上游 `MainWindow.Crop.cs:5-9`：`busy` / 印章图不处理；`Viewport.CropSelection()`
+        // 内部要选区（`if (Selection is not Rect area || !AllowEdit()) return false;`），
+        // 成功后状态栏「Cropped map to W × H cells」，`RefreshAfterResize` 里再 `Fit()`。
+        //
+        // 本仓三条差异（都不静默）：
+        // ① 没选区 ⇒ 明确的拒绝回执（上游是静默 `false`）；
+        // ② 选区已覆盖整图 ⇒ 回执「没有可裁剪的余地」（同样没改任何字节）；
+        // ③ 该格式不支持 / 有尾块 / 尺寸越界 ⇒ 回执带 `ResizeError` 的中文原因。
+        Action::CropSelection => {
+            let Some(d) = cx.doc.doc.as_mut() else {
+                return Outcome::refused(need_map_receipt());
+            };
+            let Some(area) = cx.edit.selection() else {
+                return Outcome::refused(tx::STATUS_CROP_NEED_SELECTION.to_owned());
+            };
+            let (w, h) = (d.map.width, d.map.height);
+            // 边界先算：既用于"整图 no-op"的早退，也用于给保存源传同一组偏移
+            let (left, top, right, bottom) = match miredit_core::crop_bounds(w, h, area) {
+                Ok(v) => v,
+                Err(e) => {
+                    return Outcome::refused(tx::fill(
+                        tx::STATUS_RESIZE_REFUSED_TMPL,
+                        &[("why", &e.to_string())],
+                    ))
+                }
+            };
+            let (nw, nh) = (right - left, bottom - top);
+            if nw == w && nh == h {
+                // 上游 `if (cropped.Width == Width && cropped.Height == Height) return false;`
+                return Outcome::refused(tx::STATUS_CROP_NOOP.to_owned());
+            }
+            match cx.edit.crop_to(&mut d.map, area) {
+                Ok(_) => {
+                    // 保存源同步：尺寸变化之后**内核会话**才是字节层权威（它先同步编辑再改尺寸）
+                    d.adopt_resized(cx.edit.document());
+                    // 上游 `RefreshAfterResize` 的最后一句就是 `Fit()`
+                    cx.view.fit_map(cx.canvas, nw, nh);
+                    Outcome {
+                        touched_map: true,
+                        ..Outcome::ok(tx::fill(
+                            tx::STATUS_CROP_OK_TMPL,
+                            &[("w", &nw.to_string()), ("h", &nh.to_string())],
+                        ))
+                    }
+                }
+                Err(e) => Outcome::refused(tx::fill(
+                    tx::STATUS_RESIZE_REFUSED_TMPL,
+                    &[("why", &e.to_string())],
+                )),
+            }
         }
         // ───────────── 工具：检查地图（A-015 / R32-R33） ─────────────
         //
