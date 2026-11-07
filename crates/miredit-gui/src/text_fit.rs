@@ -187,11 +187,29 @@ pub fn all_labels(p: &Painter, l: &Layout) -> Vec<Label> {
 }
 
 /// 全部**动态**标签（已按各自裁剪盒实测截断）。
+/// # 这一份是**唯一**的动态标签收集口（排版/字形守卫都从它取数）
+///
+/// 逐条来源（**加新显示面时必须加在这里，否则守卫扫不到**）：
+///
+/// | # | 来源 | 覆盖的文字 |
+/// |---|---|---|
+/// | 1 | [`crate::titlebar::dyn_labels`] | 标题栏（文件名/脏标记） |
+/// | 2 | [`crate::canvas::dyn_labels`] | 画布页签/空态 |
+/// | 3 | [`crate::banner::dyn_labels`] | 画布顶部常驻告警黄条 |
+/// | 4 | [`crate::dock_left::dyn_labels`] | 左栏（工具胶囊/图层行/单元格检查器） |
+/// | 5 | [`crate::dock_right::dyn_labels`] | 右栏（小地图/资源面板分页） |
+/// | 6 | [`crate::statusbar::dyn_labels`] | 状态栏（坐标/工具/层/笔刷/填充/回执/选区/库） |
+/// | 7 | [`crate::cell_hover::dyn_labels`] | **地砖信息悬浮面板**（坐标/可走/明细三行）；A-008 补入 |
+///
+/// 第 7 条曾经漏收（它吃的是 `cell_hover::Panel`，不是 `(p, l, t)`，所以早期没接上）
+/// ⇒ 字形守卫漏掉整整一类标签。守卫用例 [`tests::悬停面板标签也进守卫`] 会**用总数对账**
+/// 反向钉住这一条（把它从上面删掉 ⇒ 总数对不上 ⇒ 该用例红）。
 pub fn all_dyn_labels(
     p: &Painter,
     l: &Layout,
     t: &DocText,
     pal: &crate::palette::PaletteState,
+    hover: Option<&crate::cell_hover::Panel>,
 ) -> Vec<DynLabel> {
     let mut out = Vec::with_capacity(32);
     out.extend(crate::titlebar::dyn_labels(l, t));
@@ -201,6 +219,11 @@ pub fn all_dyn_labels(
     out.extend(crate::dock_left::dyn_labels(l, t));
     out.extend(crate::dock_right::dyn_labels(l, t, pal));
     out.extend(crate::statusbar::dyn_labels(p, l, t));
+    // 地砖信息悬浮面板（A-008）：它的 `dyn_labels` 吃的是 `Panel`（行内容 + 行内裁剪盒），
+    // 不是 `(p, l, t)` —— 这也是它早先被漏收的原因。调用方给 `None` 表示"本帧没有悬浮面板"。
+    if let Some(panel) = hover {
+        out.extend(crate::cell_hover::dyn_labels(panel));
+    }
     for lab in &mut out {
         lab.truncate_to_fit(p);
     }
@@ -275,6 +298,31 @@ mod tests {
     /// 取值依据：文件名取本机最长的一批（`REDCAVE02.map`）、地图尺寸取 700×700、
     /// 错误原因给 60 个汉字（远超实际报错长度，用来验证截断确实动作）。
     /// 中文一律用 `ui_text` 里的现成字块拼，**不在测试里写中文界面文案**。
+    /// **代表性悬停面板**（坐标 / 可走 / 明细三行）——A-008 用它覆盖第 7 个收集源。
+    ///
+    /// 三行都是真实模板填出来的（不是手写句子）：守卫要验的是"模板 + 运行期值"这条路径。
+    fn 典型悬停面板() -> crate::cell_hover::Panel {
+        use crate::cell_hover::Row;
+        crate::cell_hover::Panel {
+            rect: egui::Rect::from_min_size(egui::pos2(400.0, 300.0), egui::vec2(260.0, 90.0)),
+            rows: vec![
+                (
+                    Row::Coord,
+                    tx::fill(tx::HOVER_COORD_TMPL, &[("x", "1234"), ("y", "5678")]),
+                ),
+                (Row::Walkable, tx::HOVER_WALKABLE.to_owned()),
+                (
+                    Row::Detail,
+                    tx::fill(
+                        tx::HOVER_DETAIL_TMPL,
+                        &[("title", tx::LAYER_GROUND), ("value", "图号 65535 · 库号 255")],
+                    ),
+                ),
+            ],
+            truncated: false,
+        }
+    }
+
     fn 最坏情况文案() -> DocText {
         let mut lines_values: [String; 6] = Default::default();
         let kv: [(&str, &str); 3] = [("img", "65535"), ("lib", "255"), ("size", "65535×65535")];
@@ -505,6 +553,58 @@ mod tests {
         }
     }
 
+    /// **A-008：悬停面板的标签必须进守卫**（`all_dyn_labels` 的第 7 个来源）。
+    ///
+    /// 三段判据：
+    /// ① 三个悬停标签名（`hover.coords` / `hover.walkable` / `hover.detail`）都在收集结果里；
+    /// ② **总数对账**（六个 `(p,l,t)` 来源各自单独算 + 悬停条数）—— 这是**变异检测**：
+    ///    把 `all_dyn_labels` 里 `if let Some(panel) = hover { … }` 那一段删掉，
+    ///    收集数会少 `悬停条数` 条 ⇒ 这条断言当场红（不用真去改源码试）；
+    /// ③ 对照：`hover: None` 时正好少掉那么多（证明差额确实来自这一个来源，不是别处凑巧补上）。
+    #[test]
+    fn 悬停面板标签也进守卫() {
+        let p = measure_painter();
+        let l = Layout::compute(window());
+        let t = 典型文案();
+        let pal = 空面板();
+        let hover = 典型悬停面板();
+
+        let 悬停条数 = crate::cell_hover::dyn_labels(&hover).len();
+        assert_eq!(悬停条数, 3, "代表性面板应有三行（坐标/可走/明细）");
+
+        let labs = all_dyn_labels(&p, &l, &t, &pal, Some(&hover));
+        // ① 名称逐条到位
+        for want in ["hover.coords", "hover.walkable", "hover.detail"] {
+            assert!(
+                labs.iter().any(|x| x.name == want),
+                "收集口漏了悬停标签 {want}（A-008 回归）"
+            );
+        }
+        // ② 总数对账（删掉悬停那一段 ⇒ 这里少 3 ⇒ 红）
+        let 其它来源 = crate::titlebar::dyn_labels(&l, &t).len()
+            + crate::canvas::dyn_labels(&l, &t).len()
+            + crate::banner::dyn_labels(&p, &l, &t).len()
+            + crate::dock_left::dyn_labels(&l, &t).len()
+            + crate::dock_right::dyn_labels(&l, &t, &pal).len()
+            + crate::statusbar::dyn_labels(&p, &l, &t).len();
+        assert_eq!(
+            labs.len(),
+            其它来源 + 悬停条数,
+            "收集口总数对不上：应为 其它来源 {其它来源} + 悬停 {悬停条数}"
+        );
+        // ③ 对照：不给悬停面板就正好少掉那几条
+        let 无悬停 = all_dyn_labels(&p, &l, &t, &pal, None);
+        assert_eq!(
+            无悬停.len() + 悬停条数,
+            labs.len(),
+            "差额必须正好等于悬停条数（悬停是唯一差别）"
+        );
+        assert!(
+            !无悬停.iter().any(|x| x.name.starts_with("hover.")),
+            "不给面板时不该凭空冒出 hover 标签"
+        );
+    }
+
     /// 动态标签的模板必须来自 `ui_text::ALL`（防止出现一条表里没有的文案）。
     #[test]
     fn 动态标签模板都来自文案表() {
@@ -512,7 +612,7 @@ mod tests {
         let l = Layout::compute(window());
         let all: Vec<&str> = crate::ui_text::ALL.iter().map(|(_, s)| *s).collect();
         for t in [典型文案(), 最坏情况文案()] {
-            for lab in all_dyn_labels(&p, &l, &t, &空面板()) {
+            for lab in all_dyn_labels(&p, &l, &t, &空面板(), Some(&典型悬停面板())) {
                 assert!(
                     all.contains(&lab.tmpl),
                     "动态标签 {} 的模板 {:?} 不在 ui_text::ALL 里",
@@ -529,7 +629,7 @@ mod tests {
         let p = measure_painter();
         let l = Layout::compute(window());
         for t in [典型文案(), 最坏情况文案()] {
-            for lab in all_dyn_labels(&p, &l, &t, &空面板()) {
+            for lab in all_dyn_labels(&p, &l, &t, &空面板(), Some(&典型悬停面板())) {
                 let w = text_width(&p, &lab.text, lab.font);
                 assert!(
                     w <= lab.clip.width() + 0.5,
@@ -553,7 +653,7 @@ mod tests {
         let p = measure_painter();
         let l = Layout::compute(window());
         let mut bad = Vec::new();
-        for lab in all_dyn_labels(&p, &l, &典型文案(), &空面板()) {
+        for lab in all_dyn_labels(&p, &l, &典型文案(), &空面板(), Some(&典型悬停面板())) {
             if lab.truncated {
                 bad.push(format!("{} = {:?}", lab.name, lab.text));
             }
@@ -566,7 +666,7 @@ mod tests {
     fn 超长文案会被截断() {
         let p = measure_painter();
         let l = Layout::compute(window());
-        let labs = all_dyn_labels(&p, &l, &最坏情况文案(), &空面板());
+        let labs = all_dyn_labels(&p, &l, &最坏情况文案(), &空面板(), Some(&典型悬停面板()));
         let hit = labs.iter().filter(|x| x.truncated).count();
         assert!(hit > 0, "60 字错误原因/12 字文件名竟一个都没截断，测量口径可疑");
         for lab in labs.iter().filter(|x| x.truncated) {
@@ -583,7 +683,7 @@ mod tests {
     fn 动态标签id与行位置唯一() {
         let p = measure_painter();
         let l = Layout::compute(window());
-        let labels = all_dyn_labels(&p, &l, &典型文案(), &空面板());
+        let labels = all_dyn_labels(&p, &l, &典型文案(), &空面板(), Some(&典型悬停面板()));
         let mut seen: Vec<(&str, i32)> = labels
             .iter()
             .map(|x| (x.name, (x.pos.y * 10.0).round() as i32))
@@ -612,7 +712,7 @@ mod tests {
             &CellLines::unknown(),
             &crate::edit::EditSession::default(),
         );
-        let labs = all_dyn_labels(&p, &l, &t, &空面板());
+        let labs = all_dyn_labels(&p, &l, &t, &空面板(), Some(&典型悬停面板()));
         assert!(labs.len() >= 15, "动态标签太少（{}）", labs.len());
         for lab in &labs {
             assert!(!lab.text.is_empty(), "{} 空串", lab.name);
