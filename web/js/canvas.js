@@ -1,10 +1,13 @@
 /* =============================================================================
    canvas.js —— canvas 2D 渲染器
    · 按「块」拉图（一块 = 16×16 世界格）
-   · **请求倍率随缩放档**（ME.tileScaleFor）：25% ⇒ 后端出 192×128 的图，画布 1:1 贴图；
-     50% ⇒ 384×256；100% ⇒ 768×512。缩小档不再由 drawImage 缩（服务端 Box 面积加权更准、
+   · 缩放**连续**（每格 ×1.15 / ÷1.15，clamp 到 0.25~4.0）—— 同上游
+     `MapViewport.cs:471` 与 GUI `metrics.rs:427` / `:409` / `:412`
+   · **请求倍率与显示缩放解耦**（ME.tileScaleFor）：≤25% ⇒ 后端出 192×128 的图，画布 1:1 贴图；
+     ≤50% ⇒ 384×256；其余 ⇒ 768×512。缩小档不再由 drawImage 缩（服务端 Box 面积加权更准、
      体积小一个数量级）
-   · 200% ⇒ 仍请求 1×，由画布放大（关平滑保像素感）：2× 在 64×48 会超 64 MiB 上限（413）
+   · >100% ⇒ 仍请求 1×，由画布放大（关平滑保像素感）：2× 在 64×48 会超 64 MiB 上限（413）
+   · 网格**永远画**（按屏幕间距抽稀，无像素门槛）—— 同上游 `MapViewport.Presentation.cs:51-62`
    · 只画「已取到的真实瓦片」；未取到画斜纹并标注「无瓦片」，绝不画假地图
    ============================================================================= */
 (function (ME) {
@@ -12,7 +15,6 @@
 
   var CELL = ME.CELL;
   var CHUNK = ME.CHUNK;
-  var ZOOMS = ME.ZOOMS;
 
   var cv = null, ctx = null;
   var dpr = 1;
@@ -28,7 +30,7 @@
   var sel = null;                   // 已提交的选区 {x0,y0,x1,y1}（闭区间，世界格）
   var selPreview = null;            // 拖动中的选区（优先于 sel 绘制）
 
-  // 视口：ox/oy = 左上角所在的世界格（浮点），scale = 缩放档
+  // 视口：ox/oy = 左上角所在的世界格（浮点），scale = **连续**缩放值（0.25~4.0）
   var view = { ox: 0, oy: 0, scale: 1 };
 
   function cellPx() { return CELL.w * view.scale; }
@@ -102,11 +104,11 @@
     ctx.fillStyle = '#f7f5ef';
     ctx.fillRect(mx, my, mw, mh);
 
-    // 位图**已按缩放档出图**：scale<1 时目标矩形与位图尺寸逐像素相等（1:1 贴图，平滑无意义）；
-    // 只有 200%（请求 1×、显示 2×）才是放大，像素画放大必须关平滑。
+    // 位图**已按请求档位出图**：reqScale<1 时目标矩形与位图尺寸逐像素相等（1:1 贴图，平滑无意义）；
+    // 显示倍率 > 请求倍率（如 4× 显示、1× 图）才是放大，像素画放大必须关平滑。
     ctx.imageSmoothingEnabled = false;
 
-    // 本帧的请求档位（与 view.scale 不同：200% 也请求 1×，见 config.js 的 ME.tileScaleFor）
+    // 本帧的请求档位（与 view.scale 不同：显示 >50% 一律请求 1×，见 config.js 的 ME.tileScaleFor）
     var reqScale = ME.tileScaleFor(view.scale);
 
     // ---- 逐块绘制 ----
@@ -136,7 +138,7 @@
         });
 
         if (e.state === 'ok') {
-          // reqScale<1 时 `sw/sh` 与位图尺寸相等（1:1）；200% 时是 2× 放大（最近邻）
+          // reqScale<1 时 `sw/sh` 与位图尺寸相等（1:1）；放大倍率 = view.scale / reqScale（最近邻）
           ctx.drawImage(e.bitmap, sx, sy, sw, sh);
         } else if (e.state === 'pending') {
           ctx.fillStyle = '#eee9dc';
@@ -160,25 +162,42 @@
       }
     }
 
-    // ---- 网格（一格 ≥ 20px 才画，避免糊成一片）----
-    if (cpx >= 20) {
-      ctx.strokeStyle = 'rgba(90, 78, 54, .12)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      var gx0 = Math.max(0, Math.floor(ox)), gx1 = Math.min(map.width, Math.ceil(visX1));
-      var gy0 = Math.max(0, Math.floor(oy)), gy1 = Math.min(map.height, Math.ceil(visY1));
-      for (var gx = gx0; gx <= gx1; gx++) {
-        var px = Math.round((gx - ox) * cpx) + .5;
-        ctx.moveTo(px, Math.max(my, 0));
-        ctx.lineTo(px, Math.min(my + mh, H));
-      }
-      for (var gy = gy0; gy <= gy1; gy++) {
-        var py = Math.round((gy - oy) * cpy) + .5;
-        ctx.moveTo(Math.max(mx, 0), py);
-        ctx.lineTo(Math.min(mx + mw, W), py);
-      }
-      ctx.stroke();
+    // ---- 网格（**永远画**，按屏幕间距抽稀）---------------------------------
+    // 出处：上游 `_upstream/CrystalStudio/MapViewport.Presentation.cs:51-62`（GridVisible 分支）
+    //     int step = 1;
+    //     while (step * 32 * Zoom < 8) step *= 2;
+    //     var pen = new ScenePen(ThemeService.Brush("CanvasGrid"), 1 / Zoom);
+    //     for (int x = (x0 + step - 1) / step * step; x <= x1; x += step) …
+    //
+    // ① **没有像素门槛**。旧实现设了「一格至少 20 屏幕像素」的像素门槛（25% 档一格只有
+    //    48×0.25 = 12px）⇒ 整层网格消失 —— 错。上游只在缩得太小时**抽稀**
+    //    （相邻线屏幕间距 ≥ 8px），不是不画。
+    // ② 抽稀步长按**格高**算（上游写死 32 = CELL.h；格宽 48 更大，按更紧的格高算出的 step
+    //    对竖线只会更疏 ⇒ 两个方向都满足 ≥ 8px）。比较用 `< 8`（**含等号边界**）：
+    //    32×0.25 = 8，8 不 < 8 ⇒ 0.25× 档的 step 仍是 1，一条线都不许少。
+    // ③ 笔宽 `1 / Zoom` 是**世界坐标**下的 1px；本画布直接在屏幕坐标里画（不再乘 Zoom），
+    //    等价的屏幕笔宽就是恒 1px ⇒ 这里 `lineWidth = 1`。
+    // ④ 颜色：`ThemeService.Avalonia.cs:55` 浅色 `Color.FromArgb(60, 73, 89, 108)`
+    //    ⇒ RGBA(73, 89, 108, 60/255 = 0.235294…)；取 0.2353，**别四舍五入成 .24**。
+    var step = 1;
+    while (step * CELL.h * view.scale < 8) step *= 2;
+    ctx.strokeStyle = 'rgba(73, 89, 108, 0.2353)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    var gx0 = Math.max(0, Math.floor(ox)), gx1 = Math.min(map.width, Math.ceil(visX1));
+    var gy0 = Math.max(0, Math.floor(oy)), gy1 = Math.min(map.height, Math.ceil(visY1));
+    // 起点「向上取整到 step 的倍数」= 上游 `(x0 + step - 1) / step * step`（x0 ≥ 0 故同式）
+    for (var gx = Math.floor((gx0 + step - 1) / step) * step; gx <= gx1; gx += step) {
+      var px = Math.round((gx - ox) * cpx) + .5;
+      ctx.moveTo(px, Math.max(my, 0));
+      ctx.lineTo(px, Math.min(my + mh, H));
     }
+    for (var gy = Math.floor((gy0 + step - 1) / step) * step; gy <= gy1; gy += step) {
+      var py = Math.round((gy - oy) * cpy) + .5;
+      ctx.moveTo(Math.max(mx, 0), py);
+      ctx.lineTo(Math.min(mx + mw, W), py);
+    }
+    ctx.stroke();
 
     // ---- 地图边界 ----
     ctx.strokeStyle = 'rgba(168, 132, 43, .85)';
@@ -315,13 +334,10 @@
       schedule();
     },
 
-    /** 以 (ax,ay)（画布内 CSS 像素）为锚点切到某个缩放档 */
+    /** 以 (ax,ay)（画布内 CSS 像素）为锚点设一个**连续**缩放值（夹到 [0.25, 4.0]） */
     setZoom: function (level, ax, ay) {
       if (!map) return;
-      var target = ZOOMS[0];
-      for (var i = 0; i < ZOOMS.length; i++) {
-        if (Math.abs(ZOOMS[i] - level) < Math.abs(target - level)) target = ZOOMS[i];
-      }
+      var target = ME.clampZoom(level);
       if (target === view.scale) return;
       var axx = (typeof ax === 'number') ? ax : W / 2;
       var ayy = (typeof ay === 'number') ? ay : H / 2;
@@ -334,20 +350,26 @@
       schedule();
     },
 
-    /** dir=+1 放大一档 / -1 缩小一档 */
+    /**
+     * dir=+1 放大一格 / -1 缩小一格 —— **连续 ×1.15**，不是档位跳变。
+     *
+     * 上游 `MapViewport.cs:471`：`Zoom = LimitZoom(Zoom * (e.Delta.Y > 0 ? 1.15 : 1 / 1.15))`；
+     * 本仓 GUI 同口径 `metrics.rs:427` `ZOOM_PER_NOTCH = 1.15`。
+     * 返回值 `false` = 已经顶到 0.25 / 4.0 的边界（调用方据此不计手势次数）。
+     */
     zoomStep: function (dir, ax, ay) {
-      var idx = ZOOMS.indexOf(view.scale);
-      if (idx < 0) idx = ZOOMS.indexOf(1);
-      var next = ME.util.clamp(idx + dir, 0, ZOOMS.length - 1);
-      if (next === idx) return false;
-      canvasApi.setZoom(ZOOMS[next], ax, ay);
+      if (!map) return false;
+      var factor = (dir > 0) ? ME.ZOOM_PER_NOTCH : (1 / ME.ZOOM_PER_NOTCH);
+      var next = ME.clampZoom(view.scale * factor);
+      if (next === view.scale) return false;
+      canvasApi.setZoom(next, ax, ay);
       return true;
     },
 
-    /** 以某个缩放档居中到地图中心——打开地图时的默认视图 */
+    /** 以某个缩放值居中到地图中心——打开地图时的默认视图（值会被夹到 [0.25, 4.0]） */
     centerAt: function (level) {
       if (!map) return;
-      view.scale = level;
+      view.scale = ME.clampZoom(level);
       view.ox = map.width / 2 - (W / cellPx()) / 2;
       view.oy = map.height / 2 - (H / cellPy()) / 2;
       clampView();
@@ -355,18 +377,26 @@
       schedule();
     },
 
-    /** 适应地图：取「能装下整张地图」的最大档位，然后居中 */
+    /**
+     * 适应地图：把整张地图装进画布（留 80px 边距）再居中。
+     *
+     * 连续缩放下没有「档位」可选，直接照上游算一个值 ——
+     * `MapViewport.cs:166`：
+     *   `Math.Min(1, Math.Min(Math.Max(1, ActualWidth - 80) / (W * 48.0),
+     *                         Math.Max(1, ActualHeight - 80) / (H * 32.0)))`
+     * 与 GUI `metrics.rs:416-422`（`FIT_MARGIN = 80`，两条边**平分**这 80px）同口径；
+     * 算出来的值再夹到 [0.25, 4.0]（上游 `Fit()` 自己不夹，GUI `metrics.rs:420-421`
+     * 记录了这个夹取：小图 fit≈0.027 会被抬到 0.25）。
+     */
     fit: function () {
       if (!map) return;
-      var pad = 24;
-      var pick = ZOOMS[0];
-      for (var i = ZOOMS.length - 1; i >= 0; i--) {
-        if (map.width * CELL.w * ZOOMS[i] <= W - pad && map.height * CELL.h * ZOOMS[i] <= H - pad) {
-          pick = ZOOMS[i];
-          break;
-        }
-      }
-      view.scale = pick;
+      var usableW = Math.max(1, W - 80);
+      var usableH = Math.max(1, H - 80);
+      var fitScale = Math.min(1, Math.min(
+        usableW / (map.width * CELL.w),
+        usableH / (map.height * CELL.h)
+      ));
+      view.scale = ME.clampZoom(fitScale);
       view.ox = map.width / 2 - (W / cellPx()) / 2;
       view.oy = map.height / 2 - (H / cellPy()) / 2;
       clampView();

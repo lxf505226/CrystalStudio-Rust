@@ -259,7 +259,10 @@
       }, { passive: false });
       // 中键拖动会触发浏览器自动滚动，禁掉
       el.addEventListener('auxclick', function (ev) { if (ev.button === 1) ev.preventDefault(); });
-      ME.debug.pushGesture('bind', { zooms: ME.ZOOMS.slice() });
+      // 缩放是**连续**的（×1.15/格，clamp 0.25~4.0），没有档位数组可记 —— 记区间与倍率
+      ME.debug.pushGesture('bind', {
+        zoom: { min: ME.ZOOM_MIN, max: ME.ZOOM_MAX, notch: ME.ZOOM_PER_NOTCH }
+      });
     }
   };
 })(window.ME);

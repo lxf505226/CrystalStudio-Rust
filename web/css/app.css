@@ -24,8 +24,14 @@
   --sw-ground:   #b08d57;
   --sw-middle:   #7f9a6b;
   --sw-object:   #8c6fa8;
-  --sw-low:      #d98aa0;   /* 官方：低位阻挡 · 粉色 */
-  --sw-high:     #6f9bd1;   /* 官方：高位阻挡 · 蓝色 */
+  /* 原注释称「官方：低位阻挡 · 粉色」——实为自定值，2026-11-08 按
+     _upstream/CrystalStudio/CollisionMarkers.cs:6 `Color.FromArgb(90, 240, 85, 105)`
+     （RGB #F05569，α90 = 35%）订正。本仓 GUI 同值：theme.rs:371。 */
+  --sw-low:      #F05569;
+  /* 原注释称「官方：高位阻挡 · 蓝色」——实为自定值，2026-11-08 按
+     CollisionMarkers.cs:7 `Color.FromArgb(90, 65, 165, 245)`（RGB #41A5F5，α90 = 35%）订正。
+     本仓 GUI 同值：theme.rs:375。 */
+  --sw-high:     #41A5F5;
   --radius:      8px;
   --shadow-1:    0 1px 2px rgba(64, 54, 32, .08);
   --shadow-2:    0 6px 20px rgba(64, 54, 32, .16);
