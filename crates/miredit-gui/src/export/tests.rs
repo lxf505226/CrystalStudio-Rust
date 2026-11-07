@@ -1041,3 +1041,169 @@ fn 帧尺寸缓存只解码一次() {
     assert_eq!(cache.size(lib, 8), Some((48, 32)));
     assert_eq!(src.次数.get(), 2, "同一 (库, 帧号) 只该问一次");
 }
+
+// ---------------------------------------------------------------------------
+// 五、第二段 = 上游 `PreviewRaster.Create(..., padding: 0, opaque: true)`（2026-11-08 起）
+//
+// 三条都直接量 `downscale_to_fit`（本模块私有函数，`tests` 是它的子模块 ⇒ 可调），
+// **不需要图库**，因此在没有 `MIREDIT_CLIENT_ROOT` 的机器上也真的在跑，不会变成空转跳过。
+// ---------------------------------------------------------------------------
+
+/// **等比目标不许出现黑边**（`fit_centered_opaque` 的「居中」在等比时不能留边）。
+///
+/// 判据不是「看起来没黑边」，而是**输出里一个纯黑像素都不许有**：源图每个像素的 RGB
+/// 都 ≥ 1，而留边只可能来自 `opaque: true` 的黑底 ⇒ 出现纯黑就是留了边。
+///
+/// 8×4 源、目标 4×2（两向同一个 `scale = 0.5`）⇒ 内容恰好铺满，`left == top == 0`。
+#[test]
+fn 等比目标不产生黑边() {
+    let (sw, sh) = (8u32, 4u32);
+    let mut rgba = Vec::new();
+    for y in 0..sh {
+        for x in 0..sw {
+            rgba.extend_from_slice(&[(10 + x * 20) as u8, (20 + y * 30) as u8, 200, 255]);
+        }
+    }
+    let img = ExportImage {
+        width: sw,
+        height: sh,
+        rgba: rgba.clone(),
+        tiles: 1,
+        margin: 0,
+    };
+    let (out, 缩了) = downscale_to_fit(img, sw, sh, 4, Some((4, 2))).expect("第二段应成功");
+    assert!(缩了, "8×4 → 4×2 尺寸真的变了，必须报「缩了」");
+    assert_eq!((out.width, out.height), (4, 2));
+    for y in 0..out.height {
+        for x in 0..out.width {
+            let i = ((y * out.width + x) * 4) as usize;
+            let px = &out.rgba[i..i + 4];
+            assert_ne!(px, [0, 0, 0, 255], "({x},{y}) 是纯黑留边 ⇒ 居中产生了黑边");
+            assert_eq!(px[3], 255, "({x},{y}) 必须不透明（opaque: true）");
+        }
+    }
+    // 取样点逐列手算（上游 `sx = (int)((x+.5-left)*sw/w)`，left=0）：
+    // x=0 ⇒ (0.5)*2 = 1、x=3 ⇒ (3.5)*2 = 7；y 同理 ⇒ 四角取源 (1,1)/(7,1)/(1,3)/(7,3)。
+    let 源像素 = |x: u32, y: u32| -> Vec<u8> {
+        let i = ((y * sw + x) * 4) as usize;
+        rgba[i..i + 4].to_vec()
+    };
+    for (x, y, sx, sy) in [(0u32, 0u32, 1u32, 1u32), (3, 0, 7, 1), (0, 1, 1, 3), (3, 1, 7, 3)] {
+        let i = ((y * out.width + x) * 4) as usize;
+        assert_eq!(
+            out.rgba[i..i + 4].to_vec(),
+            源像素(sx, sy),
+            "({x},{y}) 必须等于源 ({sx},{sy})：最近邻 + 零偏移"
+        );
+    }
+}
+
+/// **兼容链的等比保证实测**：`fit_ratio` 算出的目标与源**逐位同比例** ⇒ 不会留边。
+///
+/// 源 768×384（64×48 格 @`Quarter`），`fit_ratio(.., max_side = 384)` ⇒ 384×192；
+/// 判据同上（一个纯黑像素都不许有）。同时钉住 `tiles` / `margin` 随新图原样带走。
+#[test]
+fn 兼容链等比缩放不产生黑边() {
+    let (sw, sh) = (768u32, 384u32);
+    // 源全不透明、且每通道 ≥ 1（保证「纯黑」只可能来自留边）
+    let mut rgba = Vec::with_capacity((sw * sh * 4) as usize);
+    for y in 0..sh {
+        for x in 0..sw {
+            rgba.extend_from_slice(&[
+                (1 + x % 250) as u8,
+                (1 + y % 240) as u8,
+                (1 + (x ^ y) % 238) as u8,
+                255,
+            ]);
+        }
+    }
+    let 目标 = fit_ratio(sw, sh, 64, 48, 384)
+        .expect("可算")
+        .expect("768×384 装不下 384 长边，必须缩");
+    assert_eq!(目标, (384, 192), "64×48 格的最简比 2:1 ⇒ k=192");
+    let img = ExportImage {
+        width: sw,
+        height: sh,
+        rgba,
+        tiles: 7,
+        margin: 3,
+    };
+    let (out, 缩了) = downscale_to_fit(img, 64, 48, 384, None).expect("第二段应成功");
+    assert!(缩了);
+    assert_eq!((out.width, out.height), 目标);
+    // 比例逐位相等（与生产同一条判据）：`w*ch*32 == h*cw*48`
+    assert_eq!(
+        u64::from(out.width) * 48 * 32,
+        u64::from(out.height) * 64 * 48,
+        "第二段之后长宽比仍必须与 1× 渲染恒等"
+    );
+    for y in 0..out.height {
+        for x in 0..out.width {
+            let i = ((y * out.width + x) * 4) as usize;
+            assert_ne!(
+                &out.rgba[i..i + 4],
+                [0, 0, 0, 255],
+                "({x},{y}) 是纯黑留边 ⇒ 等比目标不该有黑边"
+            );
+        }
+    }
+    // `tiles` / `margin` 描述的是**这次渲染**用了几块、扩了几格 ⇒ 第二段不许清掉
+    assert_eq!(out.tiles, 7, "tiles 必须随新图原样带走");
+    assert_eq!(out.margin, 3, "margin 必须随新图原样带走");
+}
+
+/// **同尺寸也要铺不透明黑底**（删掉旧早退分支的直接判据）。
+///
+/// 上游 `PreviewRaster.cs:19` 的 `opaque: true` 是**无条件** `alpha = 255`；
+/// `miredit-web` 的 `GET /api/export/minimap` 也没有同尺寸短路
+/// （`routes/export.rs:306-307`「不再有『同尺寸就跳过』的短路」）。
+/// 所以 GUI 这条路径必须一致：同尺寸时**几何不动**（采样点不漂），但全透明像素要变成
+/// 不透明黑、半透明要压到黑底上。旧早退分支会让这一格留在 `alpha = 0`。
+#[test]
+fn 同尺寸也要铺不透明黑底() {
+    let (w, h) = (4u32, 2u32);
+    let mut rgba = Vec::new();
+    for _y in 0..h {
+        rgba.extend_from_slice(&[10, 20, 30, 255]); // 不透明
+        rgba.extend_from_slice(&[10, 20, 30, 255]); // 不透明
+        rgba.extend_from_slice(&[200, 200, 200, 128]); // 半透明
+        rgba.extend_from_slice(&[0, 0, 0, 0]); // 全透明
+    }
+    let img = ExportImage {
+        width: w,
+        height: h,
+        rgba,
+        tiles: 1,
+        margin: 0,
+    };
+    let (out, 缩了) = downscale_to_fit(img, w, h, 4, Some((w, h))).expect("第二段应成功");
+    assert!(!缩了, "同尺寸不该报「真的缩了」（two_stage 只报尺寸有没有变小）");
+    assert_eq!((out.width, out.height), (w, h), "同尺寸时几何不许动");
+    for y in 0..h {
+        for x in 0..w {
+            let i = ((y * w + x) * 4) as usize;
+            let px = [out.rgba[i], out.rgba[i + 1], out.rgba[i + 2], out.rgba[i + 3]];
+            match x {
+                0 | 1 => assert_eq!(
+                    px,
+                    [10, 20, 30, 255],
+                    "({x},{y})：不透明像素必须原样（采样点没漂）"
+                ),
+                2 => {
+                    // over(src, 黑底)：`(sc*sa + 0*da_keep + out_a/2)/out_a`，此处 out_a = 255
+                    let 期望 = |c: u8| ((u32::from(c) * 128 + 127) / 255) as u8;
+                    assert_eq!(
+                        px,
+                        [期望(200), 期望(200), 期望(200), 255],
+                        "({x},{y})：半透明必须压到黑底上"
+                    );
+                }
+                _ => assert_eq!(
+                    px,
+                    [0, 0, 0, 255],
+                    "({x},{y})：全透明必须变成不透明黑底（旧早退会留 alpha=0）"
+                ),
+            }
+        }
+    }
+}

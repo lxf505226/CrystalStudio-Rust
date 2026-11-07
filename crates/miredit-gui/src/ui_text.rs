@@ -933,7 +933,12 @@ pub const EXPORT_OVERWROTE: &str = "；原文件已覆盖"; // EN: (existing fil
 ///
 /// 为什么要在回执里说：两段式意味着「最终像素不是 render crate 某一档的原生尺寸」，
 /// 不说清的话，拿 PNG 尺寸去反推档位会算不通。
-pub const EXPORT_TWO_STAGE: &str = "；已按面积平均二次缩放到目标长边（render crate 的 resize_to）"; // EN: (area-average second stage to the target long side)
+pub const EXPORT_TWO_STAGE: &str = "；已按上游 PreviewRaster 口径二次合成到目标尺寸（等比居中 + 不透明黑底 + 最近邻）"; // EN: (second pass composed to the target size per upstream PreviewRaster: aspect-fit, centred, opaque black, nearest-neighbour)
+// ⚠ 订正（2026-11-08）：本常量原文是
+//   「；已按面积平均二次缩放到目标长边（render crate 的 resize_to）」——**那句已成假话**：
+//   导出第二段已改为上游 `PreviewRaster.cs:15-19,35-38` 口径（等比 + 居中 + 不透明黑底 + 最近邻），
+//   既不是面积平均、也不再走 `compare::resize_to`（该函数保留未删，仍服务 overview mip 预缩与诊断）。
+//   原文保留作历史引用，见台账 §8.66 / `export.rs` 模块文档 §四。
 /// `--minimap-max-side` 的值非法（太小 / 不是整数）。
 pub const EXPORT_ERR_BAD_MAX_SIDE: &str = "minimap-max-side 必须是整数像素且不小于 {min}（收到：{got}）"; // EN: minimap-max-side must be an integer >= {min}
 

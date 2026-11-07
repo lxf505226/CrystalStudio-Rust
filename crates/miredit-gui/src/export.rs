@@ -70,28 +70,63 @@
 //! 本节下面的「长边两段式」是**本仓兼容链**（`--minimap-max-side`），
 //! 由 [`export_minimap`] 原样保留，护栏与逐字节输出都不变；它**不再是官方缺省口径**。
 //!
+//! ⚠ **订正（2026-11-08）**：上一句里的「逐字节输出都不变」**只对护栏与选档成立**，
+//! 对**走了第二段**的发次已不成立 —— 第二段按上游 `PreviewRaster.cs:15-19,35-38`
+//! 从面积平均换成了「等比 + 居中 + 不透明黑底 + 最近邻」，见下一小节。
+//! 原文保留作历史引用（它说的是 2026-11-06 那次上移/接线没有改字节，与本次无关）。
+//!
 //! 见 [`pick_minimap_scale`]：从大到小试 `One → Half → Quarter`，取**第一个**同时
 //! 满足「两边 ≤ [`MINIMAP_MAX_SIDE`]」且「整幅输出过得了 [`MAX_EXPORT_SIDE`] /
 //! [`MAX_EXPORT_BYTES`]」的档位。`Two` 永远不选 —— 小地图放大没有意义。
 //!
-//! 最小档仍超目标长边时，**不报错、也不超限交付**，而是走**第二段面积平均缩放**
-//! （[`downscale_to_fit`] → [`fit_ratio`]），把整幅缩到目标长边以内，
+//! 最小档仍超目标长边时，**不报错、也不超限交付**，而是走**第二段最终合成**
+//! （[`downscale_to_fit`] → [`fit_ratio`]），把整幅落到目标尺寸，
 //! 且**长宽比与 1× 渲染逐位相等**（判据 `w*ch*32 == h*cw*48`）。
 //!
-//! ## 为什么第二段用 `compare::resize_to`，而不是 `resample::盒式_流式`
+//! ## 第二段用哪个入口：`preview_raster::fit_centered_opaque`
 //!
-//! 两条都是 render crate 自己的面积平均实现，但**只有前者是公开的**：
+//! ⚠ **订正（2026-11-08）**：本节原文标题是
+//! 「## 为什么第二段用 `compare::resize_to`，而不是 `resample::盒式_流式`」，
+//! 原文如下（**保留作历史引用**）：
 //!
-//! | 入口 | 可见性 | 能不能从本 crate 调 |
+//! > 两条都是 render crate 自己的面积平均实现，但**只有前者是公开的**：
+//! >
+//! > | 入口 | 可见性 | 能不能从本 crate 调 |
+//! > |---|---|---|
+//! > | `resample::盒式_流式` | `lib.rs:162` `mod resample;` + `resample.rs:165` `pub(crate)` | **不能**（私有模块 + crate 内可见）|
+//! > | `compare::resize_to` | `lib.rs:166` `pub mod compare;` + `compare.rs:154` `pub fn` | **能** |
+//! >
+//! > 两者语义同类（面积平均、确定性、不预乘）；内存上 `resize_to` 更省
+//! > （额外只有每个目标像素一个 `[u64; 4]` 累加器，峰值 ≈ 源图 + 目标图），
+//! > 而 `resample::缩放`（整幅预乘版）在 `8400×5600` 上要 `47 MP × 32 B ≈ 1.5 GB` —— 那条不能碰。
+//! > ⇒ 本模块固定用 `compare::resize_to`，**不**去动 `miredit-render` 的可见性
+//! > （为一个已有等价公开入口再加一条 API 表面，只会多一个无人消费的契约）。
+//!
+//! **实为**：那段论证只回答了「哪个**面积平均**入口能调」，
+//! 而「第二段该不该是面积平均」这个**前提本身就是错的**。上游导出成图的最终合成是
+//! `PreviewRaster.Create(drawings, area, width, height, …, padding: 0, opaque: true)`
+//! （调用点 `MinimapExporter.cs:56-57`），它是**等比 + 居中 + 不透明黑底 + 最近邻**：
+//!
+//! | 口径 | 上游位置 | 原式 |
 //! |---|---|---|
-//! | `resample::盒式_流式` | `lib.rs:162` `mod resample;` + `resample.rs:165` `pub(crate)` | **不能**（私有模块 + crate 内可见）|
-//! | `compare::resize_to` | `lib.rs:166` `pub mod compare;` + `compare.rs:154` `pub fn` | **能** |
+//! | 等比缩放比 | `PreviewRaster.cs:15` | `scale = Math.Min((width-padding*2)/area.Width, (height-padding*2)/area.Height)` |
+//! | 居中偏移 | `PreviewRaster.cs:16-17` | `offsetX=(width-area.Width*scale)/2-area.X*scale`（`offsetY` 同形）|
+//! | 不透明黑底 | `PreviewRaster.cs:19` | `if(opaque) for(int i=3;i<output.Length;i+=4) output[i]=255;`（RGB 保 0）|
+//! | 最近邻取样 | `PreviewRaster.cs:35,38` | `sy=(int)((y+.5-top)*pixels.Height/h)`、`sx=(int)((x+.5-left)*pixels.Width/w)` |
 //!
-//! 两者语义同类（面积平均、确定性、不预乘）；内存上 `resize_to` 更省
-//! （额外只有每个目标像素一个 `[u64; 4]` 累加器，峰值 ≈ 源图 + 目标图），
-//! 而 `resample::缩放`（整幅预乘版）在 `8400×5600` 上要 `47 MP × 32 B ≈ 1.5 GB` —— 那条不能碰。
-//! ⇒ 本模块固定用 `compare::resize_to`，**不**去动 `miredit-render` 的可见性
-//! （为一个已有等价公开入口再加一条 API 表面，只会多一个无人消费的契约）。
+//! 面积平均只出现在上游的 **mip 预缩**（`OverviewPixels.cs:7-42` 的 `Reduce`），
+//! 作用在**逐帧解码**阶段 —— 本仓对应物是第一段 `try_render_region_scaled_with` 的
+//! 缩小档（`resample::盒式_流式`），**保持不动**。
+//! 第二段（导出成图）已按上游改为
+//! [`miredit_render::preview_raster::fit_centered_opaque`]
+//! （crate 根也 re-export 成 [`miredit_render::fit_centered_opaque`]：`lib.rs` 的
+//! `pub mod preview_raster;` + `pub use preview_raster::fit_centered_opaque;`
+//! —— **这里不写行号**：render crate 正被并行改动，行号会漂，符号名不会），
+//! 与 `miredit-web` 的 `GET /api/export/minimap` **同一个入口**。
+//!
+//! `compare::resize_to`（`compare.rs:154`）**保留未删、签名不变**：它仍是
+//! `overview`（画布上屏的总览 mip 预缩）与 `compare_blocks`（诊断）的实现，
+//! 只是本模块**不再用它**。
 //!
 //! # 五、诚实边界
 //!
@@ -170,7 +205,8 @@ pub use miredit_render::tiled::{
 };
 
 /// 小地图**本仓兼容链**的目标长边（像素）。选档时要求输出两边都不超过它；
-/// 最小档仍超 ⇒ 再走一次**面积平均缩放**（[`downscale_to_fit`]）把整幅缩到它以内。
+/// 最小档仍超 ⇒ 再走一次**第二段最终合成**（[`downscale_to_fit`]：等比 + 居中 +
+/// 不透明黑底 + 最近邻，对齐上游 `PreviewRaster.cs:15-19,35-38`）把整幅落到它以内。
 ///
 /// ⚠ **原判断「原版不可得 ⇒ 自定值」已失效，@acfbbf8a 回源订正（2026-11-06）**：
 /// 官方尺寸口径见 `I:\cs-new\MinimapExporter.cs` + `MinimapExportWindow.cs`：
@@ -190,7 +226,12 @@ pub use miredit_render::tiled::{
 /// ⇒ 2048 仅保留给本仓旧开关 `--minimap-max-side` 的兼容链，**官方缺省不再经过它**；
 /// 新 CLI / 菜单默认走 [`export_minimap_sized`] + [`MinimapSize::Default`]。
 /// 改这个数**不会**改变「采样由谁做」：第一段仍是 `try_render_region_scaled_with`，
-/// 第二段是 render crate 的面积平均缩放 —— 本模块一行滤镜都没有。
+/// 第二段是 render crate 的最终合成入口 —— 本模块一行滤镜都没有。
+///
+/// ⚠ **订正（2026-11-08）**：原文这句是「第二段是 render crate 的**面积平均缩放**」。
+/// 实为：第二段按上游 `PreviewRaster.cs:15-19,35-38` 是
+/// **等比 + 居中 + 不透明黑底 + 最近邻**（[`miredit_render::fit_centered_opaque`]），
+/// 面积平均只在上游 mip 预缩 `OverviewPixels.cs:7-42`。原文保留作历史引用。
 pub const MINIMAP_MAX_SIDE: u32 = 2048;
 
 /// `--minimap-max-side` 允许的最小值。
@@ -245,7 +286,16 @@ pub struct ExportReport {
     pub tiles: u32,
     /// 扩边格数（逐块不同，这里报**最大**的那个）。
     pub margin: u32,
-    /// 是否走了第二段面积平均缩放（小地图才可能 `true`）。
+    /// 第二段是否**真的改了尺寸**（小地图才可能 `true`）。
+    ///
+    /// ⚠ **订正（2026-11-08）**：原文档写的是「是否走了第二段**面积平均缩放**」。
+    /// 第二段已按上游 `PreviewRaster.cs:15-19,35-38` 换成
+    /// [`miredit_render::fit_centered_opaque`]（等比 + 居中 + 不透明黑底 + 最近邻），
+    /// 且**只要给了目标尺寸就一定会跑**（同尺寸时 `scale == 1`、`left == top == 0`，
+    /// 但 `opaque: true` 的 alpha 覆盖照样落）⇒ 本字段不能再表示「第二段跑没跑」，
+    /// 只表示「第二段有没有真的把图缩小」。
+    /// ⇒ `false` **不等于**输出与 [`render_tiled`] 逐字节相同
+    /// （同尺寸时源里 alpha < 255 的像素仍会被铺成不透明黑）。
     pub two_stage: bool,
     /// 小地图是否走官方尺寸链（[`export_minimap_sized`]）；
     /// `false` = 本仓旧「`--minimap-max-side` 长边两段式」兼容链。
@@ -270,7 +320,7 @@ pub struct ExportReport {
 /// 1. 两边都 ≤ `max_side`（用户给的目标长边），且
 /// 2. 整幅输出过得了 [`MAX_EXPORT_SIDE`] / [`MAX_EXPORT_BYTES`]（[`minimap_scale_fits`]）
 ///
-/// 的档位；都不行就用 `Quarter`（最小档，之后由 [`downscale_to_fit`] 走第二段面积平均缩放）。
+/// 的档位；都不行就用 `Quarter`（最小档，之后由 [`downscale_to_fit`] 走第二段最终合成）。
 ///
 /// `Two` 不参与：小地图是「整图缩略」，放大没有意义（而且 `Two` 只会更快撞护栏）。
 ///
@@ -522,30 +572,49 @@ pub fn export_selection(
     finish(img, target, RenderScale::One, false, false, options)
 }
 
-/// **第二段：把已渲好的整幅按面积平均缩到 `max_side` 以内**（长宽比精确保持）。
+/// **第二段：把已渲好的整幅**落到目标尺寸（等比 + 居中 + 不透明黑底 + 最近邻）。
 ///
 /// # 采样归属（这是本模块最容易被误解的一处）
 ///
 /// - **第一段**（决定每个像素取哪一格、哪一帧）**只能**由 `miredit-render` 做 ——
 ///   即 [`render_tiled`] 里的 `try_render_region_scaled_with`；
-/// - **第二段**只是「把一张已经渲好的 RGBA 图整体缩小」，不再碰任何地图语义 ——
-///   这里复用 `miredit_render::compare::resize_to`（面积平均 / 确定性 / 不预乘）。
+/// - **第二段**只是「把一张已经渲好的 RGBA 图整体落到目标宽高」，不再碰任何地图语义 ——
+///   这里复用 `miredit_render::preview_raster::fit_centered_opaque`
+///   （等比 / 居中 / 不透明黑底 / 最近邻，逐字对齐上游 `PreviewRaster.cs:15-19,35-38`）。
 ///   ⇒ 本模块**仍然一行滤镜都没写**。
 ///
-/// # 为什么是 `compare::resize_to` 而不是 `resample::盒式_流式`
+/// # 为什么是 `fit_centered_opaque` 而不是 `compare::resize_to`
 ///
-/// `resample` 在 `miredit-render` 里是**私有模块**（`lib.rs:162` `mod resample;`，
-/// 两个函数都是 `pub(crate)`）⇒ 从本 crate **物理上调不到**；要用它必须改
-/// `miredit-render`（不在本单写域）。
-/// 公开可用的面积平均入口只有 `compare::resize_to`（`compare.rs:154`，文档原话
-/// 「面积平均缩放（确定性…）」），语义与 `盒式_流式` 同类。
+/// ⚠ **订正（2026-11-08）**：本节原文标题是
+/// 「# 为什么是 `compare::resize_to` 而不是 `resample::盒式_流式`」，原文如下
+/// （**保留作历史引用**）：
 ///
-/// 内存上它也更省：`盒式_流式` 每行要一份 `sw × 32 B` 的预乘缓冲（8400 宽 = 269 KB，不大），
-/// 但 `resample::缩放`（整幅预乘版）要 `47 MP × 32 B ≈ 1.5 GB` —— 那才是必须避开的那个。
-/// `resize_to` 的额外内存只有**每个目标像素一个 `[u64; 4]` 累加器**，
-/// 峰值 ≈ 源图 + 目标图（`8400×5600×4 = 188 MB` + `2046×1364×4 = 11 MB`）。
+/// > `resample` 在 `miredit-render` 里是**私有模块**（`lib.rs:162` `mod resample;`，
+/// > 两个函数都是 `pub(crate)`）⇒ 从本 crate **物理上调不到**；要用它必须改
+/// > `miredit-render`（不在本单写域）。
+/// > 公开可用的面积平均入口只有 `compare::resize_to`（`compare.rs:154`，文档原话
+/// > 「面积平均缩放（确定性…）」），语义与 `盒式_流式` 同类。
+/// >
+/// > 内存上它也更省：`盒式_流式` 每行要一份 `sw × 32 B` 的预乘缓冲（8400 宽 = 269 KB，不大），
+/// > 但 `resample::缩放`（整幅预乘版）要 `47 MP × 32 B ≈ 1.5 GB` —— 那才是必须避开的那个。
+/// > `resize_to` 的额外内存只有**每个目标像素一个 `[u64; 4]` 累加器**，
+/// > 峰值 ≈ 源图 + 目标图（`8400×5600×4 = 188 MB` + `2046×1364×4 = 11 MB`）。
 ///
-/// `target = Some((w,h))` 时**直接按官方指定像素尺寸**做第二段面积平均缩放
+/// **实为**：原文只论证了「哪个**面积平均**入口能调」，但「第二段该不该是面积平均」
+/// 这个前提是错的 —— 上游导出成图的最终合成（调用点 `MinimapExporter.cs:56-57` →
+/// `PreviewRaster.cs:15-19,35-38`）是**最近邻**，面积平均只在上游的 mip 预缩
+/// `OverviewPixels.cs:7-42`（作用在逐帧解码阶段，本仓对应物是第一段的缩小档）。
+/// 已按上游改为 `preview_raster::fit_centered_opaque`（crate 根也有同名 re-export）。
+///
+/// 内存上两者同量级：`fit_centered_opaque` 额外只有**目标图 + 一张横向取样表**
+/// （`x1-x0` 个 `u32`），峰值 ≈ 源图 + 目标图；`resize_to` 额外只有每个目标像素一个
+/// `[u64; 4]` 累加器。两者都不是 `resample::缩放`（整幅预乘版，`8400×5600` 上要
+/// `47 MP × 32 B ≈ 1.5 GB`）那条 —— 那条仍然不能碰。
+///
+/// `compare::resize_to` **保留未删、签名不变**：`overview`（画布上屏的总览 mip 预缩）
+/// 与 `compare_blocks`（诊断）仍在用它，本模块只是不再用它。
+///
+/// `target = Some((w,h))` 时**直接按官方指定像素尺寸**做第二段最终合成
 /// （官方 `PreviewRaster.Create(..., width, height)` 的等价落点）；`None` 才是本仓旧
 /// 「保持格比例、缩到长边以内」的兼容链。`cw/ch` 只被兼容链使用。
 ///
@@ -562,20 +631,32 @@ fn downscale_to_fit(
         None => fit_ratio(img.width, img.height, cw, ch, max_side)?,
     };
     let Some((tw, th)) = 目标 else {
+        // 兼容链「已经装得下」：**没有目标尺寸可落** ⇒ 原样返回，不做最终合成。
+        // （这与「有目标尺寸、只是恰好同尺寸」不是一回事，后者见下一条 ⚠ 订正。）
         return Ok((img, false));
     };
-    // 官方默认 8400×5600 与 Quarter 原生输出恰好同尺寸：resize_to 只会 clone，
-    // 这时回执不能虚报「两段式 yes」（禁假数据）。
-    if img.width == tw && img.height == th {
-        return Ok((img, false));
-    }
-    // 交给 render crate 的公开面积平均缩放（不自己写滤镜）
+    // ⚠ **订正（2026-11-08）**：这里原本还有一条
+    //
+    //     if img.width == tw && img.height == th { return Ok((img, false)); }
+    //
+    // 原文理由是「官方默认 8400×5600 与 Quarter 原生输出恰好同尺寸：resize_to 只会
+    // clone，这时回执不能虚报『两段式 yes』」。换成 `fit_centered_opaque` 后**必须删掉**：
+    // `compare::resize_to` 在同尺寸时确实 `return img.clone()`（`compare.rs:155-157`），
+    // 但上游 `PreviewRaster.cs:19` 的 `opaque: true` 是**无条件**把 alpha 写成 255
+    // （RGB 保 0 ⇒ 不透明黑底）—— 同尺寸时 `scale == 1`、`left == top == 0` 只是
+    // **几何恒等**，底色这一步照样要落。跳过它会让 GUI 与 `miredit-web` 的
+    // `GET /api/export/minimap`（那边明确没有同尺寸短路，见
+    // `routes/export.rs:306-307`「不再有『同尺寸就跳过』的短路」）在同一张图、
+    // 同一目标尺寸上产出**不同字节**。
+    // 回执的诚实性改由下面 `真的缩了` 承担：`two_stage` 只报「尺寸有没有真的变小」。
+    let 真的缩了 = img.width != tw || img.height != th;
+    // 交给 render crate 的公开最终合成入口（不自己写滤镜）
     let src = miredit_render::PngImage {
         width: img.width,
         height: img.height,
         rgba: img.rgba,
     };
-    let out = miredit_render::compare::resize_to(&src, tw, th);
+    let out = miredit_render::fit_centered_opaque(&src, tw, th);
     drop(src);
     Ok((
         ExportImage {
@@ -585,16 +666,22 @@ fn downscale_to_fit(
             tiles: img.tiles,
             margin: img.margin,
         },
-        true,
+        真的缩了,
     ))
 }
 
 /// **导出小地图**：整张地图先按 [`pick_minimap_scale`] 选出的档位渲，再（必要时）
-/// 用面积平均缩到 `max_side` 以内。
+/// 落到 `max_side` 以内（第二段 = 等比 + 居中 + 不透明黑底 + 最近邻，见 [`downscale_to_fit`]）。
 ///
 /// `options`：**渲染选项**（门态 + 光照档位）。门偏移与光照遮罩都在 1× 合成阶段
 /// 生效、缩放只是纯后处理 ⇒ 缩完的图与「同一组选项的画布」一致（模块文档 §六/§七）。
-/// 缺省 [`RenderOptions::default()`] = 闭门 + 白天 ⇒ 与接线前逐字节相同。
+/// 缺省 [`RenderOptions::default()`] = 闭门 + 白天 ⇒ 与**门态/光照接线前**逐字节相同。
+///
+/// ⚠ **订正（2026-11-08）**：上面这句「逐字节相同」只对**没走第二段**的发次成立。
+/// 第二段已按上游 `PreviewRaster.cs:15-19,35-38` 换成
+/// [`miredit_render::fit_centered_opaque`]（等比 + 居中 + 不透明黑底 + 最近邻），
+/// 它会把源里 alpha < 255 的像素铺成不透明黑 ⇒ 走第二段的发次与 2026-11-08 之前
+/// **必然不同字节**（那正是对齐上游要改的东西）。原文保留作历史引用。
 ///
 /// 输出尺寸与长宽比：
 /// - 一档装得下 ⇒ 尺寸 = `round(宽*48*f) × round(高*32*f)`，比例与 1× 渲染恒等；
@@ -630,10 +717,21 @@ pub fn export_minimap(
 ///
 /// 流程：`valid_minimap_size` 先拒绝非法尺寸（中文原因、不写文件）→
 /// `pick_official_scale` 把官方 16 级 mip 有据映射到本仓 4 档 →
-/// 复用既有 [`render_tiled`] 分块护栏 → `compare::resize_to` 精确落到指定宽高。
+/// 复用既有 [`render_tiled`] 分块护栏 →
+/// [`miredit_render::fit_centered_opaque`] 等比 + 居中 + 不透明黑底 + 最近邻落到指定宽高。
+///
+/// ⚠ **订正（2026-11-08）**：本段原文是
+/// 「…→ `compare::resize_to` 精确落到指定宽高。」与
+/// 「第二段只做公开的**面积平均缩放** —— **有据映射，不是自定值**」。
+/// **实为**：上游 `PreviewRaster.Create` 的最终合成是
+/// **最近邻 + 等比居中 + 不透明黑底**（`PreviewRaster.cs:15-19,35-38`，调用点
+/// `MinimapExporter.cs:56-57` 传的就是 `padding: 0, opaque: true`）；
+/// 面积平均只在上游的 mip 预缩 `OverviewPixels.cs:7-42`。
+/// 已按上游改入口，原文保留作历史引用。
+///
 /// 官方 `PreviewRaster.Create` 从 **overview mip 精灵** 重绘到任意 `width×height`
 /// （`MinimapExporter.cs:46-57`）；本仓没有 mip 精灵缓存，故第一段按最接近且不越界的
-/// 档位出整幅 RGBA，第二段只做公开的面积平均缩放 —— **有据映射，不是自定值**，
+/// 档位出整幅 RGBA，第二段做上游那条最终合成 —— **有据映射，不是自定值**，
 /// 也不改 render crate 的任何常量。门态 + 光照档位整份 `RenderOptions` 透传，
 /// 缺省仍是闭门 + 白天。
 pub fn export_minimap_sized(
