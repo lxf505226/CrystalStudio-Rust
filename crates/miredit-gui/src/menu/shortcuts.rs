@@ -15,6 +15,9 @@
 //! | `Ctrl+Shift+S`（另存为）| 同上 → `dispatch_menu(Action::SaveAs)` → `Overlay::SaveAs`（2026-11-05 起真实现）|
 //! | `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` | 同上（重做同时接受官方键与本仓旧键）|
 //! | `F` / `M` / `O` / `[` `]` / `Enter` | 同上 + [`crate::selection_ops`] + [`crate::stamp_place`] |
+//! | `B` / `P` / `F` / `E` / `M` / `O` / `V` / `K`（工具，**合并一行**）| [`crate::app::MireditApp::handle_keys`]（2026-11-07 起真绑定；`P`/`K` 的**工具**本身尚未接线，表里如实标注）|
+//! | `C`（低位/高位阻挡标记同开同关）| 同上（上游 `MainWindow.axaml.cs:997`）|
+//! | `W` `A` `S` `D`（平移，每次 48 屏幕像素）| 同上 → [`crate::canvas_view::CanvasView::pan_by_screen`] |
 //! | `G`（单元格网格） | 同上 → [`crate::menu::action::apply`] → [`crate::grid`]（2026-11-05 起真实现）|
 //! | `Ctrl+C/X/V` / `Delete` / `Ctrl+Shift+V` | [`crate::app::MireditApp::handle_sel_keys`] |
 //! | 空格+拖动 / 中键拖动 / 滚轮 | [`crate::app::MireditApp::interact`] |
@@ -87,25 +90,29 @@ pub const GROUPS: &[Group] = &[
     },
     Group {
         title: tx::SC_GROUP_VIEW,
-        rows: &[Row {
-            keys: tx::KEY_G,
-            what: tx::SC_TOGGLE_GRID,
-        }],
+        rows: &[
+            Row {
+                keys: tx::KEY_G,
+                what: tx::SC_TOGGLE_GRID,
+            },
+            Row {
+                keys: tx::KEY_C,
+                what: tx::SC_TOGGLE_COLLISION,
+            },
+            Row {
+                keys: tx::KEY_WASD,
+                what: tx::SC_PAN_KEYS,
+            },
+        ],
     },
     Group {
         title: tx::SC_GROUP_TOOLS,
         rows: &[
+            // R40：八个工具键**合并成一行**（官方 `MainWindow.axaml.cs:989` 本来就是同一行
+            // `switch`；分八行会把浮层撑爆，也读不出"这是一组同类绑定"）
             Row {
-                keys: tx::KEY_F,
-                what: tx::SC_TOOL_FILL,
-            },
-            Row {
-                keys: tx::KEY_M,
-                what: tx::SC_TOOL_SELECT,
-            },
-            Row {
-                keys: tx::KEY_O,
-                what: tx::SC_TOOL_STAMP,
+                keys: tx::KEY_TOOL_KEYS,
+                what: tx::SC_TOOL_KEYS,
             },
             Row {
                 keys: tx::KEY_BRACKETS,
@@ -284,6 +291,40 @@ mod tests {
         );
     }
 
+    /// **每行的「键」与「说明」都放得进各自那一栏**（放不下就会被画到面板边界外 ⇒ 截断）。
+    ///
+    /// 2026-11-07 实测教训：工具键合并成一行后，说明最初写成
+    /// 「工具：画笔 / 铅笔 / 填充 / 橡皮 / 选择 / 印章 / 吸管 / 克隆（后二未接线）」，
+    /// 排版宽超过说明列（560 − 2×18 − 170 = **354px**），截图里被面板右边界截断。
+    /// 这条用**真排版宽度**（`paint::text_w`，与绘制同一个 `BODY_FONT`）守，不靠目测。
+    #[test]
+    fn 每行两栏都放得下() {
+        let ctx = crate::fonts::measure_ctx();
+        let screen = Rect::from_min_size(
+            pos2(0.0, 0.0),
+            egui::vec2(m::WINDOW_W, m::WINDOW_H),
+        );
+        let p = Painter::new(ctx, egui::LayerId::debug(), screen);
+        let 说明列宽 = m::SHORTCUTS_W - 2.0 * m::SHORTCUTS_PAD - m::SHORTCUTS_KEY_COL_W;
+        for g in GROUPS {
+            for row in g.rows {
+                let 键宽 = crate::paint::text_w(&p, row.keys, m::BODY_FONT);
+                assert!(
+                    键宽 <= m::SHORTCUTS_KEY_COL_W,
+                    "键「{}」排版宽 {键宽}px 超过键列 {}px",
+                    row.keys,
+                    m::SHORTCUTS_KEY_COL_W
+                );
+                let 说明宽 = crate::paint::text_w(&p, row.what, m::BODY_FONT);
+                assert!(
+                    说明宽 <= 说明列宽,
+                    "说明「{}」排版宽 {说明宽}px 超过说明列 {说明列宽}px（会被截断）",
+                    row.what
+                );
+            }
+        }
+    }
+
     /// 每一行的键与说明都非空，且键**不重复**（重复说明有两处绑同一个键，必然有一处是错的）。
     #[test]
     fn 键唯一且说明非空() {
@@ -317,9 +358,10 @@ mod tests {
             "Ctrl+Shift+S",
             "Ctrl+Z",
             "G",
-            "F",
-            "M",
-            "O",
+            // 2026-11-07（R9-F2 / R40）：八个工具键合并成一行，另加阻挡开关与平移
+            "B/P/F/E/M/O/V/K",
+            "C",
+            "W A S D",
             "Ctrl+C",
             "Delete",
             "F1",

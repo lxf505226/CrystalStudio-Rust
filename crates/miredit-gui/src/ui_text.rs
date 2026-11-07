@@ -496,8 +496,14 @@ pub const MENU_DARK_OFF: &str = "深色模式：关（已写入设置文件）";
 /// 为什么带上「48×32」：网格的几何只有这一组数（[`crate::metrics::CELL_W`] /
 /// [`crate::metrics::CELL_H`]），回执里写出来，用户点完就知道自己看到的是什么间距的线。
 pub const MENU_CELL_GRID_ON: &str = "单元格网格：开（世界格 48×32）"; // EN: Cell grid: on (48×32)
+/// **阻挡标记开**回执（键 `C`；上游 `MainWindow.axaml.cs:997` 同时打开低/高两个通道）。
+pub const MENU_COLLISION_ON: &str = "阻挡标记：开（低位 + 高位）"; // EN: Collision markers: on (low + high)
+
 /// 单元格网格关闭回执。
 pub const MENU_CELL_GRID_OFF: &str = "单元格网格：关"; // EN: Cell grid: off
+
+/// **阻挡标记关**回执（键 `C`，再按一次）。
+pub const MENU_COLLISION_OFF: &str = "阻挡标记：关"; // EN: Collision markers: off
 
 /// 开启门打开回执（`视图 → 开启门`）。
 ///
@@ -613,6 +619,16 @@ pub const SC_TOOL_FILL: &str = "填充工具"; // EN: Fill tool
 pub const SC_TOOL_SELECT: &str = "选择工具"; // EN: Select tool
 /// 动作名：印章工具。
 pub const SC_TOOL_STAMP: &str = "印章工具"; // EN: Stamp tool
+/// 工具键（八个，官方 `MainWindow.axaml.cs:989` 同一行：`B/P/F/E/M/O/V/K`）。
+///
+/// ⚠ 其中 **`P`（铅笔）与 `K`（克隆）本仓尚未接线**：键只切到那个槽位，
+/// 画布上落笔不改地图、状态栏如实说"未接线"（与点该图标同一结果）。表里合并成一行，
+/// 是为了别让快捷键浮层被五个几乎同义的行撑爆。
+pub const SC_TOOL_KEYS: &str = "工具切换（铅笔/克隆未接线）"; // EN: Switch tool (pencil/clone not wired)
+/// 官方 `Key.C`：低位/高位阻挡标记同开同关（`MainWindow.axaml.cs:997`）。
+pub const SC_TOGGLE_COLLISION: &str = "低位 / 高位阻挡标记 开 / 关"; // EN: Toggle low/high collision markers
+/// 官方 `W/A/S/D`：每次平移 48 **屏幕**像素（`PanBy`，`MapViewport.Minimap.cs:11-22`）。
+pub const SC_PAN_KEYS: &str = "平移视图（每次 48 屏幕像素）"; // EN: Pan view (48 screen px per press)
 /// 动作名：笔刷尺寸 ±2。
 pub const SC_BRUSH_SIZE: &str = "笔刷尺寸 ±2（夹 3..31）"; // EN: Brush size ±2 (clamped 3..31)
 /// 动作名：放大。
@@ -701,6 +717,14 @@ pub const KEY_CTRL_SHIFT_S: &str = "Ctrl+Shift+S"; // EN: Ctrl+Shift+S
 pub const KEY_CTRL_SHIFT_N: &str = "Ctrl+Shift+N"; // EN: Ctrl+Shift+N
 /// 键名：`G`（官方「单元格网格」的手势）。
 pub const KEY_G: &str = "G"; // EN: G
+/// 键：八个工具键（官方 `MainWindow.axaml.cs:989` 的同一行 `switch`）。
+///
+/// 快捷键浮层里合并成一行（`P`/`K` 的工具尚未接线，见 [`SC_TOOL_KEYS`]）。
+pub const KEY_TOOL_KEYS: &str = "B/P/F/E/M/O/V/K"; // EN: B/P/F/E/M/O/V/K
+/// 键：`C`（阻挡标记开/关）。
+pub const KEY_C: &str = "C"; // EN: C
+/// 键：`W A S D`（平移）。
+pub const KEY_WASD: &str = "W A S D"; // EN: W A S D
 /// 键名：`Ctrl+Z`。
 pub const KEY_CTRL_Z: &str = "Ctrl+Z"; // EN: Ctrl+Z
 /// 键名：`Ctrl+Shift+Z`（官方重做键）与 `Ctrl+Y`（本仓另接受）。
@@ -851,6 +875,9 @@ pub const DIAG_MENU_DUMP_ROW: &str = "[菜单] {menu} #{n} {id} | {label} | {sho
 pub const DIAG_MENU_DUMP_TAIL: &str = "[菜单] 已实现 {ready} / 需先开图 {needmap} / 未实现 {todo}"; // EN: [menu] summary
 /// 菜单项被点击（**灰显项也要打**：点了没动作必须有可机器抓的记录）。
 pub const DIAG_MENU_CLICK: &str = "[菜单] 点击 {id}（{label}）：{result}"; // EN: [menu] click
+
+/// **裸键动作**：`C` 这类不进菜单的键盘动作（脚本 grep 用）。
+pub const DIAG_KEY_ACTION: &str = "[键] {key}：{what}"; // EN: [key] {key}: {what}
 /// `--menu-click` 排的帧号**晚于截图帧** ⇒ 这一条不会被执行（启动时说清楚，不静默）。
 ///
 /// 为什么单独一条而不是复用 `[参数] 无法解析`：那条的意思是"参数写错了"，
@@ -2096,6 +2123,15 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_DARK_OFF", MENU_DARK_OFF),
     ("MENU_CELL_GRID_ON", MENU_CELL_GRID_ON),
     ("MENU_CELL_GRID_OFF", MENU_CELL_GRID_OFF),
+    ("MENU_COLLISION_ON", MENU_COLLISION_ON),
+    ("MENU_COLLISION_OFF", MENU_COLLISION_OFF),
+    ("DIAG_KEY_ACTION", DIAG_KEY_ACTION),
+    ("KEY_TOOL_KEYS", KEY_TOOL_KEYS),
+    ("KEY_C", KEY_C),
+    ("KEY_WASD", KEY_WASD),
+    ("SC_TOOL_KEYS", SC_TOOL_KEYS),
+    ("SC_TOGGLE_COLLISION", SC_TOGGLE_COLLISION),
+    ("SC_PAN_KEYS", SC_PAN_KEYS),
     ("MENU_CELL_HOVER", MENU_CELL_HOVER),
     ("MENU_CELL_HOVER_ON", MENU_CELL_HOVER_ON),
     ("MENU_CELL_HOVER_OFF", MENU_CELL_HOVER_OFF),

@@ -219,6 +219,26 @@ impl CanvasView {
         self.snap();
     }
 
+    /// **按屏幕像素平移视口**（= 上游 `MapViewport.Minimap.cs:11-22` 的 `PanBy(offset)`）。
+    ///
+    /// 上游：`origin += offset`，而 `origin` 是**屏幕像素**（`VisibleWorldBounds =
+    /// (-origin.X / Zoom, -origin.Y / Zoom, …)`）⇒ `W/A/S/D` 每次平移 **48 屏幕像素**，
+    /// 与缩放无关（**不是** 48 格、也不是 48 世界像素）。
+    ///
+    /// 本仓的 `pan_x/pan_y` 是**视口左上角的世界像素** ⇒ 换算是 `pan ± dx / scale`。
+    /// 平移后 `snap()` 一次：把 `pan * scale` 取整（落在整屏幕像素上），与上游"整数屏幕偏移"
+    /// 同效，也避免连续平移累积出半像素糊边。
+    ///
+    /// `dx > 0` = 视口向右、`dy > 0` = 视口向下（**移动的是相机**，不是内容）。
+    pub fn pan_by_screen(&mut self, dx: f32, dy: f32) {
+        if !dx.is_finite() || !dy.is_finite() || self.scale <= 0.0 {
+            return;
+        }
+        self.pan_x += dx / self.scale;
+        self.pan_y += dy / self.scale;
+        self.snap();
+    }
+
     /// **「适应地图」的缩放倍数**（`fit_map` 与 resize 重 fit 共用的唯一算法）。
     ///
     /// 上游 `MapViewport.cs:166@901dbe2f`：

@@ -459,6 +459,12 @@ impl StampPanel {
         self.focus
     }
 
+    /// **测试用**：直接置/清搜索框焦点（生产路径只有"点搜索框"才会置，见 `draw.rs` 的搜索段）。
+    #[cfg(test)]
+    pub fn set_focus(&mut self, on: bool) {
+        self.focus = on;
+    }
+
     /// 分类下拉是否展开。
     pub fn combo_open(&self) -> bool {
         self.combo_open

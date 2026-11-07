@@ -278,6 +278,15 @@ impl PaletteState {
         self.focus
     }
 
+    /// **测试用**：直接置/清搜索框焦点（生产路径只有"点搜索框"才会置，见 [`Self::interact`]）。
+    ///
+    /// 存在的理由：`app` 的裸键守卫要测「搜索框有焦点时 `B`/`C`/`W A S D` 不许生效」，
+    /// 而真点一次搜索框要跑一整帧 UI（无显示器环境下代价高且脆）。
+    #[cfg(test)]
+    pub fn set_focus(&mut self, on: bool) {
+        self.focus = on;
+    }
+
     /// 底部提示（没有就 `None`）。
     pub fn note(&self) -> Option<&str> {
         self.note.as_deref()

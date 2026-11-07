@@ -1069,6 +1069,95 @@ impl MireditApp {
                 ctx.request_repaint();
             }
         }
+        // ── 工具键 `B/P/E/V/K` + 阻挡开关 `C` + 平移 `W/A/S/D`（R9-F2，2026-11-07） ──
+        //
+        // 上游 `MainWindow.axaml.cs:989`：`B=>Brush / P=>Pencil / F=>Bucket / E=>Eraser /
+        // M=>Select / O=>Stamp / V=>Pickup / K=>Clone`；`:997` 单独一条 `C`：
+        // `bool show = !Viewport.CollisionVisible; LowCollisionVisible.IsChecked = show;
+        //  HighCollisionVisible.IsChecked = show;`（`MapViewport.cs:82-85`：getter = 低 **或** 高，
+        //  setter 同时写两边）；`:978-984` 的 `W/A/S/D` 走 `Viewport.PanBy(...)` 每次 **48 屏幕像素**。
+        //
+        // 三条纪律（别改）：
+        // ① 全部**裸键**（`plain` = 不带 Ctrl/Alt）—— `Ctrl+C` 是复制、`Ctrl+S` 是保存、
+        //    `Ctrl+Shift+V` 是填充选区，它们各有归属，与这三个键不冲突；
+        // ② `C` **只切阻挡通道、不动当前工具**（上游同一条：只改两个 CheckBox）；
+        // ③ 平移按**屏幕像素**（`pan_by_screen`），不按格 —— 缩放 25% 时一次 W 也只走 48 屏幕像素；
+        // ④ 一律用 `key_pressed`（= 一次按下走一步），**不按帧**：按住不放只走一步，
+        //    连按才连走（上游 WinForms 的 `KeyDown` 同语义，不靠 `repeat`）。
+        // R40 守卫：这些"裸键"只在真正该归画布时生效 ——
+        // ① `--shot` / `--autodrag` 锁死输入（[`Self::input_locked`]）；
+        // ② 两个搜索框有焦点时键盘归它们（否则在搜索框里敲 `B` 会顺手换工具）；
+        // ③ 浮层 / 菜单已由本函数开头让位（`overlay.is_some()` / `menu.open_index()`）。
+        let 键位让位 =
+            self.input_locked() || self.palette.focused() || self.stamps.focused();
+        let (工具键, 切阻挡, 平移) = ctx.input(|i| {
+            // `!command` 分流 `Ctrl+V/C/S`（粘贴/复制/保存各有归属）；`Alt` 也跳过（上游同款）
+            let plain = !i.modifiers.command && !i.modifiers.alt && !键位让位;
+            let 工具键 = if !plain {
+                None
+            } else if i.key_pressed(egui::Key::B) {
+                Some(miredit_core::TOOL_BRUSH_IDX)
+            } else if i.key_pressed(egui::Key::P) {
+                // ⚠ 铅笔尚未接线（`Tool::Unwired`）：键只切槽位，状态栏如实说"未接线"
+                Some(edit::TOOL_PENCIL_IDX)
+            } else if i.key_pressed(egui::Key::E) {
+                Some(miredit_core::TOOL_ERASER_IDX)
+            } else if i.key_pressed(egui::Key::V) {
+                Some(miredit_core::TOOL_PICKUP_IDX)
+            } else if i.key_pressed(egui::Key::K) {
+                // ⚠ 克隆尚未接线，同铅笔
+                Some(edit::TOOL_CLONE_IDX)
+            } else {
+                None
+            };
+            // 平移：符号照抄上游（W=(0,+48) / A=(+48,0) 作用在"相机原点"上）
+            // ⇒ 换算到本仓"视口左上角的世界像素"时四条边一起取反。
+            let 平移 = if !plain {
+                (0.0, 0.0)
+            } else if i.key_pressed(egui::Key::W) {
+                (0.0, -m::PAN_STEP_PX)
+            } else if i.key_pressed(egui::Key::S) {
+                (0.0, m::PAN_STEP_PX)
+            } else if i.key_pressed(egui::Key::A) {
+                (-m::PAN_STEP_PX, 0.0)
+            } else if i.key_pressed(egui::Key::D) {
+                (m::PAN_STEP_PX, 0.0)
+            } else {
+                (0.0, 0.0)
+            };
+            (工具键, plain && i.key_pressed(egui::Key::C), 平移)
+        });
+        if let Some(slot) = 工具键 {
+            self.selected_tool = slot;
+            self.edit.select(slot);
+            ctx.request_repaint();
+        }
+        if 切阻挡 {
+            // 上游 `MapViewport.cs:82-85`：`CollisionVisible` getter = 低 **或** 高，setter 同写两边
+            let show = !(self.view.overlay.low || self.view.overlay.high);
+            self.view.overlay.low = show;
+            self.view.overlay.high = show;
+            let text = if show {
+                tx::MENU_COLLISION_ON
+            } else {
+                tx::MENU_COLLISION_OFF
+            };
+            eprintln!(
+                "{}",
+                tx::fill(
+                    tx::DIAG_KEY_ACTION,
+                    &[("key", "C"), ("what", text)]
+                )
+            );
+            // 成功回执（阻断标记不是"改地图"，用正文色）
+            self.op = Some((text.to_owned(), false));
+            // 阻挡通道在画布缓存键里（`canvas_view` 的 `Cache.overlay`）⇒ 重画即可重渲
+            ctx.request_repaint();
+        }
+        if 平移 != (0.0, 0.0) {
+            self.view.pan_by_screen(平移.0, 平移.1);
+            ctx.request_repaint();
+        }
         // ── 选区 / 剪贴板快捷键（2026-11-05） ──
         //
         // 判定顺序有因果：`Ctrl+Shift+V`（填充选区）必须**先于** `Ctrl+V`（粘贴）判，
@@ -5368,6 +5457,281 @@ mod tests {
         let (text, warn) = app.op.as_ref().expect("被拒的键盘填充必须给回执");
         assert!(*warn, "拒绝回执要警示色");
         assert!(!text.is_empty());
+    }
+
+    // ───────────────────── 键位 R9-F2：工具键 / 阻挡开关 / 平移 ─────────────────────
+
+    /// **工具键 `B/P/E/V/K` 各选自己的槽位**（上游 `MainWindow.axaml.cs:989`）。
+    ///
+    /// 槽位下标 = `icons::TOOLS` 的顺序（与官方 axaml 的按钮顺序一致）：
+    /// `B`=0 画笔 / `P`=1 铅笔 / `E`=3 橡皮 / `V`=6 吸管 / `K`=7 克隆。
+    ///
+    /// ⚠ `P` / `K` 对应的**工具**本仓尚未接线 ⇒ `edit.tool()` 是 `Tool::Unwired`（如实报未接线），
+    /// 但槽位必须真的切过去（否则"按了什么都没发生"才是假功能）。
+    #[test]
+    fn 工具键各选自己槽位() {
+        let mut app = 尺寸应用(8, 8);
+        use miredit_core::Tool;
+        for (key, slot, expect) in [
+            (egui::Key::B, edit::TOOL_BRUSH_IDX, Tool::Brush),
+            (egui::Key::P, edit::TOOL_PENCIL_IDX, Tool::Unwired),
+            (egui::Key::E, miredit_core::TOOL_ERASER_IDX, Tool::Eraser),
+            (egui::Key::V, miredit_core::TOOL_PICKUP_IDX, Tool::Pickup),
+            (egui::Key::K, edit::TOOL_CLONE_IDX, Tool::Unwired),
+        ] {
+            按一次键(&mut app, key);
+            assert_eq!(app.selected_tool, slot, "{key:?} 应选到槽位 {slot}");
+            assert_eq!(app.edit.tool(), expect, "{key:?} 选中的工具");
+        }
+        // 对照：`F`（既有的填充键）仍选槽位 2，别被新键挤掉
+        按一次键(&mut app, egui::Key::F);
+        assert_eq!(app.selected_tool, miredit_core::TOOL_BUCKET_IDX);
+        assert_eq!(app.edit.tool(), Tool::Bucket);
+    }
+
+    /// **`P` / `K` 选中的工具尚未接线 ⇒ 落笔一格都不改**（R40：只切槽、画布无动作）。
+    ///
+    /// 判据四条：格内容不变、字节逐字节不变、不置脏、不进撤销栈。
+    /// 这条挡住"为了凑键位偷偷接一个半成品工具"的路 —— 没实现就老实不动。
+    #[test]
+    fn 铅笔与克隆落笔不改图() {
+        for (key, slot) in [
+            (egui::Key::P, edit::TOOL_PENCIL_IDX),
+            (egui::Key::K, edit::TOOL_CLONE_IDX),
+        ] {
+            let mut app = 尺寸应用(8, 8);
+            // 先吸一格当笔刷，确保"不改图"不是因为没笔刷
+            let brush = {
+                let d = app.doc.doc.as_ref().expect("有图");
+                app.edit.pick_at(&d.map, 0, 0)
+            };
+            assert!(brush.is_some(), "{key:?} 前置：应吸到笔刷");
+            let 前 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+            按一次键(&mut app, key);
+            assert_eq!(app.selected_tool, slot);
+            assert_eq!(app.edit.tool(), miredit_core::Tool::Unwired, "{key:?} 工具未接线");
+            // 落笔一次（走与画布相同的入口）
+            let n = {
+                let d = app.doc.doc.as_mut().expect("有图");
+                app.edit.paint_stroke_once(&mut d.map, 1, 1)
+            };
+            assert_eq!(n, 0, "{key:?} 未接线工具不许改任何格");
+            assert!(!app.edit.dirty(), "{key:?} 不许置脏");
+            assert_eq!(app.edit.undo_len(), 0, "{key:?} 不许入撤销栈");
+            let d = app.doc.doc.as_mut().expect("有图");
+            assert_eq!(d.to_bytes().expect("出字节"), 前, "{key:?} 字节必须逐字节不变");
+        }
+    }
+
+    /// **`C` 只切低位/高位阻挡标记，不动当前工具**（上游 `MainWindow.axaml.cs:997` +
+    /// `MapViewport.cs:82-85`：getter = 低或高，setter 同写两边）。
+    #[test]
+    fn c键只切阻挡不动工具() {
+        let mut app = 尺寸应用(8, 8);
+        // 先把工具切成填充，验证 C 不会把它改回画笔
+        按一次键(&mut app, egui::Key::F);
+        assert_eq!(app.edit.tool(), miredit_core::Tool::Bucket);
+        assert!(!app.view.overlay.low && !app.view.overlay.high, "初始两通道都关");
+        // R40：切阻挡**不脏、不入栈、不动图**（它只是显示开关）
+        let 前 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+
+        // 第一次 C ⇒ 两个通道**同时**打开
+        按一次键(&mut app, egui::Key::C);
+        assert!(app.view.overlay.low && app.view.overlay.high, "两个通道必须同时开");
+        assert_eq!(app.edit.tool(), miredit_core::Tool::Bucket, "C 不许改当前工具");
+        let (text, warn) = app.op.as_ref().expect("C 要写回执");
+        assert_eq!(text, tx::MENU_COLLISION_ON);
+        assert!(!*warn, "这不是拒绝，别染警示色");
+
+        // 再按一次 ⇒ 两个通道同时关
+        按一次键(&mut app, egui::Key::C);
+        assert!(!app.view.overlay.low && !app.view.overlay.high, "再按一次两通道同关");
+        assert_eq!(app.op.as_ref().expect("C 要写回执").0, tx::MENU_COLLISION_OFF);
+
+        // R40 的另外两个组合：**半开 ⇒ 全关**（getter = 低或高，setter 同写两边）
+        for (low, high) in [(true, false), (false, true)] {
+            app.view.overlay.low = low;
+            app.view.overlay.high = high;
+            按一次键(&mut app, egui::Key::C);
+            assert!(
+                !app.view.overlay.low && !app.view.overlay.high,
+                "半开（low={low}, high={high}）按 C 必须变全关"
+            );
+        }
+        // 四组合总表（再走一遍全开 / 全关两个角）
+        for (before_low, before_high, want) in [
+            (false, false, true),
+            (true, true, false),
+            (true, false, false),
+            (false, true, false),
+        ] {
+            app.view.overlay.low = before_low;
+            app.view.overlay.high = before_high;
+            按一次键(&mut app, egui::Key::C);
+            assert_eq!(
+                app.view.overlay.low, want,
+                "组合 (low={before_low}, high={before_high})：low 应为 {want}"
+            );
+            assert_eq!(app.view.overlay.high, want, "两个通道必须同值");
+        }
+
+        // `Ctrl+C` 是复制，**不许**碰阻挡通道
+        app.view.overlay.low = false;
+        app.view.overlay.high = false;
+        按一次带修饰键(&mut app, egui::Key::C, egui::Modifiers::COMMAND);
+        assert!(!app.view.overlay.low && !app.view.overlay.high, "Ctrl+C 不许切阻挡");
+
+        // R40：整套切下来地图一字节不动、不脏、不进撤销栈
+        assert_eq!(app.edit.undo_len(), 0, "切阻挡不许入撤销栈");
+        assert!(!app.edit.dirty(), "切阻挡不许置脏");
+        assert_eq!(
+            app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节"),
+            前,
+            "切阻挡不许改地图字节"
+        );
+    }
+
+    /// **`Ctrl+C` / `Ctrl+V` / `Ctrl+S` 的原功能不被新裸键吃掉**（R40 守卫的 `!command` 分流）。
+    ///
+    /// 三个反例各自对应一个新裸键：`C`(阻挡) / `V`(吸管) / `S`(平移) —— 带 Ctrl 时一个都不许触发。
+    #[test]
+    fn ctrl组合不被裸键吃掉() {
+        let mut app = 尺寸应用(8, 8);
+        app.view.scale = 1.0;
+        app.view.pan_x = 0.0;
+        app.view.pan_y = 0.0;
+        app.view.overlay.low = false;
+        app.view.overlay.high = false;
+        let 前工具 = app.selected_tool;
+
+        // `Ctrl+V`：不许变成吸管（裸 V 才是吸管）
+        按一次带修饰键(&mut app, egui::Key::V, egui::Modifiers::COMMAND);
+        assert_eq!(app.selected_tool, 前工具, "Ctrl+V 不许切工具（它是粘贴）");
+
+        // `Ctrl+S`：不许平移（裸 S 才平移）
+        按一次带修饰键(&mut app, egui::Key::S, egui::Modifiers::COMMAND);
+        assert_eq!(
+            (app.view.pan_x, app.view.pan_y),
+            (0.0, 0.0),
+            "Ctrl+S 不许平移（它是保存）"
+        );
+
+        // `Ctrl+C`：不许切阻挡（裸 C 才切）；它真做的事是复制 —— 先框一个选区再验
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(0, 0, 1, 1)
+        ));
+        按一次带修饰键(&mut app, egui::Key::C, egui::Modifiers::COMMAND);
+        assert!(!app.view.overlay.low && !app.view.overlay.high, "Ctrl+C 不许切阻挡");
+        assert!(app.edit.clipboard().is_some(), "Ctrl+C 必须真的复制了选区");
+    }
+
+    /// **`W/A/S/D` 每次平移 48 屏幕像素**（上游 `PanBy`，`MapViewport.Minimap.cs:11-22`）。
+    ///
+    /// 判据刻意用 `pan * scale`（= 屏幕像素）而不是 `pan`：缩放 200% 时一次 W 仍是 48 屏幕像素，
+    /// 也就是世界坐标只走 24 —— 这正是"按屏幕像素、不按格"的区别。
+    #[test]
+    fn wasd按屏幕像素平移() {
+        let mut app = 尺寸应用(8, 8);
+        for scale in [1.0_f32, 2.0, 0.5] {
+            app.view.scale = scale;
+            app.view.pan_x = 0.0;
+            app.view.pan_y = 0.0;
+            for (key, dx, dy) in [
+                (egui::Key::W, 0.0_f32, -1.0_f32),
+                (egui::Key::S, 0.0, 1.0),
+                (egui::Key::A, -1.0, 0.0),
+                (egui::Key::D, 1.0, 0.0),
+            ] {
+                按一次键(&mut app, key);
+                let 屏幕dx = (app.view.pan_x - 0.0) * scale;
+                let 屏幕dy = (app.view.pan_y - 0.0) * scale;
+                assert!(
+                    (屏幕dx - dx * crate::metrics::PAN_STEP_PX).abs() < 0.01,
+                    "scale={scale} {key:?}：屏幕水平位移 {屏幕dx}（期望 {}）",
+                    dx * crate::metrics::PAN_STEP_PX
+                );
+                assert!(
+                    (屏幕dy - dy * crate::metrics::PAN_STEP_PX).abs() < 0.01,
+                    "scale={scale} {key:?}：屏幕垂直位移 {屏幕dy}（期望 {}）",
+                    dy * crate::metrics::PAN_STEP_PX
+                );
+                // 复位，下一次按键单独量
+                app.view.pan_x = 0.0;
+                app.view.pan_y = 0.0;
+            }
+        }
+    }
+
+    /// **两个搜索框有焦点时，裸键归键盘输入、不归画布**（R40 守卫）。
+    ///
+    /// 否则在「资源库」搜索框里敲 `b` 会顺手换工具、敲 `w` 会把地图推走。
+    #[test]
+    fn 搜索框有焦点时裸键不生效() {
+        for 是印章面板 in [false, true] {
+            let mut app = 尺寸应用(8, 8);
+            app.view.scale = 1.0;
+            app.view.pan_x = 0.0;
+            app.view.pan_y = 0.0;
+            app.view.overlay.low = false;
+            app.view.overlay.high = false;
+            if 是印章面板 {
+                app.stamps.set_focus(true);
+            } else {
+                app.palette.set_focus(true);
+            }
+            for key in [
+                egui::Key::W,
+                egui::Key::A,
+                egui::Key::C,
+                egui::Key::B,
+                egui::Key::V,
+            ] {
+                按一次键(&mut app, key);
+            }
+            assert_eq!(
+                (app.view.pan_x, app.view.pan_y),
+                (0.0, 0.0),
+                "搜索框有焦点（印章={是印章面板}）时不许平移"
+            );
+            assert!(
+                !app.view.overlay.low && !app.view.overlay.high,
+                "搜索框有焦点时不许切阻挡"
+            );
+            assert_eq!(
+                app.selected_tool,
+                edit::TOOL_BRUSH_IDX,
+                "搜索框有焦点时不许换工具（默认应是画笔）"
+            );
+            // 清掉焦点 ⇒ 同一个键立刻恢复生效（证明确实是"焦点"在拦，不是键没绑）
+            if 是印章面板 {
+                app.stamps.set_focus(false);
+            } else {
+                app.palette.set_focus(false);
+            }
+            按一次键(&mut app, egui::Key::C);
+            assert!(
+                app.view.overlay.low && app.view.overlay.high,
+                "焦点清掉后 `C` 必须恢复生效"
+            );
+        }
+    }
+
+    /// **模态打开时 `C` 与 `W/A/S/D` 都不生效**（`handle_keys` 开头对浮层让位）。
+    #[test]
+    fn 模态打开时键位让位() {
+        let mut app = 尺寸应用(8, 8);
+        app.overlay = Overlay::Shortcuts;
+        app.view.scale = 1.0;
+        app.view.pan_x = 0.0;
+        app.view.pan_y = 0.0;
+        app.view.overlay.low = false;
+        app.view.overlay.high = false;
+        for key in [egui::Key::W, egui::Key::A, egui::Key::C, egui::Key::B] {
+            按一次键(&mut app, key);
+        }
+        assert_eq!((app.view.pan_x, app.view.pan_y), (0.0, 0.0), "浮层开着不许平移");
+        assert!(!app.view.overlay.low && !app.view.overlay.high, "浮层开着不许切阻挡");
     }
 
     // ───────────────────── 工具 → 检查地图（A-015 / R32-R33） ─────────────────────

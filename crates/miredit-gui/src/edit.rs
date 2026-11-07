@@ -236,6 +236,17 @@ fn 占位文档() -> miredit_core::Document {
         .expect("1×1 Old12 是合法地图（52+12=64 字节），占位文档必然可解析")
 }
 
+/// **铅笔**在工具图标表（[`crate::icons::TOOLS`]）里的下标。
+///
+/// 对应官方 `MainWindow.axaml.cs:989` 的 `Key.P => EditorTool.Pencil`。⚠ 内核 `Tool` 目前
+/// **没有铅笔语义**（`Tool::from_index(1)` ⇒ `Tool::Unwired`）⇒ 按 `P` 只是选中该槽位，
+/// 状态栏与画布会如实说「未接线、不改地图」（与点该图标同一结果，不假装能画）。
+pub const TOOL_PENCIL_IDX: usize = 1;
+/// **克隆**在工具图标表里的下标（官方 `Key.K => EditorTool.Clone`）。
+///
+/// 同 [`TOOL_PENCIL_IDX`]：本仓尚未接线 ⇒ 选中即 `Tool::Unwired`，如实报未接线。
+pub const TOOL_CLONE_IDX: usize = 7;
+
 /// 编辑会话：工具 + 笔刷 + **当前编辑层** + **笔刷尺寸** + 撤销/重做栈 + 脏标记。
 ///
 /// 内部**只有一份状态**：`miredit_core::EditSession`。本类型不另存任何字段
