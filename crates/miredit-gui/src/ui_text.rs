@@ -1009,6 +1009,23 @@ pub const TITLE_ACTIVE_ASSET: &str = "当前资源"; // EN: Active Asset ｜ 官
 /// ⇒ 官方漏译，按本仓口径自定（与「资源面板」「单元格检查器」同一套两字+名词风格）。
 pub const TITLE_MAPS: &str = "地图列表"; // EN: Maps ｜ 上游 `MainWindow.axaml.cs:343`（Strings.json 无此键 ⇒ 自定）
 
+// ───────────────────────── 小地图（总览纹理的三条状态） ─────────────────────────
+
+/// 小地图总览图**还没落定**（后台线程在跑）时，地图区里那一句。
+///
+/// 为什么必须有一句：地图区那时只有底色，一句也不写就成了"空白面板"，
+/// 用户会以为这张图没有缩略图（而不是"再等一下"）。判据在
+/// [`crate::minimap_job::MinimapJob::pending`]。
+pub const MINIMAP_LOADING: &str = "缩略图生成中…"; // EN: generating thumbnail… ｜ 官方: 无（上游同步渲染，没有中间态）
+
+/// 小地图总览图**失败**时那一句（`{reason}` = `OverviewError` 的中文原文）。
+///
+/// **绝不画假像素**：失败就把原因写在地图区里，让人一眼看出"是它挂了"而不是"这图本来就空"。
+pub const MINIMAP_FAIL_TMPL: &str = "缩略图不可用：{reason}"; // EN: thumbnail unavailable: {reason} ｜ 官方: 无
+
+/// 小地图后台线程**没回传就退了**（panic / 被 kill）时的失败原因。
+pub const MINIMAP_THREAD_LOST: &str = "小地图后台线程已退出（没有回传结果）"; // EN: minimap worker exited without a result
+
 // ───────────────────────── 左侧：工具选项 / 图层 ─────────────────────────
 
 /// 笔刷尺寸胶囊里的文字：**真实尺寸** `N×N`（数字不译，`×` 是 U+00D7）。
@@ -1907,6 +1924,19 @@ pub const DIAG_SHOT_FAIL: &str = "[截图] 失败：{err}"; // EN: [shot] failed
 /// 上限 `SHOT_SCAN_WAIT_MAX_FRAMES` 帧）。为什么要说：扫描中截到的「扫描中… N 项」
 /// 每次运行数字都可能不同 ⇒ 这种图**不能**拿去当逐字节比对的基线，必须让人看见这条诊断。
 pub const DIAG_SHOT_SCAN_WAIT: &str = "[截图] 地图列表仍在扫描（已等 {frames} 帧 / {n} 项）—— 达到上限，按当前画面截图"; // EN: [shot] map list still scanning
+/// `--shot` 等小地图缩略图落定**超上限**：照样拍，但要说清这张图截到的是「生成中…」。
+///
+/// 判据在 `app::MireditApp::handle_screenshot`（等 `minimap_job::MinimapJob::pending` 转假，
+/// 上限 `app::SHOT_MINIMAP_WAIT_MAX_FRAMES` 帧）。为什么要说：小地图是**后台线程**渲染的，
+/// 同一命令两次运行抢到的帧数不同 ⇒ 一次拍到真缩略图、一次拍到「缩略图生成中…」，
+/// 那正是 `a9e1785` 修掉的"同一命令两张图"的同一类缺陷。这种图**不能**当逐字节基线。
+pub const DIAG_SHOT_MINIMAP_WAIT: &str = "[截图] 小地图缩略图仍在生成（已等 {frames} 帧）—— 达到上限，按当前画面截图"; // EN: [shot] minimap thumbnail still generating
+/// 小地图总览图在后台渲完并上传（耗时只进 stderr，**不上屏**）。
+pub const DIAG_MINIMAP: &str = "[小地图] 后台总览 level={level}，{w}×{h} px，用时 {ms} ms（第 {n} 次）"; // EN: [minimap] overview rendered in background
+/// 小地图后台结果因**地图代号不符**被丢弃（换图后旧结果作废）。
+pub const DIAG_MINIMAP_DROP: &str = "[小地图] 丢弃过期结果：发起于代号 {old}，当前已是 {now}（不上屏）"; // EN: [minimap] stale result dropped
+/// 小地图总览图渲染失败（同一代号只试这一次）。
+pub const DIAG_MINIMAP_FAIL: &str = "[小地图] 缩略图失败：{err}（同一代号不再重试）"; // EN: [minimap] thumbnail failed
 /// 同视点分块比对报告头。
 pub const DIAG_GATE2: &str = "[同视点比对] 本机画布 {w}×{h} 裁剪，客户端 {cw}×{ch} 裁剪，公共区 {iw}×{ih}，背景 RGB({r},{g},{b})"; // EN: [gate2]
 /// 同视点分块比对结果。
@@ -2349,6 +2379,9 @@ pub const ALL: &[(&str, &str)] = &[
     ("TITLE_PALETTE", TITLE_PALETTE),
     ("TITLE_ACTIVE_ASSET", TITLE_ACTIVE_ASSET),
     ("TITLE_MAPS", TITLE_MAPS),
+    ("MINIMAP_LOADING", MINIMAP_LOADING),
+    ("MINIMAP_FAIL_TMPL", MINIMAP_FAIL_TMPL),
+    ("MINIMAP_THREAD_LOST", MINIMAP_THREAD_LOST),
     ("PILL_SIZE_TMPL", PILL_SIZE_TMPL),
     ("PILL_PENCIL", PILL_PENCIL),
     ("LAYER_GROUND", LAYER_GROUND),
@@ -2561,6 +2594,10 @@ pub const ALL: &[(&str, &str)] = &[
     ("DIAG_SHOT_OK", DIAG_SHOT_OK),
     ("DIAG_SHOT_FAIL", DIAG_SHOT_FAIL),
     ("DIAG_SHOT_SCAN_WAIT", DIAG_SHOT_SCAN_WAIT),
+    ("DIAG_SHOT_MINIMAP_WAIT", DIAG_SHOT_MINIMAP_WAIT),
+    ("DIAG_MINIMAP", DIAG_MINIMAP),
+    ("DIAG_MINIMAP_DROP", DIAG_MINIMAP_DROP),
+    ("DIAG_MINIMAP_FAIL", DIAG_MINIMAP_FAIL),
     ("DIAG_GATE2", DIAG_GATE2),
     ("DIAG_GATE2_RESULT", DIAG_GATE2_RESULT),
     ("DIAG_GATE2_OVERLAY", DIAG_GATE2_OVERLAY),
@@ -2658,6 +2695,9 @@ mod tests {
             ("TITLE_PALETTE", TITLE_PALETTE),
             ("TITLE_ACTIVE_ASSET", TITLE_ACTIVE_ASSET),
             ("TITLE_MAPS", TITLE_MAPS),
+    ("MINIMAP_LOADING", MINIMAP_LOADING),
+    ("MINIMAP_FAIL_TMPL", MINIMAP_FAIL_TMPL),
+    ("MINIMAP_THREAD_LOST", MINIMAP_THREAD_LOST),
             ("PILL_SIZE_TMPL", PILL_SIZE_TMPL),
     ("PILL_PENCIL", PILL_PENCIL),
             ("LAYER_GROUND", LAYER_GROUND),
@@ -2856,6 +2896,10 @@ mod tests {
             ("DIAG_SHOT_OK", DIAG_SHOT_OK),
             ("DIAG_SHOT_FAIL", DIAG_SHOT_FAIL),
             ("DIAG_SHOT_SCAN_WAIT", DIAG_SHOT_SCAN_WAIT),
+    ("DIAG_SHOT_MINIMAP_WAIT", DIAG_SHOT_MINIMAP_WAIT),
+    ("DIAG_MINIMAP", DIAG_MINIMAP),
+    ("DIAG_MINIMAP_DROP", DIAG_MINIMAP_DROP),
+    ("DIAG_MINIMAP_FAIL", DIAG_MINIMAP_FAIL),
             ("DIAG_GATE2", DIAG_GATE2),
             ("DIAG_GATE2_RESULT", DIAG_GATE2_RESULT),
             ("DIAG_GATE2_OVERLAY", DIAG_GATE2_OVERLAY),

@@ -39,6 +39,7 @@
 //! - [`edit`]     编辑闭环：吸管 / 笔刷（N×N）/ 橡皮擦（N×N）/ **填充（Bucket）** / 撤销 / 重做 / 脏标记（纯数据层，可单测）
 //! - [`save`]     保存：**原子替换**写回（写同目录临时文件 → 校验 → `rename`）
 //! - [`canvas_view`] 画布视口：世界像素 ↔ 屏幕像素、**重渲调度与纹理缓存**、缩放/平移
+//! - [`minimap_job`] 小地图**总览纹理**：后台渲染 + 缓存键 + `map_gen` 代次校验
 //! - [`cellinfo`] 单元格检查器取数（纯函数，可在无窗口测试里逐字段核对）
 //! - [`screen_text`] 运行期文案装配（模板 + 真实数据，模板全在 [`ui_text`]）
 //! - [`cli`]      命令行开关解析
@@ -97,6 +98,7 @@ pub mod mapdoc;
 pub mod menubar;
 pub mod menu;
 pub mod metrics;
+pub mod minimap_job;
 pub mod paint;
 pub mod palette;
 pub mod panel;

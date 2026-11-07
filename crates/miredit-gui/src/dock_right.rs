@@ -8,6 +8,9 @@
 //! > 小地图的视口指示框自 2026-11-04（审计 E10）起是**真数据**：地图区按
 //! > `map.width/height` 等比映射，框按当前 `pan/scale` 算出的可见格窗口换算，
 //! > 地图没打开时**不画框**、只写「未打开地图」（见 [`minimap_rects`] 的注释）。
+//! > 地图区里的**内容图**自 2026-11-07（B 段）起是真的总览纹理：由
+//! > [`crate::minimap_job`] 在后台渲好、主线程上传，本模块只按 [`MiniArt`] 的
+//! > 四种状态画（就绪贴图 / 生成中 / 失败原因 / 无内容）。
 
 use egui::{pos2, vec2, Align2, Painter, Rect};
 use mir2_assets::WilSource;
@@ -27,8 +30,9 @@ use crate::ui_text as tx;
 ///
 /// `vis` = 7 个面板的显隐（视图菜单的开关）。隐藏的面板既不画也不响应点击
 /// （点击的闸门在 [`crate::app`] 的 `interact` 里，两边用同一个判据 `PanelVis::get`）。
-// 8 个参数是"画一整块停靠区"所需的最小输入集（painter + 布局 + 文案 + 两个面板状态 +
-// 图库源 + 小地图数据 + 面板显隐）；打结构体只是搬家，不减少耦合 ⇒ 直接 `allow`。
+// 参数是"画一整块停靠区"所需的最小输入集（painter + 布局 + 文案 + 两个面板状态 +
+// 图库源 + 库号号段 + 小地图几何 + 小地图内容图 + 面板显隐）；打结构体只是搬家，
+// 不减少耦合 ⇒ 与本文件其它绘制函数同口径直接 `allow`。
 #[allow(clippy::too_many_arguments)]
 pub fn draw(
     p: &Painter,
@@ -40,6 +44,8 @@ pub fn draw(
     // 印章库号号段（A-024）：与 `src` 同源，都来自 `mapdoc::Assets`。
     号段: crate::stamp_place::库号号段,
     mini: &MiniMap,
+    // 小地图的**内容图**（B 段）：就绪纹理 / 生成中 / 失败原因
+    art: &MiniArt<'_>,
     vis: &crate::menu::panels::PanelVis,
 ) {
     use crate::menu::panels::PanelId;
@@ -48,7 +54,7 @@ pub fn draw(
 
     if vis.get(PanelId::Minimap) {
         panel::draw_panel(p, &l.p_minimap, tx::TITLE_MINIMAP, "panel.minimap", t::ui().panel_bg);
-        draw_minimap(p, l, mini);
+        draw_minimap(p, l, mini, art);
     }
 
     if vis.get(PanelId::Palette) {
@@ -611,8 +617,40 @@ pub fn minimap_block_rect(l: &Layout) -> Rect {
     Rect::from_center_size(inner.center(), vec2(m::MINIMAP_MAP_W, m::MINIMAP_MAP_H))
 }
 
-/// 画小地图：**有地图** ⇒ 按真实几何画地图区 + 视口框；**没地图** ⇒ 只画空块 + 如实文案。
-fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap) {
+/// 小地图要画的**内容图**（B 段，2026-11-07）：总览纹理 / 生成中 / 失败原因。
+///
+/// 为什么不用 `Option<&TextureId>`：三种"没有纹理"的处境语义完全不同 ——
+/// 没开始（没地图 / 图库装载失败）、**正在生成**、**失败**。合成一个 `Option` 就得靠猜，
+/// 而"生成中"与"失败"各要一句不同的话（前者等人，后者要原因）⇒ 做成显式枚举。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MiniArt<'a> {
+    /// 没有内容可画、也没有该说的话（图库装载失败时状态栏已经说了原因）。
+    None,
+    /// 后台渲染中：底色 + [`tx::MINIMAP_LOADING`]。
+    Loading,
+    /// 就绪：把总览纹理按 fit 后的地图区等比铺满。
+    Ready(egui::TextureId),
+    /// 失败：底色 + 一句中文原因（**绝不画假像素**）。
+    Failed(&'a str),
+}
+
+/// 小地图这一帧**真画了什么**（单测取证口：文案与 `image` 调用的唯一来源）。
+///
+/// 为什么要这个记录：任务书要求"生成中这一帧**不许有 image 调用**"。
+/// 光看画出来的像素分不清"没画图"和"画了一张全透明的图"，所以由被调用的绘制函数
+/// 自己如实记账（与 `canvas_view::render_calls` 同一套取证思路）。
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MiniDraw {
+    /// `p.image(...)` 的调用次数（0 或 1）。
+    pub image_calls: u32,
+    /// 这一帧在地图区/空块里画的那句文字（`None` = 一句都没画）。
+    pub text: Option<String>,
+}
+
+/// 画小地图：**有地图** ⇒ 按真实几何画地图区（+ 内容图）+ 视口框；
+/// **没地图** ⇒ 只画空块 + 如实文案。
+fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap, art: &MiniArt<'_>) -> MiniDraw {
+    let mut 记录 = MiniDraw::default();
     let c = l.p_minimap.content;
     // 浅底内框（截图 `#F9FAFB` 区段 x1146..1481，相对面板左右各内缩 10）
     let inner = Rect::from_min_max(
@@ -634,6 +672,7 @@ fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap) {
 
     let Some((map, vb)) = minimap_rects(block, mini) else {
         // 没打开地图：**不画任何框**，只如实说一句（旧版这里画的是恒在左上角的假框）
+        记录.text = Some(tx::STATUS_NO_MAP.to_owned());
         pt::text(
             p,
             block.center(),
@@ -642,17 +681,61 @@ fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap) {
             m::PALETTE_LABEL_FONT,
             t::ui().text_muted,
         );
-        return;
+        return 记录;
     };
 
     // 地图区（按地图长宽比等比缩出来的真形状）：底色略深一档，好与"块"区分开
     pt::fill(p, map, t::ui().status_bar);
+
+    // ④ 内容图（B 段）：**就绪才贴纹理**；其余两种只写一句话，**不画假像素**
+    match art {
+        MiniArt::Ready(tex) => {
+            // uv 全图、比例与 fit 一致（`map` 就是 `minimap_rects` 算出来的等比矩形），
+            // 白 tint = 不动颜色（与 `canvas.rs` 贴画布纹理同一口径）。
+            记录.image_calls = 1;
+            p.with_clip_rect(map).image(
+                *tex,
+                map,
+                Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                egui::Color32::WHITE,
+            );
+        }
+        MiniArt::Loading => {
+            let 文案 = tx::MINIMAP_LOADING;
+            记录.text = Some(文案.to_owned());
+            pt::text(
+                &p.with_clip_rect(map),
+                map.center(),
+                Align2::CENTER_CENTER,
+                文案,
+                m::PALETTE_LABEL_FONT,
+                t::ui().text_muted,
+            );
+        }
+        MiniArt::Failed(reason) => {
+            // 失败原因可能很长（`OverviewError` 的原文），左对齐 + 裁到地图区里：
+            // 宁可让人读到前半句，也不要居中裁成"两头都不见"。
+            let 文案 = tx::fill(tx::MINIMAP_FAIL_TMPL, &[("reason", reason)]);
+            记录.text = Some(文案.clone());
+            pt::text(
+                &p.with_clip_rect(map),
+                pos2(map.left() + 2.0, map.center().y),
+                Align2::LEFT_CENTER,
+                &文案,
+                m::PALETTE_LABEL_FONT,
+                t::ui().text,
+            );
+        }
+        MiniArt::None => {}
+    }
+
     pt::border(p, map, t::ui().checkbox_border);
     // 视口框：位置/大小全部来自真实 pan/scale/地图尺寸
     if vb.is_positive() {
         pt::fill(p, vb, t::ui().title_bar_text);
         pt::border(p, vb, t::ui().menu_bar_text);
     }
+    记录
 }
 
 // ───────────────────────── Palette（素材面板） ─────────────────────────
@@ -1462,5 +1545,91 @@ mod tests {
             .expect("有地图就要有矩形");
         assert!(map.is_positive());
         assert!(!vb.is_positive(), "视口未知时不许画框：{vb:?}");
+    }
+
+    // ───────────── 内容图（B 段）：就绪 / 生成中 / 失败 三种状态各画什么 ─────────────
+
+    /// 无头跑一帧绘制，把 [`MiniDraw`] 记账拿回来。
+    ///
+    /// 为什么必须真跑 `ctx.run`：`MiniDraw` 要断言的是"**真的调了 / 没调** `p.image`"，
+    /// 纯函数层没有这个调用可数 —— 与 `canvas_view` 用 `render_calls` 取证同一思路。
+    fn 画一帧(mini: &MiniMap, art: &MiniArt<'_>) -> MiniDraw {
+        let ctx = egui::Context::default();
+        let l = Layout::compute(window());
+        let mut 记录: Option<MiniDraw> = None;
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(window()),
+                ..Default::default()
+            },
+            |ctx| {
+                let p = ctx.layer_painter(egui::LayerId::new(
+                    egui::Order::Foreground,
+                    egui::Id::new("dock_right.minimap.test"),
+                ));
+                记录 = Some(draw_minimap(&p, &l, mini, art));
+            },
+        );
+        记录.expect("一帧必须画一次（ctx.run 的闭包一定会跑）")
+    }
+
+    /// **生成中**：只写「缩略图生成中…」，`image_calls` 必须 0（不许画假像素）。
+    #[test]
+    fn 生成中只写文案不贴图() {
+        let 记录 = 画一帧(
+            &MiniMap::new(Some((200, 100)), (0, 0, 20, 20)),
+            &MiniArt::Loading,
+        );
+        assert_eq!(记录.image_calls, 0, "生成中一次 image 调用都不许有");
+        assert_eq!(
+            记录.text.as_deref(),
+            Some(tx::MINIMAP_LOADING),
+            "文案必须是登记过的那一条（不是临时拼的串）"
+        );
+    }
+
+    /// **就绪**：贴一次纹理、**不写**任何文案。
+    #[test]
+    fn 就绪时贴纹理不写文案() {
+        let ctx = egui::Context::default();
+        // 2×2 白图：只是给绘制一个真的 TextureId（像素内容本用例不关心）
+        let tex = ctx.load_texture(
+            "dock_right.minimap.test",
+            egui::ColorImage::from_rgba_unmultiplied([2, 2], &[255u8; 16]),
+            egui::TextureOptions::LINEAR,
+        );
+        let 记录 = 画一帧(
+            &MiniMap::new(Some((200, 100)), (0, 0, 20, 20)),
+            &MiniArt::Ready(tex.id()),
+        );
+        assert_eq!(记录.image_calls, 1, "就绪必须贴一次总览纹理");
+        assert!(记录.text.is_none(), "就绪时不该再有文案：{:?}", 记录.text);
+    }
+
+    /// **失败**：写清原因、`image_calls` 必须 0（失败绝不画假像素）。
+    #[test]
+    fn 失败时写原因不贴图() {
+        let 记录 = 画一帧(
+            &MiniMap::new(Some((200, 100)), (0, 0, 20, 20)),
+            &MiniArt::Failed("地图宽或高为 0：没有可合成总览的格"),
+        );
+        assert_eq!(记录.image_calls, 0, "失败态一次 image 调用都不许有");
+        let 文案 = 记录.text.expect("失败必须写一句原因");
+        assert!(
+            文案.contains("地图宽或高为 0"),
+            "原因必须原样带出来：{文案}"
+        );
+        assert!(
+            文案.contains("缩略图不可用"),
+            "要让人一眼看出是缩略图挂了（不是这图本来就空）：{文案}"
+        );
+    }
+
+    /// **没有地图** ⇒ 一个字都不画框、只写「未打开地图」（保持既有口径）。
+    #[test]
+    fn 没有地图时只写未打开地图() {
+        let 记录 = 画一帧(&MiniMap::closed(), &MiniArt::None);
+        assert_eq!(记录.image_calls, 0);
+        assert_eq!(记录.text.as_deref(), Some(tx::STATUS_NO_MAP));
     }
 }

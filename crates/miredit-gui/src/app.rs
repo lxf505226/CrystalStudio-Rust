@@ -74,6 +74,7 @@ use crate::menu::panels::{PanelId, PanelVis};
 use crate::menu::{self, Overlay};
 use crate::menubar;
 use crate::metrics as m;
+use crate::minimap_job::MinimapJob;
 use crate::paint as pt;
 use crate::palette::{PaletteAction, PaletteState};
 use crate::stamp_panel::{self, StampAction, StampPanel};
@@ -96,6 +97,22 @@ use crate::ui_text as tx;
 /// 让人一眼看出"这张图不能当逐字节基线"。
 const SHOT_SCAN_WAIT_MAX_FRAMES: u64 = 600;
 
+/// `--shot` 等**小地图缩略图**落定的上限帧数（超过就照拍 + 一行诊断）。
+///
+/// 为什么要等（2026-11-07，B 段）：小地图总览图自本单起在**后台线程**渲染
+/// （[`crate::minimap_job`]），同一命令两次运行抢到的帧数不同 ⇒ 一次拍到真缩略图、
+/// 一次拍到「缩略图生成中…」，那正是 `a9e1785` 修掉的"同一命令两张图"的同一类缺陷
+/// （第 4 类：异步中间态）。判据只有一处真源 —— [`MireditApp::input_locked`] 分支
+/// （取证模式才等，人手动操作不等；不另立开关）。
+///
+/// 定 1800 帧的理由：`--shot` 运行实测帧间隔 ≈ 13 ms（75 fps：`--frames 60` 与 `--frames 300`
+/// 的差值 240 帧 / 3.23 s ⇒ 13.5 ms/帧）⇒ 1800 帧 ≈ 24 s；而 `0.map`（700×700，Old12）
+/// 一次总览后台渲染**实测 404~542 ms**（本单 10 次 `--shot` 实跑的 `[小地图] 后台总览
+/// level=7，263×175 px，用时 …` 日志区间）⇒ 留了约 45 倍余量，正常图不会撞上限。
+/// **它是个护栏，不是承诺**：真渲不完（超大图 / 帧种类极多）也照拍，但会打
+/// [`crate::ui_text::DIAG_SHOT_MINIMAP_WAIT`]，让人一眼看出"这张图不能当逐字节基线"。
+const SHOT_MINIMAP_WAIT_MAX_FRAMES: u64 = 1800;
+
 /// 自动化动作（截图 / 拖动实测 / 素材滚动实测）的状态机。
 #[derive(Default)]
 struct Auto {
@@ -107,6 +124,8 @@ struct Auto {
     requested: bool,
     /// 为等地图列表扫描静默而额外消耗的帧数（`--shot`；上限见 [`SHOT_SCAN_WAIT_MAX_FRAMES`]）。
     scan_waited: u64,
+    /// 为等**小地图缩略图**落定而额外消耗的帧数（上限见 [`SHOT_MINIMAP_WAIT_MAX_FRAMES`]）。
+    minimap_waited: u64,
     /// 截图是否已落盘。
     saved: bool,
     /// 客户端截图路径（`--gate2-client`）。
@@ -181,6 +200,12 @@ pub struct MireditApp {
     pub doc: DocState,
     /// 画布视口（平移/缩放/图层/纹理缓存）。
     pub view: CanvasView,
+    /// 小地图**总览纹理**的后台任务 + 缓存（B 段，2026-11-07）。
+    ///
+    /// 与 [`CanvasView`] 的纹理缓存同一套口径（`map_gen` 进键、命中不重算），
+    /// 区别只有一处：它的合成在**工作线程**里跑（整图三层合成动辄几百毫秒，
+    /// 放 UI 线程就是卡死 —— 见 [`crate::minimap_job`] 模块文档）。
+    pub minimap: MinimapJob,
     /// 编辑会话（工具 / 笔刷 / 撤销重做 / 脏标记）。
     pub edit: EditSession,
     /// 素材面板（真图库枚举 / 缩略图缓存 / 虚拟滚动 / 搜索）。
@@ -627,6 +652,8 @@ impl MireditApp {
         Self {
             doc,
             view,
+            // 小地图总览纹理的后台任务：缺省 Idle（第一帧 `ensure_minimap` 才发起）
+            minimap: MinimapJob::default(),
             edit,
             palette,
             stamps: StampPanel::new(),
@@ -810,6 +837,58 @@ impl MireditApp {
         let options = RenderOptions::with_doors_and_lighting(self.doors_open, self.lighting);
         self.view
             .ensure(ctx, map, src, l.viewport, self.doc.map_gen, options);
+    }
+
+    /// 小地图**总览纹理**的调度（B 段）：发起后台渲染 / 收结果 / 上传纹理。
+    ///
+    /// 与 [`Self::ensure_texture`] 同构（同一套缓存键口径：`map_gen` + 图层 + 渲染选项），
+    /// 区别只有一处：**不在本帧同步渲染** —— 整图三层合成动辄几百毫秒到数秒
+    /// （[`crate::minimap_job`] 模块文档 §一），扔给工作线程。
+    ///
+    /// 目标像素尺寸取**地图区矩形 × `pixels_per_point`**：按物理像素上传 ⇒ 屏上不再
+    /// 被 egui 按 `ppp` 放大（放大就是重采样，小地图那种细线条会糊）。
+    fn ensure_minimap(&mut self, ctx: &egui::Context, l: &Layout) {
+        let map = self.doc.doc.as_ref().map(|d| &d.map);
+        // 跨线程只能拿 `Arc`：`source()` 的 `&WilSource` 活不过 `thread::spawn` 的 `'static` 边界
+        //
+        // 闭包上写显式返回类型而不是 `as`：`Arc<WilSource> → Arc<dyn …>` 是 **unsize 强制转换**，
+        // 它只保证出现在"目标类型明确的赋值位置"（闭包返回处就是一个），`as` 表达式不保证。
+        let src = self.doc.assets.source_arc().map(
+            |a| -> std::sync::Arc<dyn SpriteSource + Send + Sync> { a },
+        );
+        // 地图区矩形 = 与绘制**同一份**几何（`draw_minimap` 也读 `minimap_rects`）
+        let mini = dock_right::MiniMap::new(
+            self.doc.doc.as_ref().map(|d| d.size()),
+            self.view.visible_cells(l.viewport),
+        );
+        let ppp = ctx.pixels_per_point();
+        let target = dock_right::minimap_rects(dock_right::minimap_block_rect(l), &mini)
+            .map(|(r, _)| {
+                (
+                    (r.width() * ppp).round().max(1.0) as u32,
+                    (r.height() * ppp).round().max(1.0) as u32,
+                )
+            })
+            // 没有地图区（没打开地图 / 块退化）⇒ 给个安全的目标，`ensure` 那边会因为
+            // 没有 `map`/`src` 直接 `clear`，这里只是不让类型上出现"猜一个尺寸"
+            .unwrap_or((m::MINIMAP_MAP_W as u32, m::MINIMAP_MAP_H as u32));
+        let options = RenderOptions::with_doors_and_lighting(self.doors_open, self.lighting);
+        if self
+            .minimap
+            .ensure(map, src, self.doc.map_gen, self.view.mask, options, target)
+        {
+            ctx.request_repaint();
+        }
+        // 收结果：符代次 ⇒ 上传纹理；不符 ⇒ 丢弃 + 回 Idle（下一帧按新代号重发）
+        if self.minimap.poll(ctx, self.doc.map_gen) {
+            ctx.request_repaint();
+        }
+        // ⚠ 还在跑 ⇒ **每帧都要主动请求重绘**：egui 只在有输入/有请求时重绘，
+        //    交互模式下没人碰窗口就不再有帧 ⇒ 后台结果永远收不到、界面永远停在
+        //    「缩略图生成中…」（与 `stamp_panel` 装载期、`maplist` 扫描期同一条纪律）。
+        if self.minimap.pending() {
+            ctx.request_repaint();
+        }
     }
 
     /// 悬停格：`--hover` 优先；交互模式取真实指针；**自动化取证模式下不读指针**。
@@ -2588,8 +2667,29 @@ impl MireditApp {
             //
             // ⚠ 顺序有因果：`self.maps.poll()` 在 ⑤d 已经推过一帧，这里读到的是**本帧**的真值。
             let 扫描中 = self.maps.is_scanning();
-            if 扫描中 && self.auto.scan_waited < SHOT_SCAN_WAIT_MAX_FRAMES {
-                self.auto.scan_waited += 1;
+            // ②a2 **小地图缩略图未落定**（2026-11-07，B 段）：后台线程还在合成整图总览。
+            //
+            // 为什么不落定就拍不出可复现的图：小地图是**异步**的，同一命令两次运行
+            // （甚至同一次运行的两个帧）可能一次拍到真缩略图、一次拍到「缩略图生成中…」
+            // ⇒ 像素不同、哈希不同，正好把 `a9e1785` 修好的截图确定性再打回去
+            // （第 5 类"同一命令两张图"：异步中间态）。
+            //
+            // 判据只有一处真源：**取证模式**（[`Self::input_locked`]）才等，人手动操作
+            // 本来就不会去按截图，也不需要为一个后台任务卡 UI。上限见
+            // [`SHOT_MINIMAP_WAIT_MAX_FRAMES`]，超了照样拍 + 一行诊断（[`Self::minimap_wait_diag`]）。
+            let 缩略图未定 = self.minimap.pending();
+            let 等扫描 = 扫描中 && self.auto.scan_waited < SHOT_SCAN_WAIT_MAX_FRAMES;
+            let 等缩略图 = 缩略图未定
+                && self.input_locked()
+                && self.auto.minimap_waited < SHOT_MINIMAP_WAIT_MAX_FRAMES;
+            if 等扫描 || 等缩略图 {
+                // 两个等待各有各的上限：到上限的那个停止记账，另一个继续等
+                if 等扫描 {
+                    self.auto.scan_waited += 1;
+                }
+                if 等缩略图 {
+                    self.auto.minimap_waited += 1;
+                }
                 ctx.request_repaint();
             } else {
                 if 扫描中 {
@@ -2603,6 +2703,11 @@ impl MireditApp {
                             ]
                         )
                     );
+                }
+                // 超限诊断：**只在真超限时**才有一句话（没超限的等待期必须静默，
+                // 否则每等一帧打一行，stderr 会变成一座垃圾山）
+                if let Some(诊断) = self.minimap_wait_diag() {
+                    eprintln!("{诊断}");
                 }
                 ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(
                     egui::UserData::default(),
@@ -2744,6 +2849,9 @@ impl eframe::App for MireditApp {
 
                 // ⑤ 重渲调度（只在变化时真渲）
                 self.ensure_texture(ctx, &l);
+                // ⑤b1 **小地图总览纹理**（B 段）：后台渲染 + 代次校验 + 缓存。
+                //     必须在 ⑥ 画之前跑：本帧落定的纹理本帧就能上屏（少一帧闪烁）。
+                self.ensure_minimap(ctx, &l);
                 // ⑤b 素材面板帧数（锁定输入的取证运行里也要查，否则网格画不出来）
                 self.palette.refresh_count(self.doc.assets.source());
                 // ⑤d **地图列表面板**：推进一帧扫描（4 ms 预算 + 512 项上限）。
@@ -2801,6 +2909,17 @@ impl eframe::App for MireditApp {
                     self.doc.doc.as_ref().map(|d| d.size()),
                     self.view.visible_cells(l.viewport),
                 );
+                // ⑥c 小地图的**内容图**（B 段）：四种状态由 `minimap_job` 一处判定，
+                //     绘制层不再自己猜一遍（就绪纹理 / 生成中 / 失败原因 / 无内容）。
+                //     先把 `TextureId`（`Copy`）取到局部：`Ready(&id)` 要借一个活到
+                //     绘制调用之后的局部量，不能借 `texture()` 返回的临时值。
+                let 缩略图 = self.minimap.texture().map(|t| t.id());
+                let mini_art = match (&缩略图, self.minimap.failure(), self.minimap.pending()) {
+                    (Some(id), _, _) => dock_right::MiniArt::Ready(*id),
+                    (None, Some(reason), _) => dock_right::MiniArt::Failed(reason),
+                    (None, None, true) => dock_right::MiniArt::Loading,
+                    (None, None, false) => dock_right::MiniArt::None,
+                };
 
                 // ⑦ 绘制
                 pt::fill(&p, screen, t::ui().panel_bg);
@@ -2873,6 +2992,8 @@ impl eframe::App for MireditApp {
                     // 素材装载失败时给兜底 `Wemade`（那时没有任何图能画出来，号段只影响字节含义）
                     号段,
                     &minimap,
+                    // 小地图的内容图（B 段）：就绪纹理 / 生成中 / 失败原因
+                    &mini_art,
                     &self.panels,
                 );
                 menubar::draw(&p, &l);
@@ -3049,6 +3170,23 @@ impl MireditApp {
     /// 它们本来就不该由人来点。
     fn input_locked(&self) -> bool {
         self.auto.shot.is_some() || self.auto.autodrag.is_some() || self.auto.palette_scroll.is_some()
+    }
+
+    /// 截图前"等小地图缩略图"的**超限诊断文案**（`None` = 没到上限，正常该静默）。
+    ///
+    /// 为什么单抽成一个函数：任务书要求"**诊断只在超限时出现**" —— 这条只有在
+    /// "等待中 ⇒ `None`、到上限 ⇒ `Some`" 能被单测直接读到时才可证伪
+    /// （直接 `eprintln!` 在等待分支里就没法断言，只能靠人眼看日志）。
+    /// 判据本身仍只有一处：`minimap.pending()` + [`SHOT_MINIMAP_WAIT_MAX_FRAMES`]。
+    fn minimap_wait_diag(&self) -> Option<String> {
+        if self.minimap.pending() && self.auto.minimap_waited >= SHOT_MINIMAP_WAIT_MAX_FRAMES {
+            Some(tx::fill(
+                tx::DIAG_SHOT_MINIMAP_WAIT,
+                &[("frames", &self.auto.minimap_waited.to_string())],
+            ))
+        } else {
+            None
+        }
     }
 
     /// 地图列表面板的状态行要不要带「扫描 {ms} ms」：**只在交互模式显示**。
@@ -3881,6 +4019,148 @@ mod tests {
 
         assert!(app.auto.requested, "达到上限必须照拍（并打一行诊断）");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// 恒慢图源：每次取帧睡 50 ms（保证"发起后台任务后它一定还在跑"）。
+    ///
+    /// **为什么要这个夹具**：小地图后台渲染是真的线程，用空图源时它可能在一帧之内就落定，
+    /// "等落定"那条路径就永远测不到。这里让取帧变慢（不造假渲染结果，只是慢），
+    /// 于是 `pending()` 在测试帧里必然为真。
+    struct 慢源;
+
+    impl mir2_assets::SpriteSource for 慢源 {
+        fn frame(
+            &self,
+            _lib: mir2_assets::LibRef,
+            _index: u32,
+        ) -> Option<mir2_assets::Frame> {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            None
+        }
+    }
+
+    /// 造一个"一定还在跑"的小地图后台任务（用 [`慢源`]）。
+    fn 起一个慢速小地图任务(app: &mut MireditApp) {
+        let 图 = app.doc.doc.as_ref().expect("夹具要有图").map.clone();
+        assert!(
+            app.minimap.ensure(
+                Some(&图),
+                Some(std::sync::Arc::new(慢源)),
+                app.doc.map_gen,
+                miredit_render::LayerMask::all(),
+                miredit_render::RenderOptions::default(),
+                (188, 126)
+            ),
+            "夹具：这一次必须真的发起后台任务"
+        );
+        assert!(app.minimap.pending(), "夹具：后台任务必须在跑");
+    }
+
+    /// **`--shot` 撞上小地图后台渲染 ⇒ 先等它落定，这一帧不请求截图。**
+    ///
+    /// 挡的是「同一命令两张图」的第 5 类（异步中间态）：小地图自 B 段起是**后台线程**
+    /// 合成的，一次拍到真缩略图、一次拍到「缩略图生成中…」⇒ 哈希不同，
+    /// 正好把 `a9e1785` 修好的截图确定性再打回去。
+    #[test]
+    fn 截图等小地图缩略图落定() {
+        let mut app = 尺寸应用(8, 8);
+        起一个慢速小地图任务(&mut app);
+        app.auto.shot = Some(std::env::temp_dir().join("miredit-shot-minimap-wait.png"));
+        app.auto.frames = 0; // 本帧就到期（不等 --frames）
+
+        let ctx = egui::Context::default();
+        截图一帧(&ctx, &mut app);
+
+        assert!(!app.auto.requested, "缩略图未落定不许请求截图");
+        assert_eq!(app.auto.minimap_waited, 1, "等待帧数要记账（上限才拦得住）");
+        assert!(
+            app.minimap_wait_diag().is_none(),
+            "没到上限时必须静默（每等一帧打一行就是刷屏）"
+        );
+    }
+
+    /// **小地图等超上限 ⇒ 照样拍**，且诊断文案**只在超限时**出现。
+    #[test]
+    fn 小地图超上限照样截图且只在超限时出诊断() {
+        let mut app = 尺寸应用(8, 8);
+        起一个慢速小地图任务(&mut app);
+        app.auto.shot = Some(std::env::temp_dir().join("miredit-shot-minimap-cap.png"));
+        app.auto.frames = 0;
+        app.auto.minimap_waited = SHOT_MINIMAP_WAIT_MAX_FRAMES; // 已经等满上限
+
+        // 诊断是"只在超限时出现"的那一句：先单独核对文案本身（真值与帧数都在里面）
+        let 诊断 = app.minimap_wait_diag().expect("等满上限必须出诊断");
+        assert!(
+            诊断.contains("小地图") && 诊断.contains(&SHOT_MINIMAP_WAIT_MAX_FRAMES.to_string()),
+            "诊断要点名是小地图、并带上已等帧数：{诊断}"
+        );
+
+        let ctx = egui::Context::default();
+        截图一帧(&ctx, &mut app);
+
+        assert!(app.auto.requested, "达到上限必须照拍（不能永远等下去）");
+        assert!(
+            app.minimap_wait_diag().is_some(),
+            "这一帧的缩略图仍未落定 ⇒ 诊断仍是 Some（截图是「生成中」的那一张）"
+        );
+    }
+
+    fn 截图输入() -> egui::RawInput {
+        egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(
+                egui::pos2(0.0, 0.0),
+                egui::vec2(m::WINDOW_W, m::WINDOW_H),
+            )),
+            ..Default::default()
+        }
+    }
+
+    /// 跑一帧，返回"这一帧里有没有请求**立即重绘**"（`ctx.has_requested_repaint`）。
+    ///
+    /// `ctx.run` 的闭包是 `FnMut`，而 `FnOnce` 只能调一次 ⇒ 用 `Option::take`
+    /// 把它"消费"掉一次（不能直接搬进闭包）。
+    fn 一帧请求重绘(ctx: &egui::Context, 动作: impl FnOnce(&egui::Context)) -> bool {
+        let mut 动作 = Some(动作);
+        let mut 请求了 = false;
+        let _ = ctx.run(截图输入(), |ctx| {
+            if let Some(一次) = 动作.take() {
+                一次(ctx);
+            }
+            请求了 = ctx.has_requested_repaint();
+        });
+        请求了
+    }
+
+    /// **后台还在跑 ⇒ 每帧都请求重绘**，否则交互模式下窗口一空闲就不再出帧
+    /// ⇒ 后台结果永远收不到、界面永远停在「缩略图生成中…」（与 `stamp_panel` 装载期
+    /// 那条纪律同源）。这条用**阴性对照**钉住：没有后台任务时第二帧不许请求重绘，
+    /// 否则本用例就是空转的（永远为真，等于没测）。
+    #[test]
+    fn 小地图生成中每帧请求重绘() {
+        let ctx = egui::Context::default();
+        // 首帧总会请求重绘（字体/布局落定），所以对照取**第二帧**
+        let _ = 一帧请求重绘(&ctx, |_| {});
+        assert!(
+            !一帧请求重绘(&ctx, |_| {}),
+            "阴性对照失效：没有任何后台任务时也在请求重绘（本用例就测不出东西）"
+        );
+
+        // 200×200 格 + 真图库 ⇒ 后台总览要扫 12 万格次，**不可能**在"起线程 → 立刻 poll"
+        // 这几个微秒里落定 ⇒ 这一帧必然停在「生成中」（夹具不靠 sleep，靠工作量本身）
+        let mut app = 尺寸应用(200, 200);
+        装合成图库(&mut app, "minimap_repaint");
+        let l = app.layout(Rect::from_min_size(
+            egui::pos2(0.0, 0.0),
+            egui::vec2(m::WINDOW_W, m::WINDOW_H),
+        ));
+        assert!(
+            一帧请求重绘(&ctx, |ctx| app.ensure_minimap(ctx, &l)),
+            "后台还在跑必须主动请求重绘（否则界面停在「生成中」等人动鼠标）"
+        );
+        assert!(
+            app.minimap.pending(),
+            "夹具失效：后台在这一帧里就落定了（那就测不到「生成中」这条路径）"
+        );
     }
 
     /// **`--shot`（锁输入）下地图列表状态行不报耗时** —— 耗时是天然不可复现值，
@@ -6961,8 +7241,11 @@ mod tests {
     ///
     /// 为什么要真装一个：`Assets::source()` 只认 `WilSource`，探针是它包出来的；
     /// 不装就只能验「没有图库」那半边，验不到"图号问题真的会报出来"。
-    fn 装合成图库(app: &mut MireditApp) {
-        let dir = std::env::temp_dir().join(format!("miredit_app_checkmap_{}", std::process::id()));
+    ///
+    /// `tag` 只用于临时目录名：cargo 的用例是**并行**跑的，两个用例共用同一个目录名
+    /// 就会互相 `remove_dir_all` 拆台（所以每个用例给自己一个 tag）。
+    fn 装合成图库(app: &mut MireditApp, tag: &str) {
+        let dir = std::env::temp_dir().join(format!("miredit_app_lib_{tag}_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let sub = dir.join("data");
         std::fs::create_dir_all(&sub).expect("建临时目录");
@@ -6991,7 +7274,8 @@ mod tests {
         let src = mir2_assets::WilSource::open(&paths).expect("应能打开");
         app.doc.assets = crate::mapdoc::Assets::Ready {
             paths,
-            src: Box::new(src),
+            // 夹具跟着 `Assets::Ready::src` 的类型换成 `Arc`（`Box` ⇒ `Arc`，2026-11-07）
+            src: std::sync::Arc::new(src),
             号段: miredit_core::库号号段::Wemade,
         };
     }
@@ -7104,7 +7388,7 @@ mod tests {
     #[test]
     fn 检查地图有库时报图号问题() {
         let mut app = 有门图应用();
-        装合成图库(&mut app);
+        装合成图库(&mut app, "checkmap");
         // 让 (0,0) 引用一个不存在的图号（Tiles 只有 2 帧 ⇒ 图号 9 越界）
         if let Some(d) = app.doc.doc.as_mut() {
             d.map.cells[0].bk_img = 9;

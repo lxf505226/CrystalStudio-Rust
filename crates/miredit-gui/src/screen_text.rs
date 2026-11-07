@@ -384,7 +384,8 @@ mod tests {
         let src = mir2_assets::WilSource::open(&paths).ok()?;
         Some(Assets::Ready {
             paths,
-            src: Box::new(src),
+            // 夹具跟着 `Assets::Ready::src` 的类型换成 `Arc`（`Box` ⇒ `Arc`，2026-11-07）
+            src: std::sync::Arc::new(src),
             // `.wzl/.wil` ⇒ Default 号段（与 `load_assets` 同口径）
             号段: miredit_core::库号号段::Wemade,
         })

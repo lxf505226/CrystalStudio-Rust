@@ -14,6 +14,7 @@
 //!    保存走 [`MapDoc::to_bytes`]，宿主**不许**再 `map.to_bytes()`。
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use mir2_assets::{AssetError, Family, LibPaths, WilSource};
 use mir2_map::Map;
@@ -246,19 +247,26 @@ impl MapDoc {
 
 /// 图库状态：要么装好了（能取帧），要么带着**具体原因**失败。
 ///
-/// ⚠ `src` 是 `Box<WilSource>`，不是直接内联：`WilSource` 内含帧缓存，本体 ≥400 B，
-/// 内联会让整个枚举最小 400 B、而 `Failed` 那支只要 24 B —— clippy
-/// `large_enum_variant` 报的就是这个（"枚举至少 400 字节，两支差 376"）。
-/// `DocState` 里这个枚举是**长期驻留的单例**，不值得为它撑 400 B 的栈/结构体尺寸；
-/// 指针化之后 `Ready` 只剩登记表 + 一个指针，两支尺寸相当。
-/// 调用方无感：`Assets::source()` 仍然返回 `Option<&WilSource>`。
+/// ⚠ `src` 是 `Arc<WilSource>`，不是直接内联，也**不是** `Box`。两条理由：
+///
+/// 1. **尺寸**：`WilSource` 内含帧缓存，本体 ≥400 B，内联会让整个枚举最小 400 B、
+///    而 `Failed` 那支只要 24 B —— clippy `large_enum_variant` 报的就是这个
+///    （"枚举至少 400 字节，两支差 376"）。`DocState` 里这个枚举是**长期驻留的单例**，
+///    不值得为它撑 400 B；指针化之后 `Ready` 只剩登记表 + 一个指针，两支尺寸相当。
+/// 2. **共享给后台线程**（2026-11-07，小地图总览后台渲染）：`Box` 拿不出可跨线程的
+///    所有权，`&WilSource` 又活不过 `std::thread::spawn` 的 `'static` 边界。
+///    `Arc<WilSource>` 两者都满足（`WilSource` 内部 `Mutex` 保护缓存 ⇒ `Send + Sync`，
+///    由 `minimap_job` 里的编译期断言钉住）。用 `Arc` 而不是 `Rc` 正是为了这一条。
+///
+/// 调用方无感：`Assets::source()` 仍然返回 `Option<&WilSource>`（签名字节级不变）；
+/// 需要跨线程的调用方走 `Assets::source_arc()`。
 pub enum Assets {
     /// 已登记并打开：`paths` 是登记表，`src` 是取帧入口。
     Ready {
         /// 图库登记表（库号 → 文件）。
         paths: LibPaths,
-        /// 取帧源（内含帧缓存；装箱理由见本枚举文档）。
-        src: Box<WilSource>,
+        /// 取帧源（内含帧缓存；指针化的理由见本枚举文档）。
+        src: Arc<WilSource>,
         /// **库号号段**：`.X` 三族库号（C# 全局分配号）→ 族内页号的换算基址（A-024）。
         ///
         /// 本仓素材只有 `.wzl/.wil`（客户端的 `Tiles`/`SmTiles`/`Objects{n}` 命名 =
@@ -286,10 +294,27 @@ impl Assets {
     }
 
     /// 取帧源；失败时 `None`（调用方据此跳过渲染，而不是画假图）。
+    ///
+    /// **签名自 `feaa2be` 起一直没变**：`Option<&WilSource>`（`Arc` 改造只换了内部
+    /// 持有方式，`src.as_ref()` 仍给出 `&WilSource`）⇒ 全仓 30+ 个前台调用点零改动。
     pub fn source(&self) -> Option<&WilSource> {
         match self {
-            // `src` 是 `&Box<WilSource>` ⇒ `as_ref()` 给出 `&WilSource`（不拷帧缓存）
+            // `src` 是 `&Arc<WilSource>` ⇒ `as_ref()` 给出 `&WilSource`（不拷帧缓存）
             Assets::Ready { src, .. } => Some(src.as_ref()),
+            Assets::Failed(_) => None,
+        }
+    }
+
+    /// **取帧源的共享句柄**：`Option<Arc<WilSource>>`，供**跨线程**的后台渲染持有。
+    ///
+    /// 为什么单开一个方法、而不是把 [`Self::source`] 改成返回 `Arc`：
+    /// 前台调用点（画布 / 素材面板 / 印章 / 导出 / 检查地图）都只读 `&WilSource`，
+    /// 改签名等于让它们全部跟着改，而它们**一个都不需要所有权**。这里只服务
+    /// 「要活过 `thread::spawn` 的 `'static` 边界」的那一个调用方
+    /// （[`crate::minimap_job`]）。
+    pub fn source_arc(&self) -> Option<Arc<WilSource>> {
+        match self {
+            Assets::Ready { src, .. } => Some(Arc::clone(src)),
             Assets::Failed(_) => None,
         }
     }
@@ -495,10 +520,10 @@ fn load_assets() -> Assets {
             ]
         )
     );
-    // `src` 装箱：见 [`Assets`] 的文档（`large_enum_variant`）
+    // `src` 指针化（`Arc`）：尺寸理由 + 后台线程要共享，见 [`Assets`] 的文档
     Assets::Ready {
         paths,
-        src: Box::new(src),
+        src: Arc::new(src),
         // `.wzl/.wil`（Default 号段）⇒ 号段恒 `Wemade`；接 `.lib` 时按 `CrystalAssetFormat`
         // 改成 `Shanda`（或新增 Sanxiu 变体），见 `Assets::Ready::号段` 的文档。
         号段: miredit_core::库号号段::Wemade,
@@ -626,6 +651,39 @@ mod tests {
         let a = Assets::Failed("x".to_string());
         assert_eq!(a.lib_count(), 0);
         assert!(a.source().is_none());
+        assert!(a.source_arc().is_none(), "跨线程句柄同样拿不到（不是空壳）");
         assert_eq!(a.error(), Some("x"));
+    }
+
+    /// `Arc<WilSource>` 改造的**取证口**：`source()` 与 `source_arc()` 指向**同一份**图源。
+    ///
+    /// 为什么必须断言"同一份指针"而不是只断言"两个都 `Some`"：`Arc::new(src.clone())`
+    /// 也能让两条都 `Some`，但那样后台线程会拿**另一个**帧缓存（内存翻倍、命中率归零）。
+    /// 判据是 `Arc::as_ptr` == `&WilSource as *const`，只有真共享才相等。
+    #[test]
+    fn 图源共享句柄与借用是同一份() {
+        // 造一个"只有登记、不解码"的假图库：discover 只看文件名规则，open 只验 available>0
+        let dir = std::env::temp_dir().join(format!("miredit_gui_arc_src_{}", std::process::id()));
+        let sub = dir.join("data");
+        std::fs::create_dir_all(&sub).expect("造目录");
+        std::fs::write(sub.join("Tiles.wzl"), b"").expect("写 wzl");
+        std::fs::write(sub.join("Tiles.wzx"), b"").expect("写 wzx");
+        let paths = LibPaths::discover(&dir).expect("扫描应成功");
+        let src = WilSource::open(&paths).expect("应能打开");
+
+        let a = Assets::Ready {
+            paths,
+            src: Arc::new(src),
+            号段: miredit_core::库号号段::Wemade,
+        };
+        let 借 = a.source().expect("Ready 必须有借用");
+        let 句柄 = a.source_arc().expect("Ready 必须有共享句柄");
+        assert_eq!(
+            Arc::as_ptr(&句柄),
+            借 as *const WilSource,
+            "两条出口必须给出同一份 WilSource（不是各拿一份拷贝）"
+        );
+        assert_eq!(a.lib_count(), 1, "夹具只要一个登记库");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
