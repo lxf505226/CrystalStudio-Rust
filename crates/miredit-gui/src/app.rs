@@ -84,6 +84,7 @@ use crate::selection_ops::{self, Cmd as SelCmd, Drag as SelDrag};
 use crate::selfcheck;
 use crate::stamp_place::{self, Armed};
 use crate::statusbar;
+use crate::tabs::{TabState, Tabs};
 use crate::theme as t;
 use crate::titlebar;
 use crate::ui_text as tx;
@@ -214,7 +215,7 @@ pub struct MireditApp {
     ///
     /// ⚠ 为什么必须存状态、不能每帧重判 `Contains`：否则「在地图区外按下、拖进区里」
     /// 会被半路接管；上游是**捕获**语义（按下就归它，直到释放）。
-    minimap_drag: Option<(f32, f32)>,
+    pub(crate) minimap_drag: Option<(f32, f32)>,
     /// 编辑会话（工具 / 笔刷 / 撤销重做 / 脏标记）。
     pub edit: EditSession,
     /// 素材面板（真图库枚举 / 缩略图缓存 / 虚拟滚动 / 搜索）。
@@ -241,7 +242,7 @@ pub struct MireditApp {
     /// 当前单元格信息（缓存，见 [`Self::refresh_cell_lines`]）。
     lines: CellLines,
     /// 上面那份信息对应的 `(x, y, 地图代号)`；变了才重算（要问图库要帧，不能每帧算）。
-    lines_key: Option<(u16, u16, u64)>,
+    pub(crate) lines_key: Option<(u16, u16, u64)>,
     /// 这一帧装配好的全部动态文字。
     text: DocText,
     /// 首次布局后把视口对准目标格（只做一次）。
@@ -284,9 +285,9 @@ pub struct MireditApp {
     ///
     /// 进入：选中一枚印章后按 `Enter`（[`Self::handle_keys`]）。
     /// 退出：点画布落位成功、按 `Esc`、或改选别的工具。
-    armed: Option<Armed>,
+    pub(crate) armed: Option<Armed>,
     /// 矩形选区的拖动起点（`None` = 当前没在拖）。
-    sel_drag: Option<SelDrag>,
+    pub(crate) sel_drag: Option<SelDrag>,
     /// **最近一次选区 / 印章操作的回执**：`(文案, 是否拒绝)`。
     ///
     /// 为什么存在宿主里而不是会话里：内核的 `note` 会被状态栏「落笔」那一段消费，
@@ -339,7 +340,7 @@ pub struct MireditApp {
     ///    的模块文档），本仓同样只在内存里留这一档。
     lighting: MapLighting,
     /// 当前浮层（打开地图模态 / 快捷键浮层）。
-    overlay: Overlay,
+    pub(crate) overlay: Overlay,
     /// 设置文件路径（`%LOCALAPPDATA%\miredit\settings.json`，可用 `--settings` 覆盖）。
     settings_path: PathBuf,
     /// **最近打开的地图列表**（最近优先；真源 = 设置文件里的 `recent`）。
@@ -368,6 +369,60 @@ pub struct MireditApp {
     maps: MapListPanel,
     /// `--map-list-root` 是否**钉住了**根（钉住后不再跟着当前地图换目录）。
     maps_root_pinned: bool,
+    /// **多地图标签集合**（R12-F3 A 段：纯数据层，本段不接 UI/菜单/CLI）。
+    ///
+    /// 稳态契约见 [`crate::tabs`] 模块文档：`items[active]` 是占位槽，
+    /// 其余是真快照，**活跃标签的真值常驻宿主字段**。构造时只放一个占位槽，
+    /// 所有文档 / 视口 / 编辑会话的既有访问点因此一行都不用改。
+    pub tabs: Tabs,
+}
+
+/// **capture**：把 `app.*` 中随标签走的字段与 `槽` 逐字段 `mem::swap`。
+///
+/// 上游 `MapViewport.cs:147-161` 的 `CaptureEditorState` 同款：调用后
+/// `app.*` 是原槽内容（占位），`槽` 是原 `app.*` 真值（真快照）。
+/// 这里能直接访问 `MireditApp` 的私有字段（同模块），故不需要任何
+/// `pub(crate)` 可见性调整，也不给状态类型加 `Default` 造假占位值。
+///
+/// 随标签字段清单（只读审计总表 2026-11-07 20:21，15 项）：
+/// `doc`（整份含 assets 壳）/ `view`（含 GPU 缓存）/ `minimap`（含 state+rx+Ready 纹理）
+/// / `minimap_drag` / `edit` / `selected_tool` / `hover` / `hover_anchor` / `lines`
+/// / `lines_key` / `preview_tex` / `armed` / `sel_drag` / `op` / `overlay`。
+///
+/// **两处审计订正**（原判错，实为）：
+/// ① `text`(DocText) 每帧 `screen_text::build` 全量重算（`app.rs` 的 ⑥ 装配文案段），
+///    纯本帧暂存 ⇒ 留全局，**不换**；
+/// ② `minimap` / `overlay` 必须随标签：前者 `map_gen` 每标签从 1 起，全局 job 会让
+///    A 的回执 `1!=1` 判定失效⇒把 A 总览贴到 B（`minimap_job.rs:296-344` 上传不复核归属）；
+///    后者 `CheckMap{gen}` 存检查那刻代号（`menu/mod.rs:170-171`），全局化会让 B 拿 A 的代次判陈旧。
+///
+/// 其余 29 项（含 `cell_hover` / `grid` / `doors_open` / `lighting`）按审计全局原位。
+/// ⚠ 字段清单与 [`restore`] **必须逐字对称**；新增随标签字段时两处同改。
+pub(crate) fn capture(app: &mut MireditApp, 槽: &mut TabState) {
+    use std::mem::swap;
+    swap(&mut app.doc, &mut 槽.doc);
+    swap(&mut app.view, &mut 槽.view);
+    swap(&mut app.minimap, &mut 槽.minimap);
+    swap(&mut app.minimap_drag, &mut 槽.minimap_drag);
+    swap(&mut app.edit, &mut 槽.edit);
+    swap(&mut app.selected_tool, &mut 槽.selected_tool);
+    swap(&mut app.hover, &mut 槽.hover);
+    swap(&mut app.hover_anchor, &mut 槽.hover_anchor);
+    swap(&mut app.lines, &mut 槽.lines);
+    swap(&mut app.lines_key, &mut 槽.lines_key);
+    swap(&mut app.preview_tex, &mut 槽.preview_tex);
+    swap(&mut app.armed, &mut 槽.armed);
+    swap(&mut app.sel_drag, &mut 槽.sel_drag);
+    swap(&mut app.op, &mut 槽.op);
+    swap(&mut app.overlay, &mut 槽.overlay);
+}
+
+/// **restore**：把 `槽` 里的真快照换进 `app.*`（与 [`capture`] 同一个 swap）。
+///
+/// 两者是同一个逐字段交换操作，`mem::swap` 天然对称；分成两个名字只为让
+/// 调用点的语义（"存"还是"取"）一眼可读，避免误把方向写反。
+pub(crate) fn restore(app: &mut MireditApp, 槽: &mut TabState) {
+    capture(app, 槽);
 }
 
 /// **地图列表面板的扫描根**：`--map-list-root` > 当前地图所在目录 > `None`。
@@ -755,6 +810,10 @@ impl MireditApp {
             pending_open_map: cli.open_map.clone(),
             maps,
             maps_root_pinned,
+            // R12-F3 A 段：只放一个**占位槽**（稳态契约见 [`crate::tabs`]）。
+            // 首张图的真值仍全部在上面的 `self.*` 字段里 ⇒ 所有既有访问点零改动，
+            // `--map` / `--shot` 行为逐值不变。B 段接 UI 时才从这里 `push` 第二张。
+            tabs: Tabs::new(TabState::占位()),
         }
     }
 

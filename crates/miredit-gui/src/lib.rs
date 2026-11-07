@@ -110,6 +110,7 @@ pub mod stamp_panel;
 pub mod stamp_place;
 pub mod stamp_probe;
 pub mod statusbar;
+pub mod tabs;
 pub mod text_fit;
 pub mod theme;
 pub mod titlebar;
