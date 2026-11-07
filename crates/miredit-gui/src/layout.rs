@@ -309,14 +309,30 @@ impl Layout {
         )
     }
 
-    /// 页签下划线（选中指示）：宽 `TAB_W`、高 `TAB_UNDERLINE_H`，贴页签条底。
+    /// 页签下划线（选中指示）：宽 `TAB_W`、高 `TAB_UNDERLINE_H`，**贴页签条底**。
+    ///
+    /// ⚠ **纵向不跟标签矩形走**（2026-11-08 多标签下划线单订正）：
+    /// 上游下划线是 `Border#Chrome` 的 `BorderThickness="0,0,0,2"` 的**底边**
+    /// （`EditorControls.axaml:60`，选中态 `:64` 只把 `BorderBrush` 换成 `Theme8CA1FF`），
+    /// 而那个 `Border` 是 `PaletteTabItem` 模板的根（`:60`）、只吃 `Padding`，
+    /// 标签项又填满 `GridLength.Auto` 那一行（`MainWindow.MapTabs.cs:28`）
+    /// ⇒ **Border 底边 = 标签项底边 = 页签条底边**。
+    ///
+    /// 本仓 `TAB_H`(30) < `TABSTRIP_H`(38) ⇒ `tab_rect().bottom()` 离条底还有 8px，
+    /// 所以下划线**只能**从 `tab_strip.bottom()` 算（有单测钉住"两态同源"）。
+    /// 多标签态逐张走 [`Self::tab_underline_at`]（同一算式）。
     pub fn tab_underline(&self) -> Rect {
+        self.tab_underline_at(self.tab_strip.left(), m::TAB_W)
+    }
+
+    /// **任意一张**标签的选中下划线：横向 `left..left+width`、纵向**贴页签条底** 2px。
+    ///
+    /// 单标签态（[`Self::tab_underline`]）与多标签态（`tab_strip::draw` 里每张标签）
+    /// **都只走这一处**纵向算式 ⇒ 两态的下划线 y 不可能再分叉。
+    pub fn tab_underline_at(&self, left: f32, width: f32) -> Rect {
         Rect::from_min_size(
-            pos2(
-                self.tab_strip.left(),
-                self.tab_strip.bottom() - m::TAB_UNDERLINE_H,
-            ),
-            egui::vec2(m::TAB_W, m::TAB_UNDERLINE_H),
+            pos2(left, self.tab_strip.bottom() - m::TAB_UNDERLINE_H),
+            egui::vec2(width, m::TAB_UNDERLINE_H),
         )
     }
 }

@@ -55,6 +55,12 @@
 //! 这样单标签路径**零像素变化**（`--shot` 哈希不变），多标签路径也不会出现
 //! "第 0 格显示的是活跃图名字"这种错位。
 //!
+//! ⚠ **选中下划线的 y 也必须两态同源**（2026-11-08 修，本段）：`canvas::draw` 走
+//! `Layout::tab_underline()`，本段逐张走 `Layout::tab_underline_at(r.left(), r.width())`
+//! —— 两者共用**同一处**纵向算式（贴页签条底 2px）。修前本段用的是 `r.bottom() - 2`，
+//! 而本仓 `TAB_H`(30) < `TABSTRIP_H`(38) ⇒ 多标签态那条比单标签态**高 8px**
+//! （实测 y95..96 vs y103..104），见单测 `多标签下划线与单标签同源且贴条底`。
+//!
 //! ⚠ **但"谁画第 0 张"也决定了"谁画它的悬停底"**：本段循环整段跳过第 0 张 ⇒ 那张的
 //! 悬停底只能由 `canvas::draw` 画。B 单修的就是这条漏账：原先 `canvas::draw` 只画了
 //! 关闭符悬停底（[`paint_close_hover`]），**整格悬停底**（[`paint_tab_hover`]）只有本段
@@ -350,11 +356,19 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
 
         // 选中底边：只画在**活跃**那一张的底部（`canvas::draw` 只在第 0 张画，
         // `active != 0` 时它那条已经被上面的底色铺盖掉了）。
-        // 厚 2 = 上游 `BorderThickness="0,0,0,2"`（`EditorControls.axaml:60`）。
+        //
+        // 厚 2 = 上游 `BorderThickness="0,0,0,2"`（`EditorControls.axaml:60`）的**底边**；
+        // 那个 Border 填满整个标签项、标签项又填满 `GridLength.Auto` 那一行
+        // （`MainWindow.MapTabs.cs:28`）⇒ 下划线**贴页签条底**，不是贴 `r.bottom()`。
+        //
+        // ⚠ 修前这里写的是 `r.bottom() - TAB_UNDERLINE_H`。本仓 `TAB_H`(30) < `TABSTRIP_H`(38)
+        // ⇒ `r.bottom() = 条底 - 8` ⇒ 多标签态那条下划线比单标签态（`Layout::tab_underline()`）
+        // **高 8px**，两态不同源（单标签态实测 y103..104、多标签态 y95..96）。
+        // 现在两态同走 `Layout::tab_underline_at`，纵向算式只有一份。
         if 活跃 {
             pt::fill(
                 &ps,
-                Rect::from_min_max(pos2(r.left(), r.bottom() - m::TAB_UNDERLINE_H), r.max),
+                l.tab_underline_at(r.left(), r.width()),
                 ui.tab_selected_underline,
             );
         }
@@ -630,10 +644,9 @@ mod tests {
             有填充(&图元, rs[1], ui.tab_strip_bg),
             "活跃标签底色同样是容器底（上游选中态只改底边与前景，不改 Background）"
         );
-        let 下划 = Rect::from_min_max(
-            pos2(rs[1].left(), rs[1].bottom() - m::TAB_UNDERLINE_H),
-            rs[1].max,
-        );
+        // 选中底边必须**贴页签条底**（上游 `BorderThickness="0,0,0,2"` 的底边，`:60`），
+        // 不是贴 `rs[1].bottom()`（`TAB_H`(30) < `TABSTRIP_H`(38) ⇒ 会高 8px）。
+        let 下划 = l.tab_underline_at(rs[1].left(), rs[1].width());
         assert!(
             有填充(&图元, 下划, ui.tab_selected_underline),
             "活跃标签底部 2px 必须是 Theme8CA1FF（BorderThickness=0,0,0,2）"
@@ -830,8 +843,9 @@ mod tests {
             )
         });
         // 叠放顺序：整格底在下、选中下划线在上（下划线不许被盖掉）。
-        // ⚠ 第 0 张的下划线由 `canvas::draw` 按 `Layout::tab_underline()` 画
-        // （页签条底 2px，不是 `rs[0].bottom()-2` —— 两套口径是**既有**差异，见回执）。
+        // ⚠ 第 0 张的下划线由 `canvas::draw` 按 `Layout::tab_underline()` 画。
+        // 2026-11-08 起本模块逐张也走 `Layout::tab_underline_at`（同一纵向算式）
+        // ⇒ 两态**不再**有"条底 vs `r.bottom()`"的口径差（旧注释记的差异已消除）。
         let 下划序 = 填充序(&图元, l.tab_underline(), ui.tab_selected_underline)
             .expect("活跃标签的选中下划线必须还在（hover 底不许盖掉它）");
         assert!(
@@ -864,16 +878,119 @@ mod tests {
         let 图元 = 画一帧合成(&l, tabs, app, Some(rs[1].center()));
         let 悬停序 = 填充序(&图元, rs[1], ui.tab_hover_bg)
             .expect("活跃标签（第 1 张）悬停时同样要有整格底");
-        let 本模块下划 = Rect::from_min_max(
-            pos2(rs[1].left(), rs[1].bottom() - m::TAB_UNDERLINE_H),
-            rs[1].max,
-        );
+        let 本模块下划 = l.tab_underline_at(rs[1].left(), rs[1].width());
         let 下划序 = 填充序(&图元, 本模块下划, ui.tab_selected_underline)
             .expect("活跃标签的选中下划线必须还在");
         assert!(
             悬停序 < 下划序,
             "叠放顺序错：整格悬停底（#{悬停序}）必须在选中下划线（#{下划序}）之前"
         );
+    }
+
+    /// **本单核心判据**：多标签态的选中下划线必须与单标签态**同源同 y**（贴页签条底）。
+    ///
+    /// # 上游真值
+    ///
+    /// 下划线 = `Border#Chrome` 的 `BorderThickness="0,0,0,2"` **底边**
+    /// （`EditorControls.axaml:60`；选中态 `:64` 只把 `BorderBrush` 换成 `Theme8CA1FF`）。
+    /// 那个 `Border` 是 `PaletteTabItem` 模板的根、只吃 `Padding="{TemplateBinding Padding}"`
+    /// ⇒ **Border 盒子 = 标签项盒子**；标签项又填满 `GridLength.Auto` 那一行
+    /// （`MainWindow.MapTabs.cs:28`）⇒ Border 底边 = 标签项底边 = **页签条底边**。
+    ///
+    /// 参考截图 `layout/refs/crystalstudio-main-runtime-1500x950.png` 实测同结论：
+    /// 页签条 `y66..103`（38 行）、选中下划线 `y102..103`（**末 2 行**）、`y104` 起是画布底。
+    ///
+    /// # 修前的代码级错因（本用例能红的前提）
+    ///
+    /// `draw` 里写的是 `r.bottom() - TAB_UNDERLINE_H`。本仓 `TAB_H = 30`、`TABSTRIP_H = 38`
+    /// ⇒ `r.bottom() = 条顶 + 30 = 条底 - 8` ⇒ 多标签态那条落在 `条底-10 .. 条底-8`
+    /// （本机实测像素行 `y95..96`），比单标签态（`Layout::tab_underline()` = `条底-2 .. 条底`，
+    /// 像素行 `y103..104`）**高 8px**。
+    ///
+    /// # 本用例的四段判据
+    ///
+    /// ① 单标签态贴条底（已被 `--shot` 基线 `D0EB25C1…` 钉住的"对"的那一侧）；
+    /// ② 标签矩形**本身不到条底** ⇒ 把"用 `r.bottom()` 必错"的几何前提钉死；
+    /// ③ **绘制层**：真画出来的那块矩形必须贴条底、且与单标签态的 `top` 逐值相同；
+    /// ④ 反面对照：修前那块（`r.bottom()-2`）**必须已不在图元里** —— 否则本用例没有分辨力。
+    ///    ⚠ ④ 只在 `TAB_H < TABSTRIP_H` 时有意义（两者相等时"修前那块"就是"贴条底那块"，
+    ///    对照退化为自证）⇒ 加几何前提守卫：将来按上游把 `TAB_H` 改成条高，本段自动跳过，
+    ///    ①②③ 仍全效，不会留下一颗"改 `TAB_H` 就红"的假地雷。
+    #[test]
+    fn 多标签下划线与单标签同源且贴条底() {
+        let l = Layout::compute(窗());
+        let ui = t::ui();
+
+        // ① 单标签态（`canvas::draw` 走的就是它）：贴条底 2px
+        let 单 = l.tab_underline();
+        assert!(
+            (单.bottom() - l.tab_strip.bottom()).abs() < 0.01,
+            "单标签态下划线必须贴条底：下划线底 {} vs 条底 {}",
+            单.bottom(),
+            l.tab_strip.bottom()
+        );
+        assert!(
+            (单.top() - (l.tab_strip.bottom() - m::TAB_UNDERLINE_H)).abs() < 0.01,
+            "单标签态下划线顶必须是「条底 - 2」"
+        );
+
+        // ② 几何前提：标签矩形比条矮 ⇒ 任何以 `r.bottom()` 为基准的算式都到不了条底
+        for n in [2usize, 3, 5] {
+            let rs = rects(&l, n);
+            for (i, r) in rs.iter().enumerate() {
+                assert!(
+                    (l.tab_strip.bottom() - r.bottom() - (m::TABSTRIP_H - m::TAB_H)).abs() < 0.01,
+                    "第 {i} 张的底边离条底应恰好 TABSTRIP_H - TAB_H = {}，实得 {}",
+                    m::TABSTRIP_H - m::TAB_H,
+                    l.tab_strip.bottom() - r.bottom()
+                );
+                let u = l.tab_underline_at(r.left(), r.width());
+                assert!(
+                    (u.top() - 单.top()).abs() < 0.01 && (u.bottom() - 单.bottom()).abs() < 0.01,
+                    "第 {i} 张（n = {n}）的下划线 y 必须与单标签态同源：{:?} vs {:?}",
+                    u,
+                    单
+                );
+                // 横向仍归自己那张（下划线宽度 = 标签宽度，不串到邻张）
+                assert!((u.left() - r.left()).abs() < 0.01);
+                assert!((u.right() - r.right()).abs() < 0.01);
+            }
+        }
+
+        // ③ 绘制层：`active == 1` ⇒ 两张都由本模块画，直接读 `Shape::Rect` 的几何
+        let f = 双标签夹具(1);
+        let (app, tabs) = (&f.app, &f.app.tabs);
+        let rs = rects(&l, 2);
+        let 图元 = 画一帧合成(&l, tabs, app, None);
+        let 应画 = l.tab_underline_at(rs[1].left(), rs[1].width());
+        assert!(
+            有填充(&图元, 应画, ui.tab_selected_underline),
+            "活跃标签（第 1 张）的下划线必须画在「贴条底」那块 {:?}（色 {:?}）",
+            应画,
+            ui.tab_selected_underline
+        );
+        assert!(
+            (应画.top() - 单.top()).abs() < 0.01,
+            "两态必须同源：多标签态 top {} ≠ 单标签态 top {}",
+            应画.top(),
+            单.top()
+        );
+
+        // ④ 反面对照：修前那块（`r.bottom() - 2 .. r.bottom()`）必须已不在图元里。
+        //    这一条是"本用例真能失败"的证明：把实现改回 `r.bottom()` 立刻红。
+        //    只在标签比条矮时有分辨力（见用例文档 ④ 的说明）。
+        if m::TAB_H < m::TABSTRIP_H {
+            let 修前 = Rect::from_min_max(
+                pos2(rs[1].left(), rs[1].bottom() - m::TAB_UNDERLINE_H),
+                rs[1].max,
+            );
+            assert!(
+                !有填充(&图元, 修前, ui.tab_selected_underline),
+                "修前那块 {:?}（离条底还差 {}px）不许再被画 —— 否则说明改回旧口径了",
+                修前,
+                l.tab_strip.bottom() - rs[1].bottom()
+            );
+        }
     }
 
     /// ③ **活跃标签的标题取自宿主 `app.*`，不读占位槽**（本架构最容易踩的坑）。
