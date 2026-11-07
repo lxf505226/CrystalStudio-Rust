@@ -67,11 +67,68 @@
 use std::path::{Path, PathBuf};
 
 use mir2_format::{format_by_id, FormatCaps, FormatError, FormatId, RawMap};
-use mir2_map::{Cell, Map};
+use mir2_map::{Cell, Map, MapError};
 
-use crate::convert::{ground_paint_supported, sync_view_into_raw, view_from_raw};
+use crate::convert::{ground_paint_supported, sync_view_into_raw, view_cell_format, view_from_raw};
 use crate::error::CoreError;
 use crate::layer_counts::{cell_mask_ext, count_map, CountKeeper, LayerCounts, MaskContext};
+
+// ─────────────────── 新建空白图：上游「创建」口径的常量与占位 ───────────────────
+
+/// 空白文档的 `path` **占位**（[`Document::path`] 目前是非 `Option` 的 `PathBuf`）。
+///
+/// # 上游的 `path` 本来就是**可空**的
+///
+/// `MainWindow.MapTabs.cs:5`：
+///
+/// ```csharp
+/// private sealed class OpenMapTab(MapEditorState state, string? path, string name)
+/// ```
+///
+/// —— 注意 `string? path`。新建标签时传 `null`（`:50` 的 `AddMapTab(MapDocument document, string? path = null)`、
+/// `:52` 的 `new OpenMapTab(..., path, $"Untitled {++untitledNumber}")`）；
+/// 显示名走 `MapDisplayName`（`:125-131`）：
+///
+/// ```csharp
+/// if (map.Path != null) return (System.IO.Path.GetFileName(map.Path));
+/// string prefix = map.IsStamp ? "Untitled stamp " : "Untitled ";
+/// return ... LocalText.Format(map.IsStamp ? "Untitled stamp {0}" : "Untitled {0}", number) : (map.Name);
+/// ```
+///
+/// 窗口标题同理（`MainWindow.axaml.cs:1035`：`mapPath == null ? LocalText.T("Untitled") : Path.GetFileName(mapPath)`）。
+///
+/// ⇒ 「未关联文件」在上游是**一等状态**。本仓 [`Document::path`] 还是 `PathBuf`，
+/// 只能用**空路径**当占位；判据统一走 [`Document::has_path`]，
+/// **不许**在别处自己写 `is_empty()` / `== ""` / `file_name().is_none()` 各判一套。
+///
+/// ⚠ `path: PathBuf → Option<PathBuf>` 是跨 crate 的结构改造（core 6 处、gui 38 处、web 4 处，
+/// 其中 15 处是「必须非空」需要语义决策），**必须用户拍板**，本单只做调研。
+pub const BLANK_PATH: &str = "";
+
+/// 空白文档的 [`Document::file_name`]。
+///
+/// 上游未关联文件的显示名就是 `"Untitled"`
+/// （`Localization/Strings.json:3444-3446` 的 `Untitled_F59AB8D1`；`MainWindow.axaml.cs:1035`）。
+///
+/// ⚠ **不带序号**：上游页签名是 `$"Untitled {++untitledNumber}"`
+/// （`MainWindow.MapTabs.cs:52`），序号来自**窗口级**计数器
+/// （`MainWindow.MapTabs.cs:23` 的 `private int untitledNumber;`）——
+/// [`Document`] 是文档级类型，拿不到也不该持有窗口状态 ⇒ 序号由宿主追加。
+pub const UNTITLED_FILE_NAME: &str = "Untitled";
+
+/// 上游新建窗口的单边**下限**（含）。
+///
+/// 真值：`MapDimensions.cs:31-32@acfbbf8a`
+/// （`width is < 16 or > 4096 || height is < 16 or > 4096` ⇒ `"Enter dimensions between 16 and 4096."`）。
+pub const CREATION_MIN_DIMENSION: u16 = 16;
+
+/// 上游新建窗口的单边**上限**（含）。真值同 [`CREATION_MIN_DIMENSION`]（`MapDimensions.cs:31`）。
+pub const CREATION_MAX_DIMENSION: u16 = 4096;
+
+/// 上游单张地图的格数上限（`MapDimensions.cs:7@acfbbf8a` 的 `MaximumCells = 16_000_000`）。
+///
+/// 同值另见 `MapDimensions.cs:11-12` 的 `CanRoundTrip` 第三条、`LegacyMapReader.cs:50`。
+pub const CREATION_MAX_CELLS: u64 = 16_000_000;
 
 /// **整档快照**（字节层 + 视图）：尺寸变化的撤销/重做单位。
 ///
@@ -197,6 +254,145 @@ impl Document {
             doc.rebuild_layer_counts();
             doc
         })
+    }
+
+    // ── 新建空白图（2026-11-08 新增；上游 `MapDocument(int,int)` 的等价物） ──
+
+    /// 本文档**是否已关联磁盘文件**（`false` = [`Document::blank_in`] 造出来的空白文档）。
+    ///
+    /// 唯一判据：`path` 是不是 [`BLANK_PATH`] 那个占位。
+    /// 为什么要有这个方法：[`Document::path`] 现在是 `PathBuf`（不是 `Option<PathBuf>`），
+    /// 「未关联」只能用空路径表达 ⇒ 这个占位必须**单点定义**，否则各处会写出不同口径
+    /// （有人判 `""`、有人判 `"."`、有人拿 `file_name().is_none()` 凑，迟早对不上）。
+    ///
+    /// 上游同形：`MainWindow.MapTabs.cs:127` 的 `if (map.Path != null)`。
+    pub fn has_path(&self) -> bool {
+        self.path.as_path() != Path::new(BLANK_PATH)
+    }
+
+    /// **新建一张空白地图文档**（`width × height`，磁盘格式 = [`FormatId::Old12`]）。
+    ///
+    /// 对应上游 `AddMapTab(new(256, 256))` —— `MainWindow.MapTabs.cs:105`：
+    ///
+    /// ```csharp
+    /// if (mapTabs.Items.Count == 0) AddMapTab(new(256, 256));   // 关掉最后一个标签时补一张空白图
+    /// ```
+    ///
+    /// 里的那个 `new MapDocument(256, 256)`（构造语义见 [`mir2_map::Map::blank`] 文档第一节）。
+    ///
+    /// # 与上游的三处**已知偏离**（不是对齐；逐条写清，等拍板）
+    ///
+    /// | # | 上游 | 本仓 | 原因 |
+    /// |---|---|---|---|
+    /// | 1 | 构造器**不选格式**，保存时永远写自己的 Crystal 格式（`Document.cs:90`、`:102`） | 默认写 [`FormatId::Old12`]（12 B/格） | `CrystalCs` 是**变长格**（26/38/35/33+）+ 尾块 + **0 真实样本** + `editable == false`（`mir2-format/src/model.rs:479`）⇒ 造得出、验不了。逐格式闸门见 [`Document::blank_in`] |
+    /// | 2 | `path` 是 `string?`，新建时 `null`（`MainWindow.MapTabs.cs:5`、`:50`） | `path` 是 `PathBuf`，用 [`BLANK_PATH`]（空路径）占位 | `PathBuf → Option<PathBuf>` 是跨 crate 结构改造，须用户拍板（本单只做调研，见 [`BLANK_PATH`] 文档） |
+    /// | 3 | 显示名 `Untitled {N}`（`MainWindow.MapTabs.cs:52`，`N` 来自窗口级 `untitledNumber`） | [`Document::file_name`] = [`UNTITLED_FILE_NAME`]（不带序号） | 序号是窗口状态（`MainWindow.MapTabs.cs:23`），文档级类型拿不到；序号由宿主追加 |
+    ///
+    /// # Errors
+    ///
+    /// 尺寸不合上游新建口径 ⇒ [`CoreError::Map`]（原因里带 `MapDimensions.cs` 行号）。
+    /// 详见 [`Document::blank_in`]。
+    pub fn blank(width: u16, height: u16) -> Result<Document, CoreError> {
+        Document::blank_in(width, height, FormatId::Old12)
+    }
+
+    /// **按指定磁盘格式**新建一张空白地图文档（[`Document::blank`] 的带格式版）。
+    ///
+    /// # 一、支持的格式：`Old12` 与 `Shanda14`
+    ///
+    /// 判据三条**合取**，每条都能回指源码（不是"挑两个简单的"）：
+    ///
+    /// 1. **`caps().editable == true`** —— `mir2-format/src/model.rs:471-472` 的逐格式结论表里
+    ///    只有这两种是 `true`（契约：`editable == true` ⟺ `editable_caveat` 是空串，
+    ///    由 `mir2-format/src/registry.rs` 的 `editable与caveat必须一致` 钉住）。
+    ///    空白图是**拿来编辑**的起点：起点格式若本仓自己都不承诺「改格后语义自洽」，
+    ///    用户建完立刻收到一条常驻黄条，那是个荒谬的初始状态。
+    /// 2. **格内无未建模尾区**（`TAIL_LEN == 0`）—— 有尾区的格式（`Shanda2012` 22 B、
+    ///    `Mir3Shanda` 7 B、`Mir3Wemade` 4 B、`Wemade2010`/`Heroes34` 各 1 B、`CrystalCs` 变长）
+    ///    新建时必须决定「这 N 个字节填什么」，而**上游没有任何新建路径给出过依据**
+    ///    （C# 只有 `LoadMapType*` 读 + `SaveCore` 写自己那套）⇒ 填 0 就是猜值，违铁律。
+    /// 3. **`detect_format` 能凭长度唯一认出**（`mir2-format/src/registry.rs:139-165`：
+    ///    52 字节 `TMapHeader` 家族里 12 / 14 / 36 B 三档**只看长度、标题不参与**）
+    ///    —— 保证写出的字节**能被本仓自己的 `read_any` 原样读回来**。
+    ///    其余 6 种要靠头部签名（`AntiHack` 的 `0x15/0x32/0x41/0x31`、
+    ///    `Mir3Shanda` 的 `(C) SNDA, MIR3`、`CrystalCs` 的 `C#` 魔数、`Mir3Wemade` 的
+    ///    「首字节 0 + 头部 20/22/24 处的三元组」）或异或键（`AntiHack`/`Wemade2010` 的 `w ^ xor`）
+    ///    才认得出 ⇒ 空白图必须先**编造**签名或键。
+    ///
+    /// ⇒ 支持集 = `{Old12, Shanda14}`；其余 7 种**显式拒绝并给中文原因**（不静默产出坏图）。
+    ///
+    /// # 二、尺寸口径：先按上游 `CreationError`，再交给 `mir2-map`
+    ///
+    /// 顺序与上游 `MapDimensions.CreationError` 一致（`MapDimensions.cs:28-41@acfbbf8a`）：
+    ///
+    /// 1. `:31-32` 单边必须落在 `16..=4096`（`"Enter dimensions between 16 and 4096."`）；
+    /// 2. `:33` `!CanRoundTrip` ⇒ 格数上限（`"A map supports at most 16,000,000 cells."`）。
+    ///    这一条在窗口内**仍可能命中**：`4096×4096 = 16,777,216 > 16,000,000`；
+    /// 3. `:34-39` 的 Province / Dungeon / Terrain 三条是**生成器专属**，
+    ///    `MapCreationKind.Blank` 不适用（`MapCreationKind` 定义在 `MapDimensions.cs:3`：
+    ///    `{ Blank, Terrain, Province, Dungeon }`；新建空白图传的就是 `Blank`，
+    ///    见 `MainWindow.axaml.cs:461`）。
+    ///
+    /// 过了这两条之后才调 [`mir2_map::Map::blank`]（它内部是 `validate_dimensions`，
+    /// 与 [`Map::parse`] 同一个单点）—— 那时尺寸已在 `16..=4096` 且 `w*h ≤ 16M`，
+    /// 所以它只剩「防御性」意义（真命中说明两道门漂了）。
+    ///
+    /// # 三、字节层怎么来：走**既有**读入口，不另造一份 `RawMap` 构造逻辑
+    ///
+    /// `Map::blank` → `to_bytes()` → [`Document::from_bytes`]。
+    /// 这样 `raw` 与 `view` **一定同源**（`from_bytes` 里 `read_any_tolerant` 会凭长度
+    /// 认出 `Old12`/`Shanda14`，见 `registry.rs:139-165`），也省掉一份「手工拼 RawMap」
+    /// 的第二套真值。构造完再用 `debug_assert` 自证两层逐格一致（见下）。
+    ///
+    /// # Errors
+    ///
+    /// - 格式不在支持集 ⇒ [`CoreError::Map`]（payload 是 [`FormatError::Inconsistent`]，
+    ///   文案里点名格式与具体原因）；
+    /// - 尺寸不合上游新建口径 ⇒ [`CoreError::Map`]（同上，文案带 `MapDimensions.cs` 行号）。
+    pub fn blank_in(width: u16, height: u16, format: FormatId) -> Result<Document, CoreError> {
+        let path = Path::new(BLANK_PATH);
+
+        // ① 格式闸门（在尺寸之前：格式不支持与尺寸无关，先报更有用的那条）。
+        if let Err(原因) = blank_gate(format) {
+            return Err(CoreError::Map {
+                path: path.to_path_buf(),
+                err: FormatError::Inconsistent {
+                    detail: format!(
+                        "本仓还不能新建「{}」格式的空白图：{原因}",
+                        format_by_id(format).name()
+                    ),
+                },
+            });
+        }
+
+        // ② 上游 `CreationError(w, h, MapCreationKind.Blank)` 的两条（`MapDimensions.cs:31-33`）。
+        if let Some(原因) = creation_error(width, height) {
+            return Err(CoreError::Map {
+                path: path.to_path_buf(),
+                err: FormatError::Inconsistent { detail: 原因 },
+            });
+        }
+
+        // ③ 视图层：空白图由 `mir2-map` 造（尺寸判据在那边单点实现，见 `Map::blank` 文档）。
+        let view = Map::blank(width, height, view_cell_format(format))
+            .map_err(|err| blank_size_error(path, format, err))?;
+
+        // ④ 出字节 → 走既有读入口打开（保证 raw/view 同源，见本节第三节）。
+        let mut doc = Document::from_bytes(path, view.to_bytes())?;
+
+        // ⑤ 两层一致性自证：`raw → view` 的投影必须与 `Map::blank` 逐格相同。
+        //    不等就说明两个 crate 的「全 0 格」口径已经漂了 —— 宁可炸，不许静默留两份真值。
+        debug_assert_eq!(
+            doc.view(),
+            &view,
+            "空白图的 raw→view 投影与 Map::blank 不一致（两个 crate 的空白格口径漂了）"
+        );
+
+        // ⑥ 文件名：上游未关联文件的显示名是 "Untitled"（见 `UNTITLED_FILE_NAME`）。
+        //    `from_bytes` 是按路径推文件名的，空路径推出来是空串，所以这里必须显式覆盖。
+        doc.file_name = UNTITLED_FILE_NAME.to_string();
+
+        Ok(doc)
     }
 
     // ── 双表示的两侧 ──
@@ -571,6 +767,171 @@ impl Document {
     }
 }
 
+// ─────────────────── 新建空白图：格式闸门 / 上游创建判据 / 错误折叠 ───────────────────
+
+/// 上游 `MapDimensions.CreationError(width, height, MapCreationKind.Blank)` 的等价物。
+///
+/// # 上游原文（`MapDimensions.cs:28-41@acfbbf8a`）
+///
+/// ```csharp
+/// public static string? CreationError(int width, int height, MapCreationKind kind)
+/// {
+///     if (!Enum.IsDefined(kind)) return "Choose a map type.";                                   // :30
+///     if (width is < 16 or > 4096 || height is < 16 or > 4096)
+///         return "Enter dimensions between 16 and 4096.";                                        // :31-32
+///     if (!CanRoundTrip(width, height)) return "A map supports at most 16,000,000 cells.";       // :33
+///     if (kind == MapCreationKind.Province && (width < 128 || height < 128 || ...)) return ...;  // :34-35
+///     if (kind == MapCreationKind.Dungeon  && (width < 64  || height < 64  || ...)) return ...;  // :36-37
+///     if (kind == MapCreationKind.Terrain  && ...) return ...;                                   // :38-39
+///     return null;                                                                               // :40
+/// }
+/// ```
+///
+/// `MapCreationKind` 定义在 `MapDimensions.cs:3`：`{ Blank, Terrain, Province, Dungeon }`。
+/// 新建空白图传的是 `Blank`（`MainWindow.axaml.cs:461`、`NewMapWindow.cs:222-225`），
+/// ⇒ **只受 `:30`-`:33` 约束**，后三条是生成器专属，本函数不实现（也不假装实现）。
+///
+/// # 与 `mir2_map::validate_dimensions` 的分工
+///
+/// | 判据 | 上游 | 允许范围 |
+/// |---|---|---|
+/// | 往返（`CanRoundTrip`） | `MapDimensions.cs:11-12` | `1..=32767` 且 `w*h ≤ 16M` |
+/// | 新建（`CreationError(.., Blank)`） | `MapDimensions.cs:31-33` | **`16..=4096`** 且 `w*h ≤ 16M` |
+///
+/// 两者都要跑，顺序照上游（先窗口、后往返）—— 本函数是**窗口 + 格数**那一道，
+/// 往返那一道在 [`mir2_map::validate_dimensions`] 里（由 `Map::blank` 调用）。
+///
+/// 返回 `None` = 可以新建；`Some(中文原因)` = 拒绝（原因里带上游 `MapDimensions.cs` 行号）。
+fn creation_error(width: u16, height: u16) -> Option<String> {
+    // ① `MapDimensions.cs:31-32`：`width is < 16 or > 4096 || height is < 16 or > 4096`
+    if !(CREATION_MIN_DIMENSION..=CREATION_MAX_DIMENSION).contains(&width)
+        || !(CREATION_MIN_DIMENSION..=CREATION_MAX_DIMENSION).contains(&height)
+    {
+        return Some(format!(
+            "新建地图的宽高必须落在 {CREATION_MIN_DIMENSION}..={CREATION_MAX_DIMENSION} 之间，\
+             收到 w={width} h={height}\
+             （上游 MapDimensions.cs:31-32 的 `width is < 16 or > 4096 || height is < 16 or > 4096`）"
+        ));
+    }
+    // ② `MapDimensions.cs:33`：`if (!CanRoundTrip(width, height))`
+    //
+    //    为什么窗口过了还要再判一次格数：`4096×4096 = 16,777,216 > 16,000,000`，
+    //    单边合格但格数超限 —— 上游 `CreationError(4096, 4096, Blank)` 走的正是这一条。
+    //    窗口内 `w,h ∈ 16..=4096`（远小于 32767、且非 0）⇒ `CanRoundTrip` 的三条件里
+    //    只有「格数 ≤ 16M」这一条还可能不成立，故此处只判格数与上游等价。
+    let cells = u64::from(width) * u64::from(height);
+    if cells > CREATION_MAX_CELLS {
+        return Some(format!(
+            "新建地图最多 {CREATION_MAX_CELLS} 格，收到 {width}×{height} = {cells} 格\
+             （上游 MapDimensions.cs:33 的 `!CanRoundTrip`，即 :11-12 的第三条；\
+             注意单边 4096 合格但 4096×4096 已超格数）"
+        ));
+    }
+    None
+}
+
+/// 空白文档**能不能按这个磁盘格式造出来**？`Ok(())` = 能；`Err(中文原因)` = 不能。
+///
+/// 判据三条合取，逐条依据见 [`Document::blank_in`] 文档第一节。逐格式落点：
+///
+/// | 格式 | `editable` | `TAIL_LEN` | 长度优先可认 | 结论 |
+/// |---|---|---|---|---|
+/// | `Old12` | true（`model.rs:471`） | 0（`formats/old12.rs:70`） | ✓（`registry.rs:150-157`） | **支持** |
+/// | `Shanda14` | true（`model.rs:472`） | 0（`formats/shanda14.rs:79`） | ✓（`registry.rs:159-161`） | **支持** |
+/// | `Shanda2012` | false（`model.rs:473`） | 22（`formats/shanda2012.rs:129`） | ✓（`registry.rs:163-165`） | 拒绝：尾区未建模 |
+/// | `AntiHack` | false（`model.rs:474`） | 0 | ✗ 头部签名 + 异或键 | 拒绝：要编造签名与键 |
+/// | `Wemade2010` | false（`model.rs:475`） | 1 | ✗ 异或键 | 拒绝：要编造异或键 |
+/// | `Heroes34` | false（`model.rs:476`） | 1 | ✗ | 拒绝：尾区未建模 |
+/// | `Mir3Wemade` | false（`model.rs:477`） | 4 | ✗ 头部三元组 + 背景块 | 拒绝：头部随尺寸变长 |
+/// | `Mir3Shanda` | false（`model.rs:478`） | 7 | ✗ 标题魔数 | 拒绝：要编造标题 |
+/// | `CrystalCs` | false（`model.rs:479`） | 变长 | ✗ `C#` 魔数 + 尾块 | 拒绝：变长格 + 0 真实样本 |
+fn blank_gate(format: FormatId) -> Result<(), &'static str> {
+    match format {
+        FormatId::Old12 | FormatId::Shanda14 => Ok(()),
+        FormatId::Shanda2012 => Err(
+            "36 B/格，格内 22 字节尾区未建模（TAIL_LEN=22，语义未知）且 caps().editable == false\
+             （mir2-format/src/model.rs:473）—— 新建时那 22 字节填什么，上游没有任何新建路径给出过依据",
+        ),
+        FormatId::AntiHack => Err(
+            "宽高在头部 31/33/35 且与异或键异或存放（formats/antihack.rs:122-131 的 `w ^ xor`），\
+             头部签名还要求 0x15/0x32/0x41/0x31（:114-120）—— 新建必须先编造一个异或键与一串签名字节",
+        ),
+        FormatId::Wemade2010 => Err(
+            "宽高在头部 21/23/25 且与异或键异或存放（formats/wemade2010.rs:192-216），\
+             格内还有 1 字节未建模尾区 —— 新建要先编造异或键，再猜那 1 个字节",
+        ),
+        FormatId::Heroes34 => Err(
+            "格内 1 字节尾区未建模（TAIL_LEN=1，formats/heroes34.rs:62），\
+             且背景图号是 u32、视图只装得下低 16 位 —— 新建填什么没有上游依据",
+        ),
+        FormatId::Mir3Wemade => Err(
+            "头部长度随尺寸变（28 字节 + 半分辨率背景块，formats/mir3_wemade.rs:167-169），\
+             宽高来自头部 20/22/24 处的三元组、还要求首字节为 0（:204-206）—— 空白图没有可固定的头",
+        ),
+        FormatId::Mir3Shanda => Err(
+            "头部 40 字节且靠标题 `(C) SNDA, MIR3` 认格式（formats/mir3_shanda.rs:106-108），\
+             格内还有 7 字节未建模尾区 —— 新建要先编造标题字符串",
+        ),
+        FormatId::CrystalCs => Err(
+            "变长格（26/38/35/33+，由 `(ver, fr_count)` 决定）+ 尾部元数据块 + `C#` 魔数，\
+             且本仓对它的 caps().editable == false、真实样本 0 张\
+             （mir2-format/src/model.rs:434-448、:479）—— 造得出、验不了，不许静默产出坏图",
+        ),
+    }
+}
+
+/// 把 [`mir2_map::Map::blank`] 的尺寸错误折成 [`FormatError`]（**不新造措辞**）。
+///
+/// 三个尺寸变体与 `mir2-format` 的尺寸变体一一对应（两边都照 C#
+/// `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 三条件）：
+/// `ZeroDimension → InvalidDimensions`、`DimensionTooLarge → DimensionTooLarge`、
+/// `TooManyCells → TooManyCells`。这样 `miredit-web/src/error.rs:134-145` 的
+/// `from_core` **不用改一个字**就能把「尺寸非法」报成 422。
+///
+/// ⚠ 走 [`Document::blank_in`] 时这两个变体其实**不可达**（窗口 `16..=4096` 已先拦掉），
+/// 保留是为了「`mir2-map` 换了契约」时如实报，而不是把错误吞成一句含糊话。
+fn blank_size_error(path: &Path, format: FormatId, err: MapError) -> CoreError {
+    let err = match err {
+        MapError::ZeroDimension { width, height } => FormatError::InvalidDimensions {
+            format,
+            width: i32::from(width),
+            height: i32::from(height),
+        },
+        MapError::DimensionTooLarge {
+            width,
+            height,
+            limit,
+        } => FormatError::DimensionTooLarge {
+            format,
+            width: i64::from(width),
+            height: i64::from(height),
+            limit,
+        },
+        MapError::TooManyCells {
+            width,
+            height,
+            cells,
+            limit,
+        } => FormatError::TooManyCells {
+            format,
+            width,
+            height,
+            cells,
+            limit,
+        },
+        // `Map::blank` 不读字节 ⇒ 这两个变体在构造路径上不可达。真到了说明 mir2-map 改了契约。
+        other @ (MapError::TooShort { .. } | MapError::LengthMismatch { .. }) => {
+            FormatError::Inconsistent {
+                detail: format!("空白图构造失败（mir2-map 的契约变了）：{other}"),
+            }
+        }
+    };
+    CoreError::Map {
+        path: path.to_path_buf(),
+        err,
+    }
+}
+
 // ───────────────────────── 格访问 ─────────────────────────
 
 /// `(x, y)` → `cells` 下标（列优先：`x * height + y`）；越界 `None`。来源：`edit.rs:1329-1334`。
@@ -819,3 +1180,13 @@ mod tests {
         }
     }
 }
+
+/// 新建空白图的用例（`Map::blank` / `Document::blank` / `Document::blank_in`）。
+///
+/// 单独一个文件：`document.rs` 已过千行，空白图这套用例自带一个落盘往返 + 9 种格式的
+/// 拒绝矩阵，塞回原模块会把「双表示 / 脏标记 / 字节差异」的用例挤散。
+/// 挂法与 `map_check_tests.rs` / `resize_tests.rs` / `session_tests.rs` 一致（`#[path]` 挂回本模块，
+/// 因此能用 `super::` 访问私有的 `creation_error` / `blank_gate`）。
+#[cfg(test)]
+#[path = "blank_tests.rs"]
+mod blank_tests;

@@ -150,6 +150,8 @@ pub use convert::{
 };
 pub use document::{
     byte_diff, byte_diff_bytes, cell_at, cell_mut, index_of, ByteDiff, DocSnapshot, Document,
+    BLANK_PATH, CREATION_MAX_CELLS, CREATION_MAX_DIMENSION, CREATION_MIN_DIMENSION,
+    UNTITLED_FILE_NAME,
 };
 pub use error::{CoreError, SaveStage};
 pub use fill::{

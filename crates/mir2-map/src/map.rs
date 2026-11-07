@@ -108,6 +108,93 @@ impl Map {
         })
     }
 
+    /// 造一张 `width × height` 的**空白图**（指定格长档位；全 0 格、无尾区）。
+    ///
+    /// # 一、上游依据：`MapDocument(int width, int height)` 到底做了什么
+    ///
+    /// CrystalStudio C# `Document.cs:37-41`：
+    ///
+    /// ```csharp
+    /// public MapDocument(int width, int height)
+    /// {
+    ///     MapDimensions.Validate(width, height);   // :39
+    ///     Width = width; Height = height;          // :40
+    /// }
+    /// ```
+    ///
+    /// 逐条对齐：
+    ///
+    /// 1. **宽高怎么存**：两个 `int` 属性（`Document.cs:35-36`），构造时只赋值、不做任何推导。
+    ///    本仓对应 [`Map::width`] / [`Map::height`]（`u16`；为什么不是无上限的 `int`，
+    ///    见 [`crate::MAX_DIMENSION`] 的文档）。
+    /// 2. **格数组怎么初始化**：**不初始化**。C# 的格表是稀疏字典
+    ///    `Dictionary<int, Cell> cells = [];`（`Document.cs:43`），构造完**一个格都不存在**；
+    ///    读取走 `Get(x, y)`，未命中返回静态 `empty`（`Document.cs:45`、`:50`），
+    ///    而 `Cell` 的字段默认值全是 0（`Document.cs:7-32`；`Empty` 判据 `:31` 也把全 0 当空格）
+    ///    ⇒ **语义等价于「`w*h` 个全 0 格」**。本仓 [`Map::cells`] 是定长 `Vec`（不是稀疏表），
+    ///    所以这里显式铺 `w*h` 个 [`Cell::default()`]，与 C# 的读取结果逐字段相同。
+    /// 3. **格式（`FormatId`）默认是什么**：构造函数**既不接受也不设置**格式 ——
+    ///    它只留一个 `SourceFormat` 属性（`Document.cs:42`）由调用方后置赋值，
+    ///    缺省即枚举零值 `AssetSourceFormat.Default`
+    ///    （`SettingsStore.cs:5`：`public enum AssetSourceFormat { Default, Sanxiu }`）。
+    ///    ⚠ C# 的 `SourceFormat` 是**素材来源**（是否三修素材），**不是磁盘格式**：
+    ///    上游保存永远写自己那一套（`Document.cs:90` 的 `1 / 'C' / '#' / w / h` +
+    ///    `:102` 的 `CellCodec.Write`，26 B/格的 Crystal 格式），与源文件格式无关。
+    ///    ⇒ 本函数的 `format` 参数**没有上游对应物**：它是本 crate 自己的「三档格长」
+    ///    投影（见 [`CellFormat`]），语义是「按这一档的格长铺格」，**不是**「仿制某种上游格式」。
+    /// 4. **header 怎么造**：C# 构造函数**不造 header**，头部字节只在保存时现写
+    ///    （`Document.cs:90`）。本仓 [`Map`] 是「52 字节头 + 格」的结构体，
+    ///    [`Map::to_bytes`] 直接吐 `header_raw` ⇒ 空白图**必须**在这里把宽高写进头部，
+    ///    否则写出的文件头是 52 字节全 0（宽高也是 0），连自己都读不回来。
+    ///    头部布局：`wWidth` u16@0、`wHeight` u16@2
+    ///    （`mir2-format/src/formats/old12.rs:7-8` 的 `TMapHeader` 字段表），
+    ///    其余 48 字节（`sTitle[16]` / `UpdateDate` f64 / `Reserved[24]`）留 0。
+    ///
+    /// # 二、为什么三档都支持、本层**没有**「不支持的档位」
+    ///
+    /// 三档全是**定长格**（12 / 14 / 36 B），本 crate 对三档的读写都是完整的
+    /// （[`CellFormat::detect`] 只看长度等式）。全 0 格在 `Ext36` 档就是
+    /// `tail = [0u8; 22]`（[`Cell::default`] 的原值），与「读一个 `52 + 36·w·h` 的全零文件」
+    /// **逐字节等价** ⇒ 不是猜值、不是占位。
+    ///
+    /// ⚠ 但「本层能铺格」≠「九种磁盘格式里哪一种适合当新建默认」：那还要另判
+    /// 「格内有没有未建模尾区」「改格后语义是否自洽」「头部签名能不能被认出来」，
+    /// 属于上层（`miredit-core` 的 `Document::blank_in`）的**格式闸门**，不在本 crate 职责里。
+    ///
+    /// # 三、尺寸判据
+    ///
+    /// 直接调 [`validate_dimensions`]（与 [`Map::parse`] 同一个单点，不另写一套），
+    /// 对应 C# 构造函数第一行 `MapDimensions.Validate(width, height)`
+    /// （`Document.cs:39` → `MapDimensions.cs:14-18` → `:11-12@acfbbf8a` 的 `CanRoundTrip` 三条件）。
+    ///
+    /// # Errors
+    ///
+    /// [`MapError::ZeroDimension`] / [`MapError::DimensionTooLarge`] / [`MapError::TooManyCells`]
+    /// —— 与 [`Map::parse`] 完全同一批变体、同一短路顺序。
+    pub fn blank(width: u16, height: u16, format: CellFormat) -> Result<Map, MapError> {
+        // 上游构造函数第一行（`Document.cs:39`）。放在最前面：不合法的尺寸一格都不许铺。
+        validate_dimensions(width, height)?;
+
+        let mut header_raw = [0u8; HEADER_LEN];
+        // 宽高按 `TMapHeader` 布局写在小端前 4 字节（`formats/old12.rs:7-8`）。
+        // 256 的字节序是 `00 01`，所以「首字节为 0」不代表这是无标题的 Mir3 图 ——
+        // 判格式的是长度等式（`mir2-format/src/registry.rs:139-165` 长度优先），不是首字节。
+        header_raw[0..2].copy_from_slice(&width.to_le_bytes());
+        header_raw[2..4].copy_from_slice(&height.to_le_bytes());
+
+        // 已过 `validate_dimensions` ⇒ `w,h ∈ 1..=32767` 且 `w*h ≤ 16M`，`usize` 乘法不会溢出。
+        let count = usize::from(width) * usize::from(height);
+
+        Ok(Map {
+            header_raw,
+            width,
+            height,
+            format,
+            // C# 侧「未命中即 `empty`（全 0 格）」的显式等价物（见本节第 2 条）。
+            cells: vec![Cell::default(); count],
+        })
+    }
+
     /// 序列化回字节流；对 [`Map::parse`] 的成功输入，输出必须与之逐字节相等。
     ///
     /// 输出长度 = `52 + cells.len() * format.cell_size()`。
@@ -480,5 +567,116 @@ mod tests {
         let again = Map::parse(&back).expect("写回的字节必须能再解析");
         assert_eq!((again.width, again.height), (w, h));
         assert_eq!(again.cells.len(), 32767);
+    }
+
+    // ─────────────────────────── 空白图（`Map::blank`） ───────────────────────────
+
+    /// `Map::blank(256,256,fmt)`：宽高写对、格**全 0**、无尾区、字节数精确。
+    ///
+    /// 对应上游 `MapDocument(int,int)` 的语义（`Document.cs:37-41`：只记宽高，
+    /// 格表是稀疏字典、未命中返回全 0 的 `empty`，见 `Map::blank` 文档第 2 条）。
+    #[test]
+    fn 空白图三档尺寸正确且格全零() {
+        const W: u16 = 256;
+        const H: u16 = 256;
+        const N: usize = 65_536; // 256×256
+
+        for fmt in [CellFormat::Old12, CellFormat::New14, CellFormat::Ext36] {
+            let map = Map::blank(W, H, fmt).expect("256×256 是合法尺寸");
+
+            assert_eq!((map.width, map.height), (W, H), "{fmt:?} 宽高必须原样存下");
+            assert_eq!(map.format, fmt);
+            assert_eq!(map.cells.len(), N, "{fmt:?} 必须铺满 w*h 个格");
+
+            // 全 0 格：逐字段等于 `Cell::default()`（含 Ext36 的 `tail = [0;22]`）
+            assert!(
+                map.cells.iter().all(|c| *c == Cell::default()),
+                "{fmt:?} 的格必须全是 `Cell::default()`"
+            );
+
+            // 头部：只有前 4 字节有值（w/h 小端），其余 48 字节留 0
+            assert_eq!(&map.header_raw[0..2], &W.to_le_bytes(), "{fmt:?} wWidth@0");
+            assert_eq!(&map.header_raw[2..4], &H.to_le_bytes(), "{fmt:?} wHeight@2");
+            assert!(
+                map.header_raw[4..].iter().all(|b| *b == 0),
+                "{fmt:?} 头部 4..52（sTitle/UpdateDate/Reserved）必须留 0"
+            );
+
+            // 字节数 = 52 + 格长 × 格数，且**没有尾区**
+            let bytes = map.to_bytes();
+            assert_eq!(bytes.len(), HEADER_LEN + fmt.cell_size() * N, "{fmt:?} 字节数");
+
+            // 能被自己读回来（逐字段 + 逐字节）
+            let back = Map::parse(&bytes).expect("空白图必须能被 Map::parse 读回");
+            assert_eq!(back, map, "{fmt:?} 空白图往返后字段必须一致");
+            assert_eq!(back.to_bytes(), bytes, "{fmt:?} 空白图往返必须逐字节相等");
+        }
+    }
+
+    /// 256×256 `Old12` 空白图的**真实字节**：头 4 字节是 `00 01 00 01`，
+    /// 之后 786,432 字节全 0，总长 **786,484**。
+    ///
+    /// 断言全部基于真实生成的字节（不是算出来的期望值），并且点明一个坑：
+    /// **首字节 `0x00` 不代表这是无标题的 Mir3 图** —— 256 的小端低字节就是 0。
+    /// 认格式的是长度等式（`mir2-format/src/registry.rs:139-165` 长度优先），不是首字节。
+    #[test]
+    fn 空白图旧12档真实字节() {
+        let map = Map::blank(256, 256, CellFormat::Old12).expect("256×256 合法");
+        let bytes = map.to_bytes();
+
+        assert_eq!(bytes.len(), 786_484);
+        assert_eq!(bytes.len(), HEADER_LEN + 12 * 65_536);
+
+        // 宽 256 = 0x0100 ⇒ 小端 `00 01`；高同理
+        assert_eq!(bytes[0], 0x00);
+        assert_eq!(bytes[1], 0x01);
+        assert_eq!(bytes[2], 0x00);
+        assert_eq!(bytes[3], 0x01);
+        assert_eq!(u16::from_le_bytes([bytes[0], bytes[1]]), 256);
+        assert_eq!(u16::from_le_bytes([bytes[2], bytes[3]]), 256);
+        assert!(bytes[4..].iter().all(|b| *b == 0), "头 4..52 与全部格必须全 0");
+
+        // 再解析：字段全等、再写回逐字节相等
+        let back = Map::parse(&bytes).expect("空白图必须能被 Map::parse 读回");
+        assert_eq!((back.width, back.height, back.format), (256, 256, CellFormat::Old12));
+        assert_eq!(back, map);
+        assert_eq!(back.to_bytes(), bytes);
+    }
+
+    /// 尺寸边界：0 / 超单边 / 超格数一律 `Err`，**不 panic**。
+    ///
+    /// ⚠ 这里**不**断言「恰好 16M 格放行」：`Map::blank(4000,4000)` 要铺 1600 万格 ×
+    /// 36 B ≈ 576 MB，会把测试机拖死。那一条边界由 [`validate_dimensions`] 自己的
+    /// `格数上限边界逐宽度穷举` 用例（`cell.rs`）覆盖，本用例只证明**拒绝侧**在分配之前就返回。
+    #[test]
+    fn 空白图尺寸边界一律报错不panic() {
+        for (w, h, 期望) in [
+            (0u16, 0u16, "ZeroDimension"),
+            (0, 7, "ZeroDimension"),
+            (7, 0, "ZeroDimension"),
+            (32768, 1, "DimensionTooLarge"),
+            (1, 32768, "DimensionTooLarge"),
+            (65535, 1, "DimensionTooLarge"),
+            (5000, 5000, "TooManyCells"),
+            (4001, 4000, "TooManyCells"),
+        ] {
+            let err = Map::blank(w, h, CellFormat::Old12)
+                .err()
+                .unwrap_or_else(|| panic!("{w}×{h} 必须 Err"));
+            let 变体名 = format!("{err:?}");
+            assert!(
+                变体名.starts_with(期望),
+                "{w}×{h} 应报 {期望}，实际 {err:?}"
+            );
+        }
+
+        // 小尺寸放行（1×1 = 52+12 = 64 字节）
+        let one = Map::blank(1, 1, CellFormat::Old12).expect("1×1 尺寸合法");
+        assert_eq!(one.to_bytes().len(), 64);
+
+        // 单边恰好 32767 放行：52 + 12×32767 = 393_256 字节（约 384 KiB，可控）
+        let edge = Map::blank(32767, 1, CellFormat::Old12).expect("32767×1 尺寸合法");
+        assert_eq!(edge.to_bytes().len(), 393_256);
+        assert_eq!(edge.cells.len(), 32767);
     }
 }
