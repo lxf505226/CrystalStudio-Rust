@@ -1082,8 +1082,14 @@ impl MireditApp {
         //    `Ctrl+Shift+V` 是填充选区，它们各有归属，与这三个键不冲突；
         // ② `C` **只切阻挡通道、不动当前工具**（上游同一条：只改两个 CheckBox）；
         // ③ 平移按**屏幕像素**（`pan_by_screen`），不按格 —— 缩放 25% 时一次 W 也只走 48 屏幕像素；
-        // ④ 一律用 `key_pressed`（= 一次按下走一步），**不按帧**：按住不放只走一步，
-        //    连按才连走（上游 WinForms 的 `KeyDown` 同语义，不靠 `repeat`）。
+        // ④ **每帧最多一步、不按帧积分**（R41 实测口径，别再写成"按住只走一步"）：
+        //    `i.key_pressed()` = `num_presses(key) > 0`，而 egui 的 `num_presses` 文档明确写
+        //    "Includes key-repeat events"（`egui-0.33.3/src/input_state/mod.rs:814-826`）
+        //    ⇒ **按住不放时，OS 每发一次重复事件就再走一步**，与上游 WinForms `KeyDown`
+        //    （同样会被系统自动重复触发）一致；但一帧内收到多次重复只算**一步**
+        //    （`key_pressed` 是布尔），且**没有按键事件的帧不会自己漂移**。
+        //    ⇒ 若将来要"按住只走一步"，得在这里过滤 `egui::Event::Key { repeat: true }`，
+        //      那是**行为变更**（会偏离上游），须先拍板。
         // R40 守卫：这些"裸键"只在真正该归画布时生效 ——
         // ① `--shot` / `--autodrag` 锁死输入（[`Self::input_locked`]）；
         // ② 两个搜索框有焦点时键盘归它们（否则在搜索框里敲 `B` 会顺手换工具）；
@@ -3571,6 +3577,31 @@ mod tests {
         let _ = ctx.run(input, |ctx| app.handle_keys(ctx));
     }
 
+    /// 跑一个**没有任何事件**的帧（用来验证"没有按键事件的帧不会漂移"）。
+    fn 空跑一帧(app: &mut MireditApp) {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| app.handle_keys(ctx));
+    }
+
+    /// 一帧里塞 `n` 个**重复**（`repeat: true`）的按键事件 —— 模拟系统自动重复。
+    fn 按一次重复键(app: &mut MireditApp, key: egui::Key, n: usize) {
+        let ctx = egui::Context::default();
+        let events: Vec<egui::Event> = (0..n)
+            .map(|_| egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: true,
+                modifiers: Default::default(),
+            })
+            .collect();
+        let input = egui::RawInput {
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| app.handle_keys(ctx));
+    }
+
     /// **无图时点「需要先开图」的项**：回执是「需要先开图：…」，且文档一个字节都不动。
     #[test]
     fn 无图时菜单项被拦且不改文档() {
@@ -5626,6 +5657,57 @@ mod tests {
         assert!(app.edit.clipboard().is_some(), "Ctrl+C 必须真的复制了选区");
     }
 
+    /// **`P` / `K` 在界面上真的显示「未接线」**（R41：不只断言 `Tool::Unwired`）。
+    ///
+    /// 两处显示面各钉一条，防止将来把工具接了一半就改写文案、或干脆改回「铅笔/克隆」骗过测试：
+    /// ① [`edit::slot_label`]（工具条/工具名）；
+    /// ② [`crate::screen_text::build`] 的 `status_tool`（状态栏「工具：…」）。
+    #[test]
+    fn 铅笔与克隆在界面上显示未接线() {
+        for (key, slot) in [
+            (egui::Key::P, edit::TOOL_PENCIL_IDX),
+            (egui::Key::K, edit::TOOL_CLONE_IDX),
+        ] {
+            // ① 静态标签
+            assert_eq!(
+                edit::slot_label(slot),
+                miredit_core::TOOL_UNWIRED,
+                "槽位 {slot} 的界面名必须是「未接线」"
+            );
+            // ② 状态栏（按一次键后现算一帧文本）
+            let mut app = 尺寸应用(8, 8);
+            按一次键(&mut app, key);
+            let t = crate::screen_text::build(
+                &app.doc,
+                &app.view,
+                app.hover,
+                &app.lines,
+                &app.edit,
+            );
+            assert!(
+                t.status_tool.contains(miredit_core::TOOL_UNWIRED),
+                "{key:?}：状态栏工具段应含「未接线」，实际「{}」",
+                t.status_tool
+            );
+            // 反面：不许冒充已实现（否则"接线"这件事就成了假功能）
+            for 假 in ["铅笔", "克隆", "Pencil", "Clone"] {
+                assert!(
+                    !t.status_tool.contains(假),
+                    "{key:?}：未接线的工具不许显示「{假}」，实际「{}」",
+                    t.status_tool
+                );
+            }
+        }
+        // 对照：真接线的三个工具仍显示各自的名字（别把「未接线」写成兜底）
+        for (i, want) in [
+            (edit::TOOL_BRUSH_IDX, miredit_core::TOOL_BRUSH),
+            (miredit_core::TOOL_ERASER_IDX, miredit_core::TOOL_ERASER),
+            (miredit_core::TOOL_PICKUP_IDX, miredit_core::TOOL_PICKUP),
+        ] {
+            assert_eq!(edit::slot_label(i), want, "槽位 {i} 的界面名");
+        }
+    }
+
     /// **`W/A/S/D` 每次平移 48 屏幕像素**（上游 `PanBy`，`MapViewport.Minimap.cs:11-22`）。
     ///
     /// 判据刻意用 `pan * scale`（= 屏幕像素）而不是 `pan`：缩放 200% 时一次 W 仍是 48 屏幕像素，
@@ -5715,6 +5797,43 @@ mod tests {
                 "焦点清掉后 `C` 必须恢复生效"
             );
         }
+    }
+
+    /// **`W/A/S/D` 的按住语义：每帧最多一步、不按帧积分**（R41 定稿口径）。
+    ///
+    /// 这条钉两件**实测**事实（而不是"按住只走一步"那句想当然的话）：
+    /// ① **没有按键事件的帧不会漂移** —— 一次 W 之后连跑 5 个空帧，位移不再增加；
+    /// ② **一帧内多次重复事件只算一步** —— egui 的 `key_pressed` 是布尔
+    ///    （`num_presses(key) > 0`，`egui-0.33.3/src/input_state/mod.rs:814-826`），
+    ///    所以同一帧塞 3 个 `repeat: true` 也只走 48 屏幕像素。
+    ///
+    /// ⚠ 注意"按住"的真相：**系统每发一次重复事件就再走一步**（`key_pressed` 把 repeat 事件
+    /// 也算按下，与上游 WinForms `KeyDown` 的重复触发一致）—— 本测试不假装按住只走一步。
+    #[test]
+    fn 平移每帧最多一步且不按帧积分() {
+        let mut app = 尺寸应用(8, 8);
+        app.view.scale = 1.0;
+        app.view.pan_x = 0.0;
+        app.view.pan_y = 0.0;
+
+        // ① 一次按键 ⇒ 一步；随后 5 个空帧（无任何按键事件）⇒ 不再移动
+        按一次键(&mut app, egui::Key::W);
+        assert!((app.view.pan_y + crate::metrics::PAN_STEP_PX).abs() < 0.01, "第一次 W 应走一步");
+        let 一步后 = app.view.pan_y;
+        for _ in 0..5 {
+            空跑一帧(&mut app);
+        }
+        assert_eq!(app.view.pan_y, 一步后, "没有按键事件的帧不许自己漂移（不按帧积分）");
+
+        // ② 同一帧里三个 repeat 事件 ⇒ 仍然只走一步
+        let 前 = app.view.pan_y;
+        按一次重复键(&mut app, egui::Key::W, 3);
+        assert!(
+            (app.view.pan_y - (前 - crate::metrics::PAN_STEP_PX)).abs() < 0.01,
+            "一帧内 3 个重复事件只该走一步：{} → {}",
+            前,
+            app.view.pan_y
+        );
     }
 
     /// **模态打开时 `C` 与 `W/A/S/D` 都不生效**（`handle_keys` 开头对浮层让位）。

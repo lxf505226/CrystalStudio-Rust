@@ -497,6 +497,10 @@ pub const MENU_DARK_OFF: &str = "深色模式：关（已写入设置文件）";
 /// [`crate::metrics::CELL_H`]），回执里写出来，用户点完就知道自己看到的是什么间距的线。
 pub const MENU_CELL_GRID_ON: &str = "单元格网格：开（世界格 48×32）"; // EN: Cell grid: on (48×32)
 /// **阻挡标记开**回执（键 `C`；上游 `MainWindow.axaml.cs:997` 同时打开低/高两个通道）。
+///
+/// ⚠ **与上游的有意差异**（R41 记档）：上游 `C` 只改两个 `CheckBox.IsChecked`，**不写状态栏**；
+/// 本仓的纪律是"每次状态变更都要有回执"（同 `G` 网格、门开关），所以这里多一句。
+/// 多出来的只是**状态栏一句话**，不改变"两个通道同值"的语义，也不额外改地图。
 pub const MENU_COLLISION_ON: &str = "阻挡标记：开（低位 + 高位）"; // EN: Collision markers: on (low + high)
 
 /// 单元格网格关闭回执。
@@ -628,6 +632,9 @@ pub const SC_TOOL_KEYS: &str = "工具切换（铅笔/克隆未接线）"; // EN
 /// 官方 `Key.C`：低位/高位阻挡标记同开同关（`MainWindow.axaml.cs:997`）。
 pub const SC_TOGGLE_COLLISION: &str = "低位 / 高位阻挡标记 开 / 关"; // EN: Toggle low/high collision markers
 /// 官方 `W/A/S/D`：每次平移 48 **屏幕**像素（`PanBy`，`MapViewport.Minimap.cs:11-22`）。
+///
+/// "每次" = **每个按键事件**一次：按住时系统自动重复会一次一次地走（`i.key_pressed()` 含
+/// key-repeat），但**没有事件的帧不会漂移**（不做按帧积分）；一帧内多次重复只算一步。
 pub const SC_PAN_KEYS: &str = "平移视图（每次 48 屏幕像素）"; // EN: Pan view (48 screen px per press)
 /// 动作名：笔刷尺寸 ±2。
 pub const SC_BRUSH_SIZE: &str = "笔刷尺寸 ±2（夹 3..31）"; // EN: Brush size ±2 (clamped 3..31)

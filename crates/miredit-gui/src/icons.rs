@@ -51,6 +51,14 @@ pub struct ToolIconDef {
     /// 工具名（取自 JSON `tag_value`）。
     pub tool: &'static str,
     /// 工具提示（取自 JSON `tooltip` 首行）。
+    ///
+    /// ⚠ **未接线的工具必须在提示里写出来**（R41，2026-11-07）：第 2 项 `Pencil` 与第 8 项
+    /// `Clone` 的内核工具仍是 [`miredit_core::Tool::Unwired`]（按 `P`/`K` 只切槽位），
+    /// 提示因此写成 `Pencil · P（未接线）` / `Clone · K（未接线）`，别让提示口气像"能用"。
+    /// 断言在 [`tests::未接线工具在悬停提示里说明`]。
+    ///
+    /// 注：本仓目前**没有**把 `tip` 画出来的路径（工具条 `dock_left::draw_tools` 只画图标）；
+    /// 这里先保证数据本身诚实，等真接悬停时直接用。
     pub tip: &'static str,
     /// 显示区边长（JSON `icon.box`，16 或 18），坐标系仍为 24×24。
     pub box_size: f32,
@@ -219,7 +227,7 @@ pub const TOOLS: &[ToolIconDef] = &[
     },
     ToolIconDef {
         tool: "Pencil",
-        tip: "Pencil · P",
+        tip: "Pencil · P（未接线）",
         box_size: 16.0,
         paths: MDL2_E70F_PENCIL,
         source: IconSource::Mdl2Equivalent("U+E70F"),
@@ -261,7 +269,7 @@ pub const TOOLS: &[ToolIconDef] = &[
     },
     ToolIconDef {
         tool: "Clone",
-        tip: "Clone · K",
+        tip: "Clone · K（未接线）",
         box_size: 16.0,
         paths: MDL2_E8C8_CLONE,
         source: IconSource::Mdl2Equivalent("U+E8C8"),
@@ -440,6 +448,44 @@ pub fn box_size_of(idx: usize) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// **未接线的工具必须在悬停提示里说出来**（R41 收尾：可见面最后一处）。
+    ///
+    /// 第 2 项（`Pencil`）与第 8 项（`Clone`）对应的内核工具是 `Tool::Unwired`：
+    /// 按 `P`/`K` 只切槽位、画布无动作。提示原来写 `"Pencil · P"` / `"Clone · K"`
+    /// 口气像"能用" ⇒ 现在必须带「（未接线）」。
+    ///
+    /// 反面同样重要：**已接线**的工具（画笔/填充/橡皮/吸管）与宿主工具（选择/印章）
+    /// 的提示不许出现「未接线」，否则用户会以为连画笔都不能用。
+    #[test]
+    fn 未接线工具在悬停提示里说明() {
+        // ① 两个未接线槽：点名 + 带「未接线」
+        for (i, name) in [(1usize, "Pencil"), (7usize, "Clone")] {
+            let tip = TOOLS[i].tip;
+            assert!(tip.contains(name), "第 {i} 项提示应仍点名 {name}：{tip}");
+            assert!(
+                tip.contains("未接线"),
+                "第 {i} 项（{name}）的提示缺「未接线」：{tip}"
+            );
+        }
+        // ② 已接线 + 宿主工具：不许出现「未接线」
+        for i in [0usize, 2, 3, 4, 5, 6] {
+            assert!(
+                !TOOLS[i].tip.contains("未接线"),
+                "第 {i} 项（{}）是可用工具，提示不该说未接线：{}",
+                TOOLS[i].tool,
+                TOOLS[i].tip
+            );
+        }
+        // ③ 全表里带「未接线」的**恰好这两个**槽（多一个少一个都说明标注走偏了）
+        let 带标注: Vec<usize> = TOOLS
+            .iter()
+            .enumerate()
+            .filter(|(_, t)| t.tip.contains("未接线"))
+            .map(|(i, _)| i)
+            .collect();
+        assert_eq!(带标注, vec![1, 7], "带「未接线」的槽位应恰好是铅笔与克隆");
+    }
 
     #[test]
     fn 工具数量为10() {

@@ -18,6 +18,11 @@
 //! | `B` / `P` / `F` / `E` / `M` / `O` / `V` / `K`（工具，**合并一行**）| [`crate::app::MireditApp::handle_keys`]（2026-11-07 起真绑定；`P`/`K` 的**工具**本身尚未接线，表里如实标注）|
 //! | `C`（低位/高位阻挡标记同开同关）| 同上（上游 `MainWindow.axaml.cs:997`）|
 //! | `W` `A` `S` `D`（平移，每次 48 屏幕像素）| 同上 → [`crate::canvas_view::CanvasView::pan_by_screen`] |
+//!
+//! ⚠ **`W A S D` 的按住语义**（R41 定稿）：**每个按键事件走一步（48 屏幕像素），每帧最多一步**。
+//! `i.key_pressed()` 含 egui 的 key-repeat 事件 ⇒ 按住不放时系统每发一次重复事件再走一步
+//! （与上游 WinForms `KeyDown` 的重复行为一致）；但没有按键事件的帧**不会**自己漂移
+//! （不是"按帧 × 速度"那种积分）。表里写「每次 48 屏幕像素」指的就是这个"每次"。
 //! | `G`（单元格网格） | 同上 → [`crate::menu::action::apply`] → [`crate::grid`]（2026-11-05 起真实现）|
 //! | `Ctrl+C/X/V` / `Delete` / `Ctrl+Shift+V` | [`crate::app::MireditApp::handle_sel_keys`] |
 //! | 空格+拖动 / 中键拖动 / 滚轮 | [`crate::app::MireditApp::interact`] |
