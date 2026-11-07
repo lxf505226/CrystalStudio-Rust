@@ -886,6 +886,99 @@ mod tests {
         );
     }
 
+    /// ③d **标题左边界 = `r.left() + TAB_TITLE_INSET`、关闭符右边界 = `r.right() − TAB_TITLE_INSET`**。
+    ///
+    /// # 为什么这条只能靠单测（**无像素证据**）
+    ///
+    /// `TAB_TITLE_INSET` 有两个消费族：
+    /// * **单标签态** —— 第 0 格由 `canvas::draw` 画（`canvas::labels` / `canvas::dyn_labels`）
+    ///   ⇒ 能被 `--shot` 拍到（A12-a 单已拍：标题 +1px、`×` −1px，见回执）；
+    /// * **多标签态** —— 第 0 格以外由本模块 [`draw`] 画，而 `MireditApp` **只放一个占位槽**
+    ///   （`app.rs` 的 `tabs: Tabs::new(TabState::占位())`，生产代码从不 `push`）
+    ///   ⇒ CLI 开不出第二张标签 ⇒ **这条路径永远拍不到**。
+    ///
+    /// 所以这里读 **egui 真要栅格化的那个 galley**（`Shape::Text` 的 `pos` / `galley.size()`）
+    /// 把两个边界钉住：`Painter::text` 是 `anchor.anchor_size(pos, size).min` 落 `galley`
+    /// （`egui-0.33.3/src/painter.rs:518-520`）⇒ `pos.x` 就是排版盒左边。
+    ///
+    /// 上游推导（`12` 的真值，见 [`m::TAB_TITLE_INSET`] 的文档）：
+    /// `EditorControls.axaml:59` 的 `Padding="8,7"` + `MainWindow.MapTabs.cs:54` 的
+    /// `Label.Margin=(4,2,8,2)` ⇒ 左 8+4；`MapTabs.cs:57` 的关闭钮 `Padding=(4,0,4,0)`
+    /// ⇒ 右 8+4。
+    #[test]
+    fn 标题左边界与关闭符右边界都取内缩常量() {
+        // ⓪ 常量本身的值：上游 8+4 的推导值。改回 11（旧截图量值）或别的数 ⇒ 这里当场红。
+        assert!(
+            (m::TAB_TITLE_INSET - 12.0).abs() < 0.01,
+            "TAB_TITLE_INSET 必须是上游推导值 12（Padding 左 8 + Label.Margin 左 4；\
+             右侧同理 8 + 关闭钮 Padding 右 4），实得 {}",
+            m::TAB_TITLE_INSET
+        );
+
+        let l = Layout::compute(窗());
+        let f = 双标签夹具(1);
+        let (app, tabs, 甲名, 乙名) = (&f.app, &f.app.tabs, &f.甲名, &f.乙名);
+        assert_eq!(tabs.active(), 1, "本用例要 active == 1（两张都由本模块画）");
+        let rs = rects(&l, 2);
+
+        let ctx = egui::Context::default();
+        let out = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(
+                    pos2(0.0, 0.0),
+                    vec2(m::WINDOW_W, m::WINDOW_H),
+                )),
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::NONE)
+                    .show(ctx, |ui| draw(ui.painter(), &l, tabs, app));
+            },
+        );
+        // (文本, 排版盒左边 x, 排版盒宽)
+        let mut 文本: Vec<(String, f32, f32)> = Vec::new();
+        for cs in &out.shapes {
+            if let egui::epaint::Shape::Text(t) = &cs.shape {
+                文本.push((t.galley.job.text.clone(), t.pos.x, t.galley.size().x));
+            }
+        }
+
+        // ① 标题：左边界 = 各自标签的 `r.left() + TAB_TITLE_INSET`
+        let 甲 = tx::fill(tx::TAB_TITLE_DIRTY_TMPL, &[("name", 甲名)]);
+        let 乙 = tx::fill(tx::TAB_TITLE_TMPL, &[("name", 乙名)]);
+        for (i, want) in [(0usize, &甲), (1usize, &乙)] {
+            let (_, x, _) = 文本
+                .iter()
+                .find(|(s, _, _)| s == want)
+                .unwrap_or_else(|| panic!("标签 {i} 的标题「{want}」没上屏。实际提交：{文本:?}"));
+            let 应 = rs[i].left() + m::TAB_TITLE_INSET;
+            assert!(
+                (x - 应).abs() < 0.01,
+                "标签 {i} 标题左边界 {x} 必须 = r.left({}) + TAB_TITLE_INSET({}) = {应}",
+                rs[i].left(),
+                m::TAB_TITLE_INSET
+            );
+        }
+
+        // ② 关闭符 `×`：右边界 = 各自标签的 `r.right() − TAB_TITLE_INSET`
+        //   （`RIGHT_CENTER` ⇒ 排版盒右边 = pos.x + 宽；两张标签各查各的，不许串到隔壁）
+        for (i, r) in rs.iter().enumerate() {
+            let 应 = r.right() - m::TAB_TITLE_INSET;
+            let 命中 = 文本
+                .iter()
+                .filter(|(s, x, w)| s == tx::TAB_CLOSE && (x + w - 应).abs() < 0.01)
+                .count();
+            assert!(
+                命中 >= 1,
+                "标签 {i} 的关闭符右边界必须是 r.right({}) − TAB_TITLE_INSET({}) = {应}；\
+                 实际提交：{文本:?}",
+                r.right(),
+                m::TAB_TITLE_INSET
+            );
+        }
+    }
+
     /// ⑥ **点击真的切过去了**：点非活跃标签 ⇒ `active` 变化 + `app.*` 换成那张图的真值；
     /// 点活跃标签 ⇒ `active` 不变、`app.*` 逐值不变（`activate` 自身 no-op）。
     ///
