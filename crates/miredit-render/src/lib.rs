@@ -268,6 +268,32 @@
 //!
 //! 判据是 `grep -rn "cells_w * 48 / 4" crates/` 只应命中 [`minimap`] 一处；
 //! `miredit-gui` 与 `miredit-web` 都只做 [`MinimapSize`] → 像素尺寸的**调用**。
+//!
+//! # 十二、窗内小地图的总览图（[`overview`] 模块，2026-11-07 新增）
+//!
+//! 窗内小地图取的是**共享总览场景**的像素（`MapMinimap.Avalonia.cs:45` → `:50
+//! source.OverviewScene`、`MapViewport.Minimap.cs:7`），而总览是 `1/2^level` 尺度的
+//! **逐帧预缩 + 合成**（`MapViewport.cs:145` `WarmOverview()` →
+//! `Overview.cs:42-47` `StartOverview(settings, 4)`；预缩算式 `Assets.cs:119`，
+//! 合成 `OverviewBatch.cs:25-104`）—— 不是「1× 合成后再缩」（`700×700` 格 1× 就是 3.0 GiB）。
+//!
+//! [`render_overview`] 只做**渲染层**：输出
+//! `ceil(W*48 / 2^level) × ceil(H*32 / 2^level)` 的 RGBA8（`700×700` @ `level 4`
+//! ⇒ `2100×1400`），落格口径**与三层合成同源**（[`crate::compose::层取帧`] /
+//! [`crate::compose::层放置`]，本模块不复制第二份）。
+//!
+//! | 项 | 口径 |
+//! |---|---|
+//! | 预算 | 目标缓冲 ≤ [`OVERVIEW_MAX_BYTES`]（64 MiB）；超则**逐级抬 level**（到 16）|
+//! | 抬到 16 仍超 | [`OverviewError::BudgetExceeded`]，**不分配、不截断** |
+//! | `level > 16` | [`OverviewError::LevelOutOfRange`]（不静默 clamp）|
+//! | 实际档位 | [`Overview::level`]（可能大于入参，调用方按它换算坐标）|
+//! | 缺帧 | 不画、也不计数（与 §二 同一条「禁假数据」纪律）|
+//! | 光照 / 阻挡 / 门灯标记 | **不画**（总览只铺三层精灵）|
+//!
+//! 等价性由单测 `总览与整幅盒式降采样逐字节相同` 钉住（16 对齐假帧下，总览逐字节
+//! 等于 1× 合成图的 `16×16` 盒式平均）；非 `2^level` 对齐帧的相位误差等已知差异
+//! 见 [`overview`] 模块文档 §四。
 
 
 #![forbid(unsafe_code)]
@@ -284,6 +310,7 @@ mod types;
 pub mod compare;
 pub mod lighting;
 pub mod minimap;
+pub mod overview;
 pub mod png_io;
 pub mod stamp;
 pub mod tiled;
@@ -304,6 +331,11 @@ pub use lighting::{emits_light, light_bounds, MapLighting, LIGHT_SIZES};
 pub use minimap::{
     minimap_scale_fits, pick_official_scale, valid_minimap_size, MinimapPreset, MinimapSize,
     MAX_EXPORT_BYTES, MAX_EXPORT_SIDE, MINIMAP_MAX_PIXELS,
+};
+// 窗内小地图的**总览图**（`1/2^level` 尺度的三层合成，见 crate 文档 §十二）。
+// 落格口径不在这里：`render_overview` 调的是 `compose` 的 `层取帧` / `层放置`（同一份）。
+pub use overview::{
+    render_overview, Overview, OverviewError, OVERVIEW_MAX_BYTES, OVERVIEW_MAX_LEVEL,
 };
 pub use png_io::{encode_rgba_png, PngImage};
 pub use scale::{try_render_region_scaled, try_render_region_scaled_with};

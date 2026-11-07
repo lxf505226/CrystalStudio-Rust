@@ -30,6 +30,12 @@
 //! 印章渲染（`crate::stamp`）调的是**同一批函数** —— 改锚点只改一处，两边同时生效，
 //! 不会出现「地图一套、印章另一套」的口径分裂。
 //!
+//! **循环级的落格前提也只有一份**：[`层取帧`]（偶偶格 + 库路由 + 帧号 + 门偏移 + 加性标志，
+//! 规则 3/7/8 + §七）与 [`层放置`]（把取样的分支接到上面两个锚点算式上）。本模块的三层循环、
+//! 窗内小地图的总览图（`crate::overview`）都调这两个函数 ⇒「1× 合成」与「1/2^level 总览」
+//! 不可能各写一套落格口径。总览另需把位移换算到 level 尺度（`px / 2^level`），那是
+//! `crate::overview` 自己的事，换算完仍走同一批锚点函数。
+//!
 //! ⚠ **与任务书 §三.4 的差异**：任务书写「表层按 y 排序绘制」（= 原始 C++ 的行优先，
 //! `GameScene.cpp:3429-3431` 是 `j` 外层 / `i` 内层）。按「以源码为准」的口径，本实现取
 //! **Godot 客户端的列优先**：截图对照的基准就是 Godot 客户端，层内顺序必须以它为准。
@@ -337,39 +343,33 @@ pub(crate) fn render(
         // ---- 地表：只铺偶偶格（map_view.gd:199）；落格 = 世界格/2，像素位 = x*48 / y*32 ----
         for dx in 0..cells_w {
             let x = vp.origin_x + dx;
-            if x & 1 != 0 {
-                continue; // 奇数列不铺地表（GameScene.cpp:3549-3553）
-            }
             for dy in 0..cells_h {
                 let y = vp.origin_y + dy;
-                if y & 1 != 0 {
-                    continue;
-                }
                 let Some(cell) = 取格(map, x, y) else {
                     continue; // 图外：不画也不计数
                 };
-                // 1-based 帧号；低 15 位（最高位是「不可通过」标志，不参与取图）。
-                let Some(索引) = 帧号(cell.bk_img) else {
-                    continue; // 该格本来没有地表图 —— 不是缺帧
+                // 「只铺偶偶格」与「该层取哪一帧」在 [`层取帧`] 里只有一份：
+                // 奇格返回 `None`（**不是缺帧**，不计 missing），其余格照旧
+                // （`GameScene.cpp:3549-3553` / 模块文档 §一 规则 3）。
+                let Some(取样) = 层取帧(层别::地表, x, y, cell, options) else {
+                    continue;
                 };
-                let lib = LibRef::ground(u16::from(cell.tiles));
-                match cache.get(lib, 索引) {
+                match cache.get(取样.库, 取样.索引) {
                     Some(f) => {
-                        // 只有真的写下像素才算这格落笔（缺帧/空帧/全透明帧都不算）
-                        // 锚点：地表在 `Bounds` 里是 `anchored: false`（`MapViewport.cs:364-365`）
-                        // ⇒ 走 [`非加性锚点`] 但永远不位移（与 [`左上锚点`] 逐像素相同，
-                        // 共用同一个算式，避免三处各写一份）。
-                        let (px, py) = 非加性锚点(
+                        // 落格算式在 [`层放置`]（地表 `anchored = false` ⇒ 永远左上，
+                        // `MapViewport.cs:364-365`）。
+                        let (px, py) = 层放置(
+                            层别::地表,
                             dx,
                             dy,
                             map.format,
                             cell.area,
+                            &取样,
                             f.width,
                             f.height,
                             f.anchor,
-                            层别::地表,
-                            false,
                         );
+                        // 只有真的写下像素才算这格落笔（缺帧/空帧/全透明帧都不算）
                         if canvas.blit(&f, px, py) {
                             touched[(dx * cells_h + dy) as usize] = true;
                         }
@@ -381,7 +381,7 @@ pub(crate) fn render(
     }
 
     if mask.middle {
-        // ---- 中层：逐格（含奇格）。锚点按 C#：tile 尺寸左上、其余底边（见 `非加性锚点`）----
+        // ---- 中层：逐格（含奇格）。锚点按 C#：tile 尺寸左上、其余底边（见 [`层放置`]）----
         for dx in 0..cells_w {
             let x = vp.origin_x + dx;
             for dy in 0..cells_h {
@@ -389,28 +389,22 @@ pub(crate) fn render(
                 let Some(cell) = 取格(map, x, y) else {
                     continue;
                 };
-                let Some(索引) = 帧号(cell.mid_img) else {
+                let Some(取样) = 层取帧(层别::中层, x, y, cell, options) else {
                     continue; // 该格没有中层图
                 };
-                let lib = LibRef::middle(u16::from(cell.sm_tiles));
-                match cache.get(lib, 索引) {
+                match cache.get(取样.库, 取样.索引) {
                     Some(f) => {
                         // 同上：以「真的写了像素」为准
-                        // 锚点（A-001 跟 C#）：`anchored: true, front: false`
-                        // （`MapViewport.cs:268`）⇒ `anchored && (!tile || blend)`：
-                        // **tile 尺寸（48×32 / 96×64）且非混合 ⇒ 左上；其余 ⇒ 底边**。
-                        // 混合判据 [`中层混合`] 是 C# `MiddleBlend`；本仓视图没有中层动画帧
-                        // 字节 ⇒ 传 [`中层帧缺省`]（恒 0 ⇒ 恒 false），见该常量文档。
-                        let (px, py) = 非加性锚点(
+                        let (px, py) = 层放置(
+                            层别::中层,
                             dx,
                             dy,
                             map.format,
                             cell.area,
+                            &取样,
                             f.width,
                             f.height,
                             f.anchor,
-                            层别::中层,
-                            中层混合(中层帧缺省),
                         );
                         if canvas.blit(&f, px, py) {
                             touched[(dx * cells_h + dy) as usize] = true;
@@ -431,50 +425,39 @@ pub(crate) fn render(
                 let Some(cell) = 取格(map, x, y) else {
                     continue;
                 };
-                let Some(索引) = 帧号(cell.fr_img) else {
+                // 取帧与混合方式都在 [`层取帧`]：门开帧偏移**只有前景层有**
+                // （`options.doors_open == false` 时 [`门偏移`] 恒 0 ⇒ 索引与改动前同一个值，
+                // 见模块文档 §七），加性判据是 [`表层混合`]（`Front.Frames & 0x80`，
+                // 上游 `MapSpriteDrawing.cs:5@6450da90` 的 `FrontBlend`）。
+                //
+                // 与门偏移**正交**：门只改「取第几帧」，混合方式只看 `ani_frame` 的高位，
+                // 两者互不影响（模块文档 §九）。
+                let Some(取样) = 层取帧(层别::表层, x, y, cell, options) else {
                     continue; // 该格没有表层图
                 };
-                // 门开帧偏移（**只有前景层有门**，见模块文档 §七）：
-                // `options.doors_open == false` 时 [`门偏移`] 恒 0 ⇒ 索引与改动前同一个值。
-                let 索引 = 索引 + 门偏移(cell, options);
-                let lib = LibRef::surface(u16::from(cell.area));
-                match cache.get(lib, 索引) {
+                match cache.get(取样.库, 取样.索引) {
                     Some(f) => {
-                        // **前景加性混合**：`Front.Frames & 0x80`（上游
-                        // `MapSpriteDrawing.cs:5@6450da90` 的 `FrontBlend`）置位时走
-                        // `blit_additive`，否则仍走 `blit`（默认路径逐字节不变）。
+                        // 锚点在 [`层放置`]：加性帧走上游 `front && blend` 那条独立分支
+                        // （§十），非加性帧仍是「tile 不位移 / 非 tile 底边」（§一 规则 6）。
+                        // 二者互斥 ⇒ §十 的锚点**不会**漏到普通帧上。
                         //
-                        // 与门偏移**正交**：门只改「取第几帧」（上行 `索引`），混合方式只
-                        // 看 `ani_frame` 的高位，两者互不影响（模块文档 §九）。
-                        let 加性 = 表层混合(cell.ani_frame);
-                        // 锚点：混合帧走上游 `front && blend` 那条独立分支（§十），
-                        // 非混合帧仍是「底边钉在格底」（§一 规则 6）—— 二者互斥，
-                        // 所以 §十 的锚点**不会**漏到普通帧上。
-                        //
-                        // ⚠ 传给 `混合锚点` 的是**加过门偏移**的 `索引`：上游把
+                        // ⚠ 传进去的是**加过门偏移**的 `索引`：上游把
                         // `MapPreview.FrontImage(...)` 的结果同时用于取帧与帧号窗口判断
                         // （`MapViewport.cs:287`），门偏移因此参与「落不落进 2723..2732」。
-                        let (px, py) = if 加性 {
-                            混合锚点(dx, dy, map.format, cell.area, 索引, f.height, f.anchor)
-                        } else {
-                            // A-001 跟 C#（`MapSpriteDrawing.cs:53-55`）：`anchored: true,
-                            // front: true, blend: false` ⇒ **tile 尺寸不位移（左上）**，
-                            // 只有非 tile 才底边锚定；`library == 28` 且锚点非零是第三条特例。
-                            非加性锚点(
-                                dx,
-                                dy,
-                                map.format,
-                                cell.area,
-                                f.width,
-                                f.height,
-                                f.anchor,
-                                层别::表层,
-                                false,
-                            )
-                        };
+                        let (px, py) = 层放置(
+                            层别::表层,
+                            dx,
+                            dy,
+                            map.format,
+                            cell.area,
+                            &取样,
+                            f.width,
+                            f.height,
+                            f.anchor,
+                        );
                         // 大件帧的锚点可能在画布上方，但底边总落在格底；
                         // 只有真的写了像素（非空帧、非全透明）才算落笔
-                        let 落笔 = if 加性 {
+                        let 落笔 = if 取样.加性 {
                             canvas.blit_additive(&f, px, py)
                         } else {
                             canvas.blit(&f, px, py)
@@ -709,6 +692,109 @@ impl 层别 {
     #[inline]
     fn 锚定(self) -> bool {
         !matches!(self, Self::地表)
+    }
+}
+
+/// 某一层在某一格上「取哪个库的哪一帧、用哪种混合」——**三层循环与总览共用的唯一实现**。
+///
+/// 出自 [`层取帧`]；它把三处散落在循环里的判断（偶偶格、库路由、帧号、门偏移、
+/// 加性标志）收成一份，`crate::overview` 的三层循环与 [`render`] 的三层循环都调它
+/// ⇒ 「窗内小地图的总览图」和「1× 合成图」不可能各写一套落格前提。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct 层取样 {
+    /// 图库路由：地表 = `btTiles` / 中层 = `btsmTiles` / 表层 = `btArea`（模块文档 §一 规则 8）。
+    pub(crate) 库: LibRef,
+    /// 0-based 帧号（表层**已加**门偏移，见 [`门偏移`]）。
+    pub(crate) 索引: u32,
+    /// 表层加性混合（[`表层混合`]）；地表 / 中层恒 `false`。
+    pub(crate) 加性: bool,
+    /// 非加性分支的 `blend` 实参：中层走 [`中层混合`]（本仓视图恒 `false`，见该函数文档）；
+    /// 其余恒 `false`。加性分支不看它（[`混合锚点`] 不带 `blend` 参数）。
+    pub(crate) 混合: bool,
+}
+
+/// 该层在这一格上取哪一帧：`None` = **该层在此格本来就没图**（不是缺帧，调用方不得计 missing）。
+///
+/// # 参数
+///
+/// | 参数 | 说明 |
+/// |---|---|
+/// | `层` | 三层之一；决定库路由与「地表只铺偶偶格」 |
+/// | `x` / `y` | **世界格**坐标（不是视口内 `dx/dy`）：偶偶格判据用的是世界坐标 |
+/// | `cell` | 该格的三个图号 / 库号 / 动画字节 |
+/// | `options` | 目前只用 [`RenderOptions::doors_open`]（只影响表层帧号）|
+///
+/// # 三条口径（与改动前的三层循环逐条对应）
+///
+/// 1. **地表只铺偶偶格**：`x & 1 != 0 || y & 1 != 0` ⇒ `None`。出处 `map_view.gd:199`、
+///    `GameScene.cpp:3549-3553`（模块文档 §一 规则 3）；奇格**不取格、不取帧、不计 missing**。
+/// 2. **图号为 0 ⇒ `None`**（[`帧号`]）—— 空地不是缺帧（模块文档 §三）。
+/// 3. **门偏移只加在表层**（[`门偏移`] 在 `doors_open == false` 时恒 0），
+///    且**必须在取帧之前加**（否则取错帧、`混合锚点` 的帧号窗口也会判错）。
+#[inline]
+pub(crate) fn 层取帧(
+    层: 层别,
+    x: i32,
+    y: i32,
+    cell: &mir2_map::Cell,
+    options: RenderOptions,
+) -> Option<层取样> {
+    match 层 {
+        层别::地表 => {
+            if x & 1 != 0 || y & 1 != 0 {
+                return None; // 奇格不铺地表
+            }
+            Some(层取样 {
+                库: LibRef::ground(u16::from(cell.tiles)),
+                索引: 帧号(cell.bk_img)?,
+                加性: false,
+                混合: false,
+            })
+        }
+        层别::中层 => Some(层取样 {
+            库: LibRef::middle(u16::from(cell.sm_tiles)),
+            索引: 帧号(cell.mid_img)?,
+            加性: false,
+            // 本仓视图没有中层动画帧字节 ⇒ 恒 false（见 [`中层混合`] / [`中层帧缺省`]）
+            混合: 中层混合(中层帧缺省),
+        }),
+        层别::表层 => Some(层取样 {
+            库: LibRef::surface(u16::from(cell.area)),
+            索引: 帧号(cell.fr_img)? + 门偏移(cell, options),
+            加性: 表层混合(cell.ani_frame),
+            混合: false,
+        }),
+    }
+}
+
+/// 该层这一帧该贴的**像素位置**：**三层循环与总览共用的唯一实现**。
+///
+/// 两条分支互斥：
+///
+/// | 取样 | 走的算式 | 出处 |
+/// |---|---|---|
+/// | `加性 == true`（只有表层可能） | [`混合锚点`] | `MapSpriteDrawing.cs:43-52@6450da90` |
+/// | 否则 | [`非加性锚点`]（`anchored` / `front` 由 [`层别`] 决定） | `MapSpriteDrawing.cs:53-55` |
+///
+/// ⚠ 参数是**上游 `Bounds(...)` 的实参表**（9 个），拆成结构体反而看不出与源码的
+/// 一一对应关系；与 [`非加性锚点`] 的 `#[allow]` 同一处置。
+#[allow(clippy::too_many_arguments)]
+#[inline]
+pub(crate) fn 层放置(
+    层: 层别,
+    dx: i32,
+    dy: i32,
+    格式: CellFormat,
+    库号原值: u8,
+    取样: &层取样,
+    帧宽: u32,
+    帧高: u32,
+    锚点: (i16, i16),
+) -> (i32, i32) {
+    if 取样.加性 {
+        混合锚点(dx, dy, 格式, 库号原值, 取样.索引, 帧高, 锚点)
+    } else {
+        非加性锚点(dx, dy, 格式, 库号原值, 帧宽, 帧高, 锚点, 层, 取样.混合)
     }
 }
 
