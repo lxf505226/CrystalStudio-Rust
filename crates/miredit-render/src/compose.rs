@@ -8,8 +8,8 @@
 //! | 2 | 地表帧 = 96×64 px，覆盖 2×2 世界格，**落格 = 世界格 / 2** | `map_view.gd:11-13` |
 //! | 3 | 地表**只铺偶偶格**（`x%2==0 && y%2==0`），其余格无地表 | `map_view.gd:12,199`（`GameScene.cpp:3545-3553`）|
 //! | 4 | 地表像素位 = `(x/2)*96 = x*48`，纵向 `y*32` | `map_view.gd:13` |
-//! | 5 | 中层像素位 = `(x*48, y*32)`（左上角锚定、居中=false） | `map_overlay_layer.gd:17,79` |
-//! | 6 | 表层**底边**钉在格底：`y_top = (y+1)*32 - 帧高` | `map_overlay_layer.gd:18-19,96-99`（`GameScene.cpp:3515`）|
+//! | 5 | 中层：**tile 尺寸（48×32 / 96×64）且非混合 ⇒ 左上**；否则**底边**（`y_top = (y+1)*32 - 帧高`） | C# `MapSpriteDrawing.cs:24,55@f115352`（`.gd` 恒左上：`map_overlay_layer.gd:17,79`，A-001 起不跟） |
+//! | 6 | 表层：同上式（`front=true, blend=false`）⇒ **tile 尺寸不位移**，非 tile 才底边；另有 `library==28` 且帧锚点非零 ⇒ **只叠锚点** | C# `MapSpriteDrawing.cs:53-55`（`.gd` 恒底边：`map_overlay_layer.gd:96-99`，A-001 起不跟） |
 //! | 7 | 帧号 **1-based**，`0` = 无图，取图 `(img & 0x7FFF) - 1` | `map_loader.gd:51-52`、`map_overlay_layer.gd:20` |
 //! | 8 | 库路由：`btTiles`→地面 / `btsmTiles`→中层 / `btArea`→表层 | `map_loader.gd:39-45`、`map_overlay_layer.gd:67,71,84,88` |
 //!
@@ -24,8 +24,9 @@
 //!
 //! # 二·五、落格算式的唯一实现处
 //!
-//! 上面表格里的三条锚点/帧号规则，代码上**只实现一次**：[`左上锚点`]（规则 4/5）、
-//! [`底边锚点`]（规则 6）、[`帧号`]（规则 7）。地图渲染（本模块的三层循环）与
+//! 上面表格里的锚点/帧号规则，代码上**只实现一次**：[`非加性锚点`]（规则 5/6 的完整算式，
+//! 内含 [`左上锚点`] / [`底边锚点`] / [`tile尺寸`] / [`前景库号`]）、[`混合锚点`]（A-018 的
+//! `front && blend` 分支）、[`帧号`]（规则 7）。地图渲染（本模块的三层循环）与
 //! 印章渲染（`crate::stamp`）调的是**同一批函数** —— 改锚点只改一处，两边同时生效，
 //! 不会出现「地图一套、印章另一套」的口径分裂。
 //!
@@ -251,6 +252,52 @@
 //! `MapLayers` 里没有 `FrontBlend` 的对应物）⇒ 混合帧这一类的唯一参照就是 C#，不存在
 //! 「跟 .gd」的第二解。两者因此是**可分离**的两次裁定。
 
+//! # 十一、A-001：非加性帧的格栅锚点（**用户裁定：跟 C#**，2026-11-07）
+//!
+//! 上游 `MapSpriteDrawing.cs:24,53-55@f115352`（本地快照 `_upstream/CrystalStudio/`）：
+//!
+//! ```text
+//! 24: bool tile = (sprite.Width == 48 && sprite.Height == 32) || (sprite.Width == 96 && sprite.Height == 64);
+//! 53: else if (front && library == 28 && (sprite.X != 0 || sprite.Y != 0))
+//! 54: { px += sprite.X; py += sprite.Y; }
+//! 55: else if (anchored && (!tile || blend)) py += 32 - sprite.Height;
+//! ```
+//!
+//! 调用点：中层 `MapViewport.cs:268`（`anchored: true, front: false, blend: MiddleBlend`）、
+//! 表层 `:287`（`anchored: true, front: true, blend: FrontBlend`）、
+//! 地表 `:364-365`（总览/小地图 `anchored: false`）。
+//!
+//! 实现：[`非加性锚点`] 是这条算式**唯一**的实现处（内含 [`tile尺寸`] / [`前景库号`] /
+//! [`左上锚点`] 的等价算式），三层循环分别传 [`层别::地表`] / [`层别::中层`] / [`层别::表层`]。
+//! 加性帧（`ani_frame & 0x80`）**不进**这条路，仍走 [`混合锚点`]（A-018，一行未改）。
+//!
+//! ## 十一.1 与 `.gd` 的取舍（为什么改）
+//!
+//! 旧口径跟 Godot 客户端（中层恒左上、表层恒底边，`map_overlay_layer.gd:79,96-99`）。
+//! 用户 2026-11-07 裁定「A-001 跟 C#」⇒ 96×64 的**表层 tile** 帧不再被当成"大件"钉底边
+//! （这正是 A-001 的原始症状）；48×32 的 tile 帧因为 `32 - 32 == 0` 数值上不变。
+//!
+//! ## 十一.2 语料实测（2026-11-07，只读字节，`E:\GodM2\GodotClient\maps`）
+//!
+//! 61 张图 / **2,760,946 格** / 解出 **169,503 帧**（`WilSource` 真帧尺寸；扫描脚本用完已删）：
+//!
+//! | 分类 | 格数 | 本改动是否动像素 |
+//! |---|---|---|
+//! | 表层·96×64（tile、非加性） | **3** | **是**（`py: -32 → 0`，整帧下移 32 px；帧索引 3967/3987/3988） |
+//! | 表层·48×32（tile、非加性） | 51,631 | 否（`32-32=0`，两条分支同址） |
+//! | 表层·非 tile（非加性） | 63,341 | 否（改前改后都底边） |
+//! | 表层·加性（A-018） | 228 | 否（不走本路径） |
+//! | 表层·`library == 28` 特例 | **0** | 否（语料里没有「12 B 档 + `area=26` + 帧锚点非零」的格） |
+//! | 中层·非 tile | **1** | **是**（240×192 帧：改前左上 `py=0` ⇒ 改后底边 `py = 32-192 = -160`） |
+//! | 中层·tile | 54,299 | 否（仍左上） |
+//!
+//! ⇒ 真实语料里锚点**真的变**的只有 **4 格**（表层 3 + 中层 1），其余 16.9 万帧逐像素不变。
+//!
+//! ⚠ **中层混合帧不可达**：`MiddleBlend` 要读「中层动画帧」字节，而 `mir2_map::Cell` 没有
+//! 这个字段（12 B/14 B 档 C# 侧 `MiddleFrames` 恒 0；36 B 档本仓未解析）⇒ 渲染循环传
+//! [`中层帧缺省`]（恒 0 ⇒ `MiddleBlend` 恒 false）。锚点函数已按 `blend` 参数写好并有单测
+//! （`非加性_中层混合帧即使tile也底边`）；视图补上该字节后无需改本模块，只需把实参换掉。
+
 use mir2_assets::{LibRef, SpriteSource};
 use mir2_map::{CellFormat, Map};
 
@@ -309,7 +356,20 @@ pub(crate) fn render(
                 match cache.get(lib, 索引) {
                     Some(f) => {
                         // 只有真的写下像素才算这格落笔（缺帧/空帧/全透明帧都不算）
-                        let (px, py) = 左上锚点(dx, dy);
+                        // 锚点：地表在 `Bounds` 里是 `anchored: false`（`MapViewport.cs:364-365`）
+                        // ⇒ 走 [`非加性锚点`] 但永远不位移（与 [`左上锚点`] 逐像素相同，
+                        // 共用同一个算式，避免三处各写一份）。
+                        let (px, py) = 非加性锚点(
+                            dx,
+                            dy,
+                            map.format,
+                            cell.area,
+                            f.width,
+                            f.height,
+                            f.anchor,
+                            层别::地表,
+                            false,
+                        );
                         if canvas.blit(&f, px, py) {
                             touched[(dx * cells_h + dy) as usize] = true;
                         }
@@ -321,7 +381,7 @@ pub(crate) fn render(
     }
 
     if mask.middle {
-        // ---- 中层：逐格（含奇格），左上角锚定（map_overlay_layer.gd:79）----
+        // ---- 中层：逐格（含奇格）。锚点按 C#：tile 尺寸左上、其余底边（见 `非加性锚点`）----
         for dx in 0..cells_w {
             let x = vp.origin_x + dx;
             for dy in 0..cells_h {
@@ -336,7 +396,22 @@ pub(crate) fn render(
                 match cache.get(lib, 索引) {
                     Some(f) => {
                         // 同上：以「真的写了像素」为准
-                        let (px, py) = 左上锚点(dx, dy);
+                        // 锚点（A-001 跟 C#）：`anchored: true, front: false`
+                        // （`MapViewport.cs:268`）⇒ `anchored && (!tile || blend)`：
+                        // **tile 尺寸（48×32 / 96×64）且非混合 ⇒ 左上；其余 ⇒ 底边**。
+                        // 混合判据 [`中层混合`] 是 C# `MiddleBlend`；本仓视图没有中层动画帧
+                        // 字节 ⇒ 传 [`中层帧缺省`]（恒 0 ⇒ 恒 false），见该常量文档。
+                        let (px, py) = 非加性锚点(
+                            dx,
+                            dy,
+                            map.format,
+                            cell.area,
+                            f.width,
+                            f.height,
+                            f.anchor,
+                            层别::中层,
+                            中层混合(中层帧缺省),
+                        );
                         if canvas.blit(&f, px, py) {
                             touched[(dx * cells_h + dy) as usize] = true;
                         }
@@ -348,7 +423,7 @@ pub(crate) fn render(
     }
 
     if mask.front {
-        // ---- 表层：逐格，**底边**钉在格底（map_overlay_layer.gd:96-99）----
+        // ---- 表层：逐格。非加性帧按 C#：tile 尺寸左上、非 tile 底边（`library==28` 特例只叠锚点）----
         for dx in 0..cells_w {
             let x = vp.origin_x + dx;
             for dy in 0..cells_h {
@@ -371,7 +446,7 @@ pub(crate) fn render(
                         //
                         // 与门偏移**正交**：门只改「取第几帧」（上行 `索引`），混合方式只
                         // 看 `ani_frame` 的高位，两者互不影响（模块文档 §九）。
-                        let 加性 = cell.ani_frame & 0x80 != 0;
+                        let 加性 = 表层混合(cell.ani_frame);
                         // 锚点：混合帧走上游 `front && blend` 那条独立分支（§十），
                         // 非混合帧仍是「底边钉在格底」（§一 规则 6）—— 二者互斥，
                         // 所以 §十 的锚点**不会**漏到普通帧上。
@@ -382,8 +457,20 @@ pub(crate) fn render(
                         let (px, py) = if 加性 {
                             混合锚点(dx, dy, map.format, cell.area, 索引, f.height, f.anchor)
                         } else {
-                            // y_top = (y+1)*32 - 帧高 ⇒ 帧底边 = 格底边
-                            底边锚点(dx, dy, f.height)
+                            // A-001 跟 C#（`MapSpriteDrawing.cs:53-55`）：`anchored: true,
+                            // front: true, blend: false` ⇒ **tile 尺寸不位移（左上）**，
+                            // 只有非 tile 才底边锚定；`library == 28` 且锚点非零是第三条特例。
+                            非加性锚点(
+                                dx,
+                                dy,
+                                map.format,
+                                cell.area,
+                                f.width,
+                                f.height,
+                                f.anchor,
+                                层别::表层,
+                                false,
+                            )
                         };
                         // 大件帧的锚点可能在画布上方，但底边总落在格底；
                         // 只有真的写了像素（非空帧、非全透明）才算落笔
@@ -495,6 +582,136 @@ pub(crate) fn 底边锚点(dx: i32, dy: i32, 帧高: u32) -> (i32, i32) {
     (dx * CELL_W as i32, (dy + 1) * CELL_H as i32 - 帧高 as i32)
 }
 
+
+// ─────────────────── A-001：非加性帧的格栅锚点（`MapSpriteDrawing.cs:24,53-55`） ───────────────────
+
+/// 帧是不是**「tile 尺寸」**：上游 `MapSpriteDrawing.cs:24@6450da90`
+/// `(sprite.Width == 48 && sprite.Height == 32) || (sprite.Width == 96 && sprite.Height == 64)`。
+///
+/// 为什么单拎出来：这个判定在 `Bounds` 里**只出现一次**却被两条分支共用，散在循环里写成
+/// `f.width == 48 && f.height == 32 || …` 迟早漏一个括号。
+#[inline]
+pub(crate) fn tile尺寸(帧宽: u32, 帧高: u32) -> bool {
+    matches!((帧宽, 帧高), (48, 32) | (96, 64))
+}
+
+/// 中层混合：上游 `MapSpriteDrawing.cs:8@6450da90`
+/// `frames != 255 && (frames & 15) is 8 or 10`。
+///
+/// ⚠ 本仓 `mir2_map::Cell` **没有「中层动画帧」字节**（12 B/14 B 档 C# 侧
+/// `MiddleFrames` 恒 `0`；36 B 档我们只把它留在 `Cell::tail` 里没解析）⇒ 渲染循环里
+/// 传 [`中层帧缺省`]，本函数在现有视图下恒 `false`。一旦视图补上该字节，锚点函数已经就绪。
+#[inline]
+pub(crate) fn 中层混合(frames: u8) -> bool {
+    frames != 255 && matches!(frames & 15, 8 | 10)
+}
+
+/// 表层加性混合：上游 `MapSpriteDrawing.cs:5@6450da90` 的 `FrontBlend`（`frames & 0x80 != 0`）。
+///
+/// 与 [`中层混合`] 是两套判据（前者看高位、后者看低 4 位），**不要合并**。
+#[inline]
+pub(crate) fn 表层混合(frames: u8) -> bool {
+    frames & 0x80 != 0
+}
+
+/// 本仓视图里**能拿到的**中层动画帧字节 —— 恒 `0`，理由见 [`中层混合`]。
+pub(crate) const 中层帧缺省: u8 = 0;
+
+/// 前景库号（C# `Foreground.Library`）在**本仓能算的档**里换算；算不出来就 `None`。
+///
+/// 换算表与 [`三格库分支`] 同源（模块文档 §十.2）：`Old12`/`AntiHack` 都是 `btArea + 2`
+/// （`LegacyMapReader.cs:147` / `:360`），故视图档 [`CellFormat::Old12`] 能给值；
+/// `New14` / `Ext36` 里同时挤着 `+120` / `+200` / `+300` / CrystalCs（无 `area`）
+/// ⇒ **推不出就不猜**。
+#[inline]
+pub(crate) fn 前景库号(格式: CellFormat, 库号原值: u8) -> Option<i32> {
+    matches!(格式, CellFormat::Old12).then(|| i32::from(库号原值) + 2)
+}
+
+/// **非加性帧**的落格锚点：上游 `MapSpriteDrawing.cs:53-55@6450da90`。
+///
+/// ```text
+/// else if (front && library == 28 && (sprite.X != 0 || sprite.Y != 0))   // :53
+/// { px += sprite.X; py += sprite.Y; }                                     // :54 ← 只叠锚点
+/// else if (anchored && (!tile || blend)) py += 32 - sprite.Height;        // :55 ← 底边锚点
+/// ```
+///
+/// # 参数（与上游一一对应）
+///
+/// | 参数 | 上游 | 说明 |
+/// |---|---|---|
+/// | `dx` / `dy` | `x` / `y` | **视口内**格坐标（乘 48/32 前） |
+/// | `格式` / `库号原值` | `library` | 只有能算出前景库号的档才可能命中 `library == 28`，见 [`前景库号`] |
+/// | `帧宽` / `帧高` | `sprite.Width/Height` | 决定 [`tile尺寸`] 与 `32 - Height` |
+/// | `锚点` | `sprite.X/Y` | 帧头锚点（[`Frame::anchor`]） |
+/// | `front` | `front` | 地表 / 中层为 `false`；表层为 `true` |
+/// | `锚定` | `anchored` | 地表 `false`（`MapViewport.cs:364-365` 总览/小地图），中层/表层 `true`（`:268` / `:287`） |
+/// | `混合` | `blend` | 表层：加性帧走 [`混合锚点`]（A-018），**不进本函数**；中层：[`中层混合`] |
+///
+/// # 三条口径（别合并）
+///
+/// 1. `library == 28` 分支**先于**底边锚定，且只在 `front` 上成立 ⇒ 中层/地表永不命中；
+/// 2. 底边锚定条件是 `!tile || blend` —— **tile 帧默认不锚定**（96×64 也属于 tile），
+///    这正是 A-001 的原始症状（96×64 表层被当成"大件"钉了底边，实际该贴左上）；
+/// 3. `48×32` 的 tile 帧：`32 - 32 == 0` ⇒ 两条分支数值相同（像素不变），
+///    只有 `96×64` 与「非 tile」才真的动像素。
+// 9 个参数是**逐字对齐上游** `Bounds(sprite, x, y, library, image, anchored, front, blend, format)`
+// 的实参表（`MapSpriteDrawing.cs:19-22`）：拆成结构体反而看不出与上游的一一对应关系。
+// 与 `stamp_convert::cells_from_stamp` 同类处置（那条也是"参数就是上游签名"）。
+#[allow(clippy::too_many_arguments)]
+#[inline]
+pub(crate) fn 非加性锚点(
+    dx: i32,
+    dy: i32,
+    格式: CellFormat,
+    库号原值: u8,
+    帧宽: u32,
+    帧高: u32,
+    锚点: (i16, i16),
+    层: 层别,
+    混合: bool,
+) -> (i32, i32) {
+    let (ax, ay) = (i32::from(锚点.0), i32::from(锚点.1));
+    let (px, mut py) = 左上锚点(dx, dy);
+    // `:53-54`：`front && library == 28 && (X != 0 || Y != 0)` ⇒ 只叠锚点（不做底边锚定）
+    if 层.是表层()
+        && 前景库号(格式, 库号原值) == Some(28)
+        && (ax != 0 || ay != 0)
+    {
+        return (px + ax, py + ay);
+    }
+    // `:55`：`anchored && (!tile || blend)` ⇒ 底边锚点（`py += 32 - 帧高`）
+    if 层.锚定() && (!tile尺寸(帧宽, 帧高) || 混合) {
+        py += CELL_H as i32 - 帧高 as i32;
+    }
+    (px, py)
+}
+
+/// 三层在 `Bounds` 里的两个开关（`anchored` / `front`），由层决定而不是调用方随手传。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum 层别 {
+    /// 地表：`anchored = false`（`MapViewport.cs:364-365`）⇒ 永远左上。
+    地表,
+    /// 中层：`anchored = true, front = false`（`:268`）。
+    中层,
+    /// 表层非加性：`anchored = true, front = true`（`:287`）。
+    表层,
+}
+
+impl 层别 {
+    /// 上游 `front` 实参。
+    #[inline]
+    fn 是表层(self) -> bool {
+        matches!(self, Self::表层)
+    }
+
+    /// 上游 `anchored` 实参。
+    #[inline]
+    fn 锚定(self) -> bool {
+        !matches!(self, Self::地表)
+    }
+}
+
 /// **前景加性混合帧**的锚点：上游 `MapSpriteDrawing.cs:43-52@6450da90` 的 `front && blend` 分支。
 ///
 /// 与 [`底边锚点`] 的关系：非混合帧**一律**走 [`底边锚点`]，本函数只被
@@ -565,7 +782,9 @@ fn 三格库分支(格式: CellFormat, 库号原值: u8) -> bool {
     if !matches!(格式, CellFormat::Old12) {
         return false;
     }
-    let 库号 = i32::from(库号原值) + 2;
+    let Some(库号) = 前景库号(格式, 库号原值) else {
+        return false;
+    };
     库号 == 14 || 库号 == 27 || (库号 > 99 && 库号 < 199)
 }
 
@@ -1032,6 +1251,212 @@ mod tests {
             );
             assert_eq!(stats.cells_drawn, 1, "ani=0x{ani:02X}：落笔口径不变");
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // §十一 A-001：非加性帧的格栅锚点（`MapSpriteDrawing.cs:24,53-55`，跟 C#）
+    // -----------------------------------------------------------------------
+    //
+    // 上游原文（`_upstream/CrystalStudio/MapSpriteDrawing.cs`）：
+    //   24: bool tile = (sprite.Width == 48 && sprite.Height == 32) || (sprite.Width == 96 && sprite.Height == 64);
+    //   53: else if (front && library == 28 && (sprite.X != 0 || sprite.Y != 0))
+    //   54: { px += sprite.X; py += sprite.Y; }
+    //   55: else if (anchored && (!tile || blend)) py += 32 - sprite.Height;
+    // 调用点：中层 `MapViewport.cs:268`（anchored:true, front:false, blend=MiddleBlend）、
+    //        表层 `:287`（anchored:true, front:true, blend=FrontBlend）、
+    //        地表 `:364-365`（总览/小地图 anchored:false）。
+
+    /// 任意尺寸的**单点帧**：只有 `(7,3)` 一个不透明红点，其余全透明。
+    fn 单点帧尺寸(w: u32, h: u32, 锚点: (i16, i16)) -> Frame {
+        let mut rgba = vec![0u8; (w * h * 4) as usize];
+        let i = ((3 * w + 7) * 4) as usize;
+        rgba[i..i + 4].copy_from_slice(&[255, 0, 0, 255]);
+        Frame {
+            width: w,
+            height: h,
+            rgba,
+            anchor: 锚点,
+        }
+    }
+
+    /// 指定中层图号的 1×1 合成图（12 B 档：`mid_img` 在 2..4）。
+    fn 指定中层图(mid_img: u16) -> Map {
+        合成图(1, 1, |_, _, 格| {
+            格[2..4].copy_from_slice(&mid_img.to_le_bytes()); // mid_img
+        })
+    }
+
+    /// 只开某一层渲染 1×1 视口（画布 48×32）。
+    fn 渲染一格单层(map: &Map, src: &dyn SpriteSource, 层: 层别) -> Vec<u8> {
+        let mask = match 层 {
+            层别::地表 => LayerMask {
+                ground: true,
+                middle: false,
+                front: false,
+            },
+            层别::中层 => LayerMask {
+                ground: false,
+                middle: true,
+                front: false,
+            },
+            层别::表层 => LayerMask {
+                ground: false,
+                middle: false,
+                front: true,
+            },
+        };
+        render(
+            map,
+            src,
+            &Viewport::new(0, 0, 1, 1),
+            &mask,
+            CollisionOverlay::none(),
+            RenderOptions::default(),
+        )
+        .expect("1×1 合成图应能渲染")
+        .rgba
+    }
+
+    /// **① 表层 96×64（tile）⇒ 左上；改前（底边）会跌到画布外**。
+    ///
+    /// 改前：`py = 32 - 64 = -32` ⇒ 红点 `(7, -29)`（画布外，看不见）；
+    /// 改后：`py = 0` ⇒ 红点 `(7, 3)`。两个位置**一个可见一个不可见** ⇒ 断言对锚点敏感。
+    #[test]
+    fn 非加性_表层96x64是tile不位移() {
+        assert!(tile尺寸(96, 64), "96×64 必须是 tile");
+        // 改前的位置确实在画布外（这就是 A-001 的原始症状：大件 tile 被钉了底边）
+        let 旧 = 底边锚点(0, 0, 64);
+        assert_eq!(旧.1, -32, "改前 py 应是 -32");
+        assert!(旧.1 + 3 < 0, "改前红点 y = {} 在画布外", 旧.1 + 3);
+
+        let src = 定帧源(单点帧尺寸(96, 64, (0, 0)));
+        let rgba = 渲染一格单层(
+            &合成图(1, 1, |_, _, 格| 格[4..6].copy_from_slice(&1u16.to_le_bytes())),
+            &src,
+            层别::表层,
+        );
+        assert!(红点在(&rgba, 7, 3), "tile 表层必须贴左上（红点 (7,3)）");
+    }
+
+    /// **② 表层 48×32（tile）⇒ 左上**（数值上等价于改前的底边：`32 - 32 == 0`）。
+    #[test]
+    fn 非加性_表层48x32是tile不位移() {
+        assert!(tile尺寸(48, 32));
+        assert_eq!(底边锚点(0, 0, 32), 左上锚点(0, 0), "48×32 两条分支数值相同");
+        let src = 定帧源(单点帧尺寸(48, 32, (0, 0)));
+        let rgba = 渲染一格单层(
+            &合成图(1, 1, |_, _, 格| 格[4..6].copy_from_slice(&1u16.to_le_bytes())),
+            &src,
+            层别::表层,
+        );
+        assert!(红点在(&rgba, 7, 3), "48×32 表层仍是左上");
+    }
+
+    /// **③ 表层非 tile（100×100）⇒ 底边锚点**（这条与改前**相同**，是回归）。
+    #[test]
+    fn 非加性_表层非tile走底边() {
+        assert!(!tile尺寸(100, 100));
+        let 落 = 非加性锚点(0, 0, CellFormat::Old12, 0, 100, 100, (0, 0), 层别::表层, false);
+        assert_eq!(落, (0, 32 - 100), "非 tile 必须底边锚定（py = 32-100）");
+    }
+
+    /// **④ 中层 48×32 ⇒ 左上**（改前我方恒左上；C# 的 tile 分支也左上 ⇒ 不变）。
+    #[test]
+    fn 非加性_中层48x32贴左上() {
+        let src = 定帧源(单点帧尺寸(48, 32, (0, 0)));
+        let rgba = 渲染一格单层(&指定中层图(1), &src, 层别::中层);
+        assert!(红点在(&rgba, 7, 3), "中层 tile 必须贴左上");
+    }
+
+    /// **⑤ 中层非 tile（16×8）⇒ 底边锚点**（改前我方是左上 ⇒ **真的换了像素**）。
+    ///
+    /// 改前：红点 `(7, 3)`；改后：`py = 32 - 8 = 24` ⇒ 红点 `(7, 27)`。
+    #[test]
+    fn 非加性_中层非tile走底边() {
+        let src = 定帧源(单点帧尺寸(16, 8, (0, 0)));
+        let rgba = 渲染一格单层(&指定中层图(1), &src, 层别::中层);
+        assert!(红点在(&rgba, 7, 27), "中层非 tile 必须底边锚定（红点 (7,27)）");
+        assert!(!红点在(&rgba, 7, 3), "改前的左上位置必须空了（否则本用例对锚点不敏感）");
+    }
+
+    /// **⑥ 中层 `MiddleBlend`（frames=8/10）⇒ 即使 tile 也底边**。
+    ///
+    /// 用 96×64 的 tile：`blend` 成立时 `py = 32 - 64 = -32`，与左上（0）**差 32 px**。
+    /// ⚠ 本仓视图没有中层动画帧字节 ⇒ 渲染循环传 [`中层帧缺省`]（恒 0），
+    /// 所以这条在**函数层**验证；视图补上该字节后无需改动本函数。
+    #[test]
+    fn 非加性_中层混合帧即使tile也底边() {
+        assert!(中层混合(8) && 中层混合(10), "MiddleBlend: (frames & 15) is 8 or 10");
+        assert!(!中层混合(0), "0 不是混合");
+        assert!(!中层混合(9), "9 不是混合");
+        assert!(!中层混合(255), "255 是哨兵，不是混合");
+        assert!(!中层混合(0x80), "只有高位（低 4 位 = 0）不触发");
+        assert!(
+            中层混合(0x80 | 8),
+            "低 4 位 = 8 ⇒ 仍触发：上游只看低 4 位，高位既不加也不减"
+        );
+        let 混合 = 中层混合(8);
+        let 落 = 非加性锚点(0, 0, CellFormat::Old12, 0, 96, 64, (0, 0), 层别::中层, 混合);
+        assert_eq!(落, (0, -32), "混合帧即使 tile 也要底边（py = 32-64）");
+        assert_ne!(落, 左上锚点(0, 0), "必须与左上不同，否则本用例白测");
+    }
+
+    /// **⑦ 地表 96×64 ⇒ 仍左上**（上游地表 `anchored: false`）。
+    #[test]
+    fn 非加性_地表不锚定() {
+        let src = 定帧源(单点帧尺寸(96, 64, (0, 0)));
+        let rgba = 渲染一格单层(
+            &合成图(1, 1, |_, _, 格| 格[0..2].copy_from_slice(&1u16.to_le_bytes())), // bk_img
+            &src,
+            层别::地表,
+        );
+        assert!(红点在(&rgba, 7, 3), "地表永远左上（anchored:false）");
+        let 落 = 非加性锚点(0, 0, CellFormat::Old12, 0, 96, 64, (0, 0), 层别::地表, true);
+        assert_eq!(落, 左上锚点(0, 0), "地表连 blend 都不该影响锚点");
+    }
+
+    /// **⑧ 加性路径回归（A-018）**：`ani_frame & 0x80` 的帧**仍走** [`混合锚点`]，
+    /// 逐字节等于在该位置的 `Canvas::blit_additive`；即使帧是 tile（96×64）也仍底边。
+    #[test]
+    fn 加性路径不受本改动影响() {
+        let 帧 = 单点帧尺寸(96, 64, (0, 0));
+        let src = 定帧源(帧.clone());
+        let map = 合成图(1, 1, |_, _, 格| {
+            格[4..6].copy_from_slice(&1u16.to_le_bytes()); // fr_img = 1 ⇒ 帧号 0
+            格[8] = 0x80; // FrontBlend
+        });
+        // A-018 的锚点算式（库号 2 ⇒ 不命中三格库分支、帧号 0 不在窗口 ⇒ 纯底边）
+        let 期望锚点 = 混合锚点(0, 0, CellFormat::Old12, 0, 0, 64, (0, 0));
+        assert_eq!(期望锚点, (0, 32 - 64), "加性帧仍是底边（A-018 不动）");
+        let mut 参照 = Canvas::new(48, 32);
+        // 帧顶在 -32 ⇒ 只有 y ∈ [32,64) 的帧行可见（红点在帧内 (7,3)，这里看不见）
+        assert!(!参照.blit_additive(&帧, 期望锚点.0, 期望锚点.1), "该位置整帧在画布外");
+        let rgba = 渲染一格单层(&map, &src, 层别::表层);
+        assert_eq!(
+            rgba,
+            参照.into_rgba(),
+            "加性路径必须与「同一帧、同一锚点、blit_additive」逐字节相同"
+        );
+    }
+
+    /// **`library == 28` 特例**（`MapSpriteDrawing.cs:53-54`）：只叠帧锚点，**不做底边锚定**。
+    ///
+    /// 库号 28 ⇔ `area = 26`（12 B 档 `+2`）；锚点 `(5, 7)` ⇒ 落点 `(5, 7)`，
+    /// 而普通非 tile 的底边锚点会是 `(0, 32-帧高)`。
+    #[test]
+    fn 非加性_库28特例只叠锚点() {
+        assert_eq!(前景库号(CellFormat::Old12, 26), Some(28));
+        assert_eq!(前景库号(CellFormat::New14, 26), None, "14 档推不出库号 ⇒ 不猜");
+        let 落 = 非加性锚点(0, 0, CellFormat::Old12, 26, 16, 8, (5, 7), 层别::表层, false);
+        assert_eq!(落, (5, 7), "库 28 且锚点非零 ⇒ 只叠锚点");
+        // 锚点全 0 ⇒ 回到普通分支（底边）
+        let 落0 = 非加性锚点(0, 0, CellFormat::Old12, 26, 16, 8, (0, 0), 层别::表层, false);
+        assert_eq!(落0, (0, 32 - 8), "锚点为 0 ⇒ 不命中 :53 的条件");
+        // 中层/地表即使库号 28 也不命中（`:53` 要求 front）
+        let 中 = 非加性锚点(0, 0, CellFormat::Old12, 26, 16, 8, (5, 7), 层别::中层, false);
+        assert_eq!(中, (0, 32 - 8), "中层不许命中 front 专有分支");
+        let 地 = 非加性锚点(0, 0, CellFormat::Old12, 26, 16, 8, (5, 7), 层别::地表, false);
+        assert_eq!(地, (0, 0), "地表永远左上");
     }
 }
 
