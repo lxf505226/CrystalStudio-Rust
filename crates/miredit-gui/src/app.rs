@@ -937,16 +937,21 @@ impl MireditApp {
             f32::from(mw) * m::CELL_W,
             f32::from(mh) * m::CELL_H,
         );
-        // 视口框的**世界**矩形：上游判 `Visible.Contains(world)` 用的是世界坐标，
-        // 不是屏幕矩形（屏幕矩形只用于画）。两者别混。
+        // 视口框的**世界**矩形：上游判 `Visible.Contains(world)` 用的是
+        // `Viewport.VisibleWorldBounds`（`MapViewport.Minimap.cs:9`），那是
+        // **像素精确**的 `(−origin.X/Zoom, −origin.Y/Zoom, ActualWidth/Zoom, ActualHeight/Zoom)`，
+        // 数学上就等于 `(pan_x, pan_y, 画布宽/scale, 画布高/scale)`。
+        //
+        // ⚠ **不能用 `mini.view`（`visible_cells`）× 48/32**：那一份是**格量化**的
+        // （floor/ceil，向外扩），最坏会比真实可见区多出 1 格（48×32 世界像素）⇒
+        // 边缘那一条上「框内/框外」判定与上游相反（实测：pan_x=1000、scale=0.25 时，
+        // 上游可见 x∈[1000,4948]，格量化版从 960 起 ⇒ 世界 x∈[960,1000) 判反）。
+        // 屏幕矩形（`_vb`）只用于**画**框，不参与判定。
         let vis = egui::Rect::from_min_size(
-            egui::pos2(
-                mini.view.0 as f32 * m::CELL_W,
-                mini.view.1 as f32 * m::CELL_H,
-            ),
+            egui::pos2(self.view.pan_x, self.view.pan_y),
             egui::vec2(
-                mini.view.2 as f32 * m::CELL_W,
-                mini.view.3 as f32 * m::CELL_H,
+                l.viewport.width() / self.view.scale,
+                l.viewport.height() / self.view.scale,
             ),
         );
         let (pos, pressed, down, released, scroll) = ui.input(|i| {
@@ -4303,14 +4308,23 @@ mod tests {
     /// 夹具：200×200 格 + `scale=0.25` ⇒ 视口（约 3948×3260 世界像素）**小于**整图
     /// （9600×6400）⇒ 走 clamp 分支。**刻意不选小图**：图比视口小时 `center_on_world`
     /// 恒把图居中，点哪都一样，用例就没有分辨力了。
-    fn 小地图交互夹具() -> (MireditApp, crate::layout::Layout) {
+    ///
+    /// ⚠ **先跑一帧再摆姿势**：首帧可能触发「画布尺寸变化 ⇒ 重 fit」（[`CanvasView::refit_on_resize`]），
+    /// 把 `scale`/`pan` 改掉。若夹具直接赋值不跑帧，用例结果就依赖"这个进程里前面有没有人先跑过一帧"
+    /// （实测：全量 622 跑挂 2 条、单跑绿 —— 典型顺序依赖）。跑一帧把一次性动作吃掉，再摆值。
+    ///
+    /// `ctx` 必须**带出来复用**：egui 的 `hovered()/clicked()` 取上一帧 widget 表，
+    /// 每帧新建 `Context` 会让判定永远 false（`egui-interaction-test-determinism` 第 1 条）。
+    fn 小地图交互夹具() -> (MireditApp, crate::layout::Layout, egui::Context) {
         let mut app = 尺寸应用(200, 200);
+        let l = 测试布局();
+        let ctx = egui::Context::default();
+        互动一帧(&ctx, &mut app, &l, vec![]);
         app.view.scale = 0.25;
         app.view.pan_x = 1000.0;
         app.view.pan_y = 800.0;
         app.panels.set(PanelId::Minimap, true);
-        let l = 测试布局();
-        (app, l)
+        (app, l, ctx)
     }
 
     /// **框内按下 ⇒ 保持抓取偏移，视口不跳**（上游 `:81-83` 的 grab 语义）。
@@ -4319,24 +4333,28 @@ mod tests {
     /// 若实现漏了 grab（直接居中到指针下），`pan` 会立刻变 ⇒ 本条红。
     #[test]
     fn 小地图点击视口框内不跳() {
-        let (mut app, l) = 小地图交互夹具();
-        let ctx = egui::Context::default();
+        let (mut app, l, ctx) = 小地图交互夹具();
         let half = (
             l.viewport.width() / 2.0 / app.view.scale,
             l.viewport.height() / 2.0 / app.view.scale,
         );
-        let 视口中心 = (app.view.pan_x + half.0, app.view.pan_y + half.1);
+        let 中心 = (app.view.pan_x + half.0, app.view.pan_y + half.1);
         let 前 = (app.view.pan_x, app.view.pan_y);
         let 前代号 = app.doc.map_gen;
+        let 前撤销 = app.edit.undo_len();
 
-        let p = 小地图屏幕点(&l, &app, 视口中心);
+        // ⚠ 判据点必须选**框内非中心**：中心那一点在「grab 生效」与「grab 漏成 0」
+        // 两种实现下结果**相同**（都居中到中心）⇒ 拿它作判据就是假绿（复核实测过）。
+        // 取中心右侧 500 世界像素：有 grab（=500）⇒ 目标回到中心、pan 不变；
+        // 漏 grab ⇒ 该点居中 ⇒ pan_x 直接 +500（远超容差，且 1500 仍在 clamp 区间内）。
+        let p = 小地图屏幕点(&l, &app, (中心.0 + 500.0, 中心.1));
         点一下(&ctx, &mut app, &l, p);
 
         // `snap()` 把 `pan*scale` 取整 ⇒ 世界量化步长 = `1/scale`
         let 容差 = 1.0 / app.view.scale + 0.01;
         assert!(
             (app.view.pan_x - 前.0).abs() <= 容差,
-            "框内按下要保持抓取偏移：pan_x {前:?} → {}",
+            "框内非中心按下必须保持抓取偏移、视口不跳：pan_x {前:?} → {}（漏 grab 会 +500）",
             app.view.pan_x
         );
         assert!(
@@ -4345,6 +4363,109 @@ mod tests {
             app.view.pan_y
         );
         assert_eq!(app.doc.map_gen, 前代号, "交互只动视口，不许碰地图");
+        assert_eq!(app.edit.undo_len(), 前撤销, "交互不许进撤销栈");
+    }
+
+    /// **拖拽按世界量平移；释放后再移动不许再动**（上游 `:78-88` 的捕获语义）。
+    ///
+    /// 判据：框内按下（视口不跳）→ 移动 400 世界像素 ⇒ `pan` 恰好 +400 →
+    /// 释放 → 再移动 ⇒ `pan` 冻结。若实现「每帧重判 Contains」或漏了 grab，
+    /// 中间那条会变成「跳到指针」而不是「+400」。
+    #[test]
+    fn 小地图拖拽按世界量平移且释放后停止() {
+        let (mut app, l, ctx) = 小地图交互夹具();
+        let half = (
+            l.viewport.width() / 2.0 / app.view.scale,
+            l.viewport.height() / 2.0 / app.view.scale,
+        );
+        let 中心 = (app.view.pan_x + half.0, app.view.pan_y + half.1);
+        let 起点 = 小地图屏幕点(&l, &app, (中心.0 + 500.0, 中心.1));
+        let 终点 = 小地图屏幕点(&l, &app, (中心.0 + 900.0, 中心.1));
+        let 更远 = 小地图屏幕点(&l, &app, (中心.0 + 1400.0, 中心.1));
+        let 容差 = 1.0 / app.view.scale + 0.01;
+        let 前 = app.view.pan_x;
+
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(起点)]);
+        互动一帧(
+            &ctx,
+            &mut app,
+            &l,
+            vec![egui::Event::PointerButton {
+                pos: 起点,
+                button: egui::PointerButton::Primary,
+                pressed: true,
+                modifiers: Default::default(),
+            }],
+        );
+        let 按下后 = app.view.pan_x;
+        assert!(
+            (按下后 - 前).abs() <= 容差,
+            "框内按下（grab 生效）不许让视口跳：{前} → {按下后}"
+        );
+
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(终点)]);
+        let 拖后 = app.view.pan_x;
+        assert!(
+            (拖后 - (按下后 + 400.0)).abs() <= 容差,
+            "拖 400 世界像素 ⇒ pan 应 {按下后}+400，实得 {拖后}（跳到指针就不是这个数）"
+        );
+
+        互动一帧(
+            &ctx,
+            &mut app,
+            &l,
+            vec![egui::Event::PointerButton {
+                pos: 终点,
+                button: egui::PointerButton::Primary,
+                pressed: false,
+                modifiers: Default::default(),
+            }],
+        );
+        let 释放后 = app.view.pan_x;
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(更远)]);
+        assert!(
+            (app.view.pan_x - 释放后).abs() <= 容差,
+            "释放后再移动不许再平移：{释放后} → {}",
+            app.view.pan_x
+        );
+    }
+
+    /// **地图区外点击、非左键都不响应**（上游 `:78` 的后两项：`!MapBounds.Contains` / 非左键）。
+    ///
+    /// 阴性对照 —— 没有这条，「实现只认了位置、没认按键」这种错也测不出来。
+    #[test]
+    fn 小地图区外点击或右键都不响应() {
+        let (mut app, l, ctx) = 小地图交互夹具();
+        let 前 = (app.view.pan_x, app.view.pan_y);
+
+        // ① 块内、地图区外的角落（`block.shrink(6)` 之外 2px）——不落在地图上，也不在画布上
+        let 块角 = dock_right::minimap_block_rect(&l).left_top() + egui::vec2(2.0, 2.0);
+        点一下(&ctx, &mut app, &l, 块角);
+        assert_eq!(
+            (app.view.pan_x, app.view.pan_y),
+            前,
+            "地图区外点击不许动视口"
+        );
+
+        // ② 地图区内**右键**：上游只认 `IsLeftButtonPressed`
+        let p = 小地图屏幕点(&l, &app, (100.0, 100.0));
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(p)]);
+        互动一帧(
+            &ctx,
+            &mut app,
+            &l,
+            vec![egui::Event::PointerButton {
+                pos: p,
+                button: egui::PointerButton::Secondary,
+                pressed: true,
+                modifiers: Default::default(),
+            }],
+        );
+        assert_eq!(
+            (app.view.pan_x, app.view.pan_y),
+            前,
+            "右键不许动视口（上游只认左键）"
+        );
     }
 
     /// **框外按下 ⇒ 该点直接居中，并被 clamp 夹到边界**（上游 `:84-86` + `Minimap.cs:36-42`）。
@@ -4353,8 +4474,7 @@ mod tests {
     /// 而 `x < half` ⇒ 夹到 `half` ⇒ `pan_x = 0`。若 clamp 漏了会变成**负** `pan`（越界留白）。
     #[test]
     fn 小地图点击框外让该点居中并被夹到边界() {
-        let (mut app, l) = 小地图交互夹具();
-        let ctx = egui::Context::default();
+        let (mut app, l, ctx) = 小地图交互夹具();
         let 前代号 = app.doc.map_gen;
 
         let p = 小地图屏幕点(&l, &app, (100.0, 100.0));
@@ -4380,8 +4500,7 @@ mod tests {
     /// `[0.25, 4]` —— 语义不同、不只是数值不同（模块文档已写）。
     #[test]
     fn 小地图滚轮缩放并夹在本仓缩放域() {
-        let (mut app, l) = 小地图交互夹具();
-        let ctx = egui::Context::default();
+        let (mut app, l, ctx) = 小地图交互夹具();
         let 图中心 = 小地图屏幕点(&l, &app, (4800.0, 3200.0));
         互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(图中心)]);
 
@@ -4430,9 +4549,8 @@ mod tests {
     /// `input_locked()` 同一条闸门；截图取证不该被"上一次运行残留的指针"改变结果。
     #[test]
     fn 截图模式小地图不响应交互() {
-        let (mut app, l) = 小地图交互夹具();
+        let (mut app, l, ctx) = 小地图交互夹具();
         app.auto.shot = Some(std::env::temp_dir().join("miredit-shot-minimap-nointeract.png"));
-        let ctx = egui::Context::default();
         let 前 = (app.view.pan_x, app.view.pan_y, app.view.scale);
 
         let p = 小地图屏幕点(&l, &app, (100.0, 100.0));
