@@ -2757,6 +2757,7 @@ impl eframe::App for MireditApp {
                     &self.view.overlay,
                     &self.text,
                     &self.panels,
+                    self.doc.doc.is_some() && self.edit.selection().is_some(),
                 );
                 // ⑦a2 **地图列表面板**（中列左侧一列）：先让它把当前图那行滚进可见区，
                 //      再画。顺序有因果：`tick` 改 `top`，`draw` 按 `top` 出图 ——
@@ -3274,6 +3275,34 @@ impl MireditApp {
                         self.armed = None;
                         self.op = None;
                     }
+                }
+            }
+
+            // ④b **裁剪按钮**（A-015 / R54）：与菜单「工具 → 裁剪到选区」**同一个动作**，
+            //     这里只做命中与提示 —— 裁剪逻辑（crop_to / adopt_resized / fit_map / 回执）
+            //     全在 `Action::CropSelection` 里，不写第二套。
+            //
+            // 启用判据只有「有图 + 有选区」（本仓**没有**图层锁/印章文档模型 —— 不伪造那两类禁用原因）。
+            let 可裁剪 = self.doc.doc.is_some() && self.edit.selection().is_some();
+            {
+                let resp = if 可裁剪 {
+                    ui.interact(l.crop_button, ui.id().with("tool_crop"), Sense::click())
+                        .on_hover_text(tx::TOOL_CROP_TIP)
+                } else {
+                    // 禁用态：在 `ui.disable()` 的作用域里登记，才走得到 `on_disabled_hover_text`
+                    ui.scope(|ui| {
+                        ui.disable();
+                        ui.interact(l.crop_button, ui.id().with("tool_crop"), Sense::click())
+                    })
+                    .inner
+                    .on_disabled_hover_text(tx::TOOL_CROP_DISABLED)
+                };
+                if 可裁剪 && resp.clicked() {
+                    // 换图尺寸前先收掉待放置印章与选区拖动（与换层同一套清理；不动 core）
+                    self.armed = None;
+                    self.sel_drag = None;
+                    self.dispatch_menu(menu::model::Action::CropSelection, l.viewport);
+                    ui.ctx().request_repaint();
                 }
             }
         }
@@ -5810,6 +5839,124 @@ mod tests {
             "阻挡层上印章必须纠正"
         );
         assert_eq!(层, miredit_core::EditLayer::LowCollision);
+    }
+
+    // ───────────────────── 工具条「裁剪」按钮（A-015 / R54） ─────────────────────
+
+    /// 点一下布局里的 `pos`（先 hover 一帧，再 press+release —— `clicked()` 要求按下前已 hover）。
+    fn 点一下(ctx: &egui::Context, app: &mut MireditApp, l: &crate::layout::Layout, pos: egui::Pos2) {
+        互动一帧(ctx, app, l, vec![egui::Event::PointerMoved(pos)]);
+        互动一帧(
+            ctx,
+            app,
+            l,
+            vec![
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: true,
+                    modifiers: Default::default(),
+                },
+                egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: Default::default(),
+                },
+            ],
+        );
+    }
+
+    /// **裁剪按钮与菜单同结果**（R54 第 3/6 条）：同一个 `Action::CropSelection`，
+    /// 尺寸 / 回执 / 重 fit / 一步撤销 / 清选区 / 不换工具 —— 逐条与菜单用例对齐。
+    #[test]
+    fn 裁剪按钮与菜单同结果() {
+        let mut app = 尺寸应用(8, 8);
+        let l = 测试布局();
+        let ctx = egui::Context::default();
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(2, 2, 5, 5)
+        ));
+        let 前槽 = app.selected_tool;
+        let 前代号 = app.doc.map_gen;
+
+        let pos = l.crop_button.center();
+        // 悬停一帧：不裁剪（提示只是气泡，不许有副作用）
+        互动一帧(&ctx, &mut app, &l, vec![egui::Event::PointerMoved(pos)]);
+        assert_eq!(
+            app.doc.doc.as_ref().expect("有图").map.width,
+            8,
+            "悬停不许裁剪"
+        );
+        // 点击：裁剪发生
+        点一下(&ctx, &mut app, &l, pos);
+        let d = app.doc.doc.as_ref().expect("有图");
+        assert_eq!((d.map.width, d.map.height), (4, 4), "8×8 裁 2..5 ⇒ 4×4");
+        assert!(app.edit.selection().is_none(), "与菜单一致：裁剪后清选区");
+        assert!(app.doc.map_gen > 前代号, "改尺寸要让地图代号 +1");
+        assert_eq!(app.selected_tool, 前槽, "裁剪不是工具槽：不许换工具");
+        let (text, warn) = app.op.clone().expect("裁剪要给回执");
+        assert_eq!(
+            text,
+            tx::fill(tx::STATUS_CROP_OK_TMPL, &[("w", "4"), ("h", "4")]),
+            "回执与菜单同模板"
+        );
+        assert!(!warn);
+        let want = crate::canvas_view::CanvasView::fit_scale(l.viewport, 4, 4);
+        assert!(
+            (app.view.scale - want).abs() < 1e-4,
+            "与菜单一致：裁剪后重 fit（{} vs {want}）",
+            app.view.scale
+        );
+        // 一步撤销回原尺寸（整档步骤，与菜单同）
+        app.dispatch_menu(menu::model::Action::Undo, l.viewport);
+        assert_eq!(
+            app.doc.doc.as_ref().expect("有图").map.width,
+            8,
+            "裁剪 = 一步撤销"
+        );
+        // 菜单项数不变（R54：裁剪按钮不是菜单项）
+        assert_eq!(menu::model::item_count(), 47, "item_count 不许因按钮变化");
+    }
+
+    /// **无选区 ⇒ 禁用，点击不误触**（R54 第 4/6 条）：不裁剪、不写回执、不改代号。
+    #[test]
+    fn 裁剪按钮无选区时禁用() {
+        let mut app = 尺寸应用(8, 8);
+        let l = 测试布局();
+        let ctx = egui::Context::default();
+        let 前 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        let 前代号 = app.doc.map_gen;
+        app.op = None;
+        点一下(&ctx, &mut app, &l, l.crop_button.center());
+        assert_eq!(
+            app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节"),
+            前,
+            "禁用态不许改一个字节"
+        );
+        assert_eq!(app.doc.map_gen, 前代号, "禁用态不许改地图代号");
+        assert!(app.op.is_none(), "禁用态不该产生回执（没点到东西）");
+    }
+
+    /// **工具面板隐藏 ⇒ 裁剪按钮也不响应**（与 10 个工具槽同一条 gating）。
+    #[test]
+    fn 裁剪按钮面板隐藏时不响应() {
+        let mut app = 尺寸应用(8, 8);
+        let l = 测试布局();
+        let ctx = egui::Context::default();
+        app.panels.set(menu::panels::PanelId::Tools, false);
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(2, 2, 5, 5)
+        ));
+        点一下(&ctx, &mut app, &l, l.crop_button.center());
+        assert_eq!(
+            app.doc.doc.as_ref().expect("有图").map.width,
+            8,
+            "面板隐藏时按钮不存在，不许裁剪"
+        );
+        assert!(app.edit.selection().is_some(), "选区也不该被动");
     }
 
     // ───────────────────── 工具条悬停提示 / 点击（R48 / R51） ─────────────────────

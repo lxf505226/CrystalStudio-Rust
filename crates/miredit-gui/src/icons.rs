@@ -372,6 +372,33 @@ pub fn paint_tool_icon(painter: &Painter, idx: usize, box_rect: Rect, color: Col
     }
 }
 
+/// **工具条「裁剪」按钮的图标**：16×16 里用**线段**画一个裁切框（四个 L 形角，中间留空）。
+///
+/// 为什么不用字/字形：32×32 的按钮里塞两个汉字会糊，而本项目不额外带图标字体
+/// ⇒ 直接画几何（与 `paint_tool_icon` 的线段/路径同一套 `Painter` 原语）。
+///
+/// 语义与官方 `CropButton`（`MainWindow.axaml:16`，32×32 `QuietButton`）一致：
+/// 看到的就是"框住一块再切掉外面"。
+pub fn paint_crop_icon(painter: &Painter, box_rect: Rect, color: Color32) {
+    let 线宽 = (box_rect.width() * 0.09).max(1.0);
+    let 臂长 = box_rect.width() * 0.42;
+    let (x0, x1) = (box_rect.left(), box_rect.right());
+    let (y0, y1) = (box_rect.top(), box_rect.bottom());
+    let 线段 = [
+        (egui::pos2(x0, y0), egui::pos2(x0 + 臂长, y0)),
+        (egui::pos2(x0, y0), egui::pos2(x0, y0 + 臂长)),
+        (egui::pos2(x1, y0), egui::pos2(x1 - 臂长, y0)),
+        (egui::pos2(x1, y0), egui::pos2(x1, y0 + 臂长)),
+        (egui::pos2(x0, y1), egui::pos2(x0 + 臂长, y1)),
+        (egui::pos2(x0, y1), egui::pos2(x0, y1 - 臂长)),
+        (egui::pos2(x1, y1), egui::pos2(x1 - 臂长, y1)),
+        (egui::pos2(x1, y1), egui::pos2(x1, y1 - 臂长)),
+    ];
+    for (a, b) in 线段 {
+        painter.line_segment([a, b], egui::Stroke::new(线宽, color));
+    }
+}
+
 /// 把一个图标编译成待绘制的 `Shape` 列表（与 Painter 解耦，便于单元测试校验网格不越界）。
 pub fn icon_shapes(idx: usize, box_rect: Rect, color: Color32) -> Vec<Shape> {
     let mut out: Vec<Shape> = Vec::new();

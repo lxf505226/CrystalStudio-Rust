@@ -314,6 +314,19 @@ pub const STATUS_CROP_NOOP: &str = "选区已覆盖整张地图，没有可裁�
 /// 没有选区就点「裁剪到选区」时的回执（上游是静默 `return false`，本仓必须说出来）。
 pub const STATUS_CROP_NEED_SELECTION: &str = "先在地图上框选要保留的部分再裁剪"; // EN: Select an area inside the map before cropping.
 
+// ───────────────────────── 工具栏「裁剪」按钮（A-015 / R54） ─────────────────────────
+
+/// 工具条上那颗裁剪按钮的悬停提示（与菜单项同义，点明"和菜单是同一条动作"）。
+///
+/// 按钮**面**上不写字（32×32 里放汉字会糊；按 R54 用 [`crate::icons::paint_crop_icon`] 的线段图标）。
+pub const TOOL_CROP_TIP: &str = "裁剪到选区（同 工具 → 裁剪到选区）"; // EN: Crop to selection (same as Tools → Crop)
+
+/// 裁剪按钮**禁用**时的悬停提示（`on_disabled_hover_text`）。
+///
+/// 本仓的启用判据只有「有图 + 有选区」（R54 第 4 条：本仓**没有**图层锁/印章文档模型，
+/// 不伪造那两类原因）；禁用时能说的就是"先框一个选区"。
+pub const TOOL_CROP_DISABLED: &str = "先在地图上框选要保留的部分再裁剪"; // EN: Select an area inside the map before cropping.
+
 // ───────────────────────── 换层纠正工具（R12-F2 / R43） ─────────────────────────
 
 /// **换层时纠正了工具**的回执（上游 `MainWindow.axaml.cs:648-657` 强制切 Pencil 的那条）。
@@ -2102,6 +2115,8 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_EXTRACT_OBJECTS", MENU_EXTRACT_OBJECTS),
     ("MENU_CROP_SELECTION", MENU_CROP_SELECTION),
     ("MENU_EXPAND_MAP", MENU_EXPAND_MAP),
+    ("TOOL_CROP_TIP", TOOL_CROP_TIP),
+    ("TOOL_CROP_DISABLED", TOOL_CROP_DISABLED),
     ("STATUS_LAYER_TOOL_FIXED_TMPL", STATUS_LAYER_TOOL_FIXED_TMPL),
     ("MENU_LOCATE_CELL", MENU_LOCATE_CELL),
     ("GOTO_DLG_TITLE", GOTO_DLG_TITLE),

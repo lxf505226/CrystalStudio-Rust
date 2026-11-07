@@ -197,6 +197,8 @@ pub fn draw(
     overlay: &CollisionOverlay,
     d: &DocText,
     vis: &crate::menu::panels::PanelVis,
+    // 裁剪按钮这一帧是否可用（`有图 + 有选区`；判据由 `app` 给，`dock_left` 只负责画）。
+    crop_enabled: bool,
 ) {
     use crate::menu::panels::PanelId;
 
@@ -205,7 +207,7 @@ pub fn draw(
 
     if vis.get(PanelId::Tools) {
         panel::draw_panel(p, &l.p_tools, tx::TITLE_TOOLS, "panel.tools", t::ui().panel_bg);
-        draw_tools(p, l, selected_tool);
+        draw_tools(p, l, selected_tool, crop_enabled);
     }
 
     if vis.get(PanelId::ToolOptions) {
@@ -544,7 +546,7 @@ pub fn value_row_spans(l: &Layout, d: &DocText) -> Vec<(f32, usize)> {
 
 // ───────────────────────── Tools ─────────────────────────
 
-fn draw_tools(p: &Painter, l: &Layout, selected: usize) {
+fn draw_tools(p: &Painter, l: &Layout, selected: usize, crop_enabled: bool) {
     for (i, btn) in l.tool_buttons.iter().enumerate() {
         let on = i == selected;
         if on {
@@ -558,6 +560,18 @@ fn draw_tools(p: &Painter, l: &Layout, selected: usize) {
         let icon_rect = Rect::from_center_size(btn.center(), vec2(side, side));
         let color = if on { t::ui().accent_dark } else { t::ui().text };
         crate::icons::paint_tool_icon(p, i, icon_rect, color);
+    }
+
+    // **裁剪按钮**（A-015 / R54）：**不是工具槽 ⇒ 没有选中态**；可用 = 强调色 + 浅底，
+    // 禁用 = 灰色图标（悬停由 `app::interact` 用 `on_disabled_hover_text` 说明原因）。
+    let crop = l.crop_button;
+    let pal = t::ui();
+    let 图标 = Rect::from_center_size(crop.center(), vec2(16.0, 16.0));
+    if crop_enabled {
+        pt::fill_round(p, crop, 5.0, pal.accent_soft);
+        crate::icons::paint_crop_icon(p, 图标, pal.accent_dark);
+    } else {
+        crate::icons::paint_crop_icon(p, 图标, pal.text_muted);
     }
 }
 

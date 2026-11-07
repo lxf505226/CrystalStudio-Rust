@@ -92,6 +92,16 @@ pub struct Layout {
 
     /// 10 个工具按钮的矩形（顺序同 `icons::TOOLS`）。
     pub tool_buttons: [Rect; 10],
+    /// **工具条上的「裁剪」按钮**（A-015；上游 `MainWindow.axaml:16` 的 `CropButton`）。
+    ///
+    /// 放在 10 个工具槽之后的**空格子**（第 3 行第 3 列 —— 10 个工具只用掉 4+4+2，
+    /// 这一格原本空着）⇒ 不动 `tool_buttons` 的类型、不动面板高度、不改任何工具槽语义。
+    ///
+    /// ⚠ **与上游的视觉位置不同（有意差异，R54 记档）**：官方 `CropButton`
+    /// （`MainWindow.axaml:16`）在左侧工具列的**独立一行**（32×32 `QuietButton`，带 2px margin），
+    /// 不在 4 列图标网格里；本仓为了不动 `[Rect; 10]` 与面板高度，把它放进网格里那颗
+    /// **空着的格子**。位置不同、语义相同（都调同一条裁剪动作）。
+    pub crop_button: Rect,
     /// 5 个图层行。
     pub layer_rows: [Rect; 5],
     /// `Cell Highlights` 分隔线。
@@ -228,6 +238,15 @@ impl Layout {
             );
         }
 
+        // 工具条上的「裁剪」按钮：占工具网格里第 3 行第 3 列那个空格（10 个工具只用掉 4+4+2）
+        let crop_button = Rect::from_min_size(
+            pos2(
+                btn_x0 + 2.0 * m::TOOL_ITEM,
+                btn_y0 + 2.0 * m::TOOL_ITEM,
+            ),
+            egui::vec2(m::TOOL_BTN, m::TOOL_BTN),
+        );
+
         // ── Layers 面板 5 行 + 子组 2 行 ──
         let row_left = p_layers.content.left() + m::LAYER_ROW_INSET_L;
         let row_right = p_layers.content.right() - m::LAYER_ROW_INSET_R;
@@ -275,6 +294,7 @@ impl Layout {
             viewport,
             zoom_pill,
             tool_buttons,
+            crop_button,
             layer_rows,
             layer_group_sep,
             layer_sub_rows,
@@ -328,6 +348,42 @@ mod tests {
         assert!((l.p_minimap.whole.bottom() - l.p_palette.whole.top()).abs() < 0.01);
         assert!((l.p_palette.whole.bottom() - l.p_active_asset.whole.top()).abs() < 0.01);
         assert!((l.p_active_asset.whole.bottom() - l.status_bar.top()).abs() < 0.01);
+    }
+
+    /// **裁剪按钮的几何**（A-015 / R54）：32×32、在「工具」面板内容区里、
+    /// 与 10 个工具槽**互不重叠**、且占的是第 3 行第 3 列那颗**空格子**。
+    ///
+    /// 这条同时钉住"没有扩 `tool_buttons: [Rect; 10]`"：槽位类型/数量不变，
+    /// 裁剪按钮是**独立**的矩形（不是第 11 个工具槽）。
+    #[test]
+    fn 裁剪按钮独立且在空格子里() {
+        let l = Layout::compute(Rect::from_min_size(
+            pos2(0.0, 0.0),
+            egui::vec2(m::WINDOW_W, m::WINDOW_H),
+        ));
+        let r = l.crop_button;
+        assert_eq!((r.width(), r.height()), (m::TOOL_BTN, m::TOOL_BTN), "32×32");
+        assert!(
+            l.p_tools.content.contains_rect(r),
+            "裁剪按钮 {:?} 不在工具面板内容区 {:?} 内",
+            r,
+            l.p_tools.content
+        );
+        for (i, slot) in l.tool_buttons.iter().enumerate() {
+            assert!(
+                !slot.intersects(r),
+                "裁剪按钮与第 {i} 个工具槽重叠：{:?} / {:?}",
+                r,
+                slot
+            );
+        }
+        // 正好是网格里的第 3 行第 3 列（10 个工具只用掉 4+4+2，这一格原本空着）
+        let dx = r.left() - l.tool_buttons[0].left();
+        let dy = r.top() - l.tool_buttons[0].top();
+        assert!((dx - 2.0 * m::TOOL_ITEM).abs() < 0.01, "列偏移 {dx}");
+        assert!((dy - 2.0 * m::TOOL_ITEM).abs() < 0.01, "行偏移 {dy}");
+        // 槽位表仍是 10 个（R54：不扩）
+        assert_eq!(l.tool_buttons.len(), 10, "工具槽不许被裁剪按钮顶成 11 个");
     }
 
     #[test]
