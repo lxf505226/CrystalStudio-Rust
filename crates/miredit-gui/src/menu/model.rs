@@ -1,4 +1,4 @@
-//! **菜单项静态表**：5 个菜单 / **46 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
+//! **菜单项静态表**：5 个菜单 / **47 项**（+ 3 个子菜单 / 5 个静态子项 + 1 个动态列表），
 //! 逐项照抄官方（分组 = 官方 `<Separator />` 的位置）。
 //!
 //! # 数据来源（两处互相印证）
@@ -10,10 +10,10 @@
 //! 运行时由代码追加的那几项（语言 / 7 个面板开关 / 锁定 / 重置）见
 //! `ui_text` 里「下拉菜单项」小节的说明与 [`crate::menu::panels`] 的模块文档。
 //!
-//! # 46 项的账
+//! # 47 项的账
 //!
 //! ```text
-//! 文件 10 + 编辑 5 + 视图 20 + 工具 9 + 帮助 2 = 46
+//! 文件 10 + 编辑 5 + 视图 21 + 工具 9 + 帮助 2 = 47
 //! 视图 20 = XAML 9 + 语言 1 + 面板开关 8 + 锁定/重置 2
 //!
 //! ⚠ **2026-11-05 起是 40 项**（原 39）：上游 `901dbe2f` 新增了第 8 个面板
@@ -44,7 +44,7 @@
 //!
 //! 静态子项共 **5** 个（[`sub_count`]），另有 1 个动态列表（行数随 `recent` 变：0 条 ⇒ 1 行空态）。
 //! 子项**不进** [`MENUS`] 的 `items`（那是"顶级 42 项"的口径），
-//! 所以 [`item_count`] 仍是 46、`--menu-dump` 的汇总行仍是 46 —— 子项在 dump 里
+//! 所以 [`item_count`] 仍是 47、`--menu-dump` 的汇总行仍是 47 —— 子项在 dump 里
 //! 靠 `parent=` 列自证（见 [`crate::menu::dump_lines`]）。
 //!
 //! [`tests::顶级39项与子项5项计数`] 把这两笔账都钉住。
@@ -204,7 +204,7 @@ impl Lang {
 ///
 /// # 为什么需要它
 ///
-/// 顶级 46 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
+/// 顶级 47 项里真正有**运行期真状态**的有六样：深色模式（`app.dark`）、
 /// 单元格网格（`app.grid`）、开启门（`app.doors_open`）、**地图光照（`app.lighting`）**、
 /// **地砖信息悬浮（`app.cell_hover`）**、8 个面板显隐（`app.panels`）—— 它们由
 /// [`check`] / [`check_with`] / [`check_with_hover`] 直接从宿主字段读，
@@ -345,6 +345,12 @@ pub enum Action {
     ZoomOut,
     ActualSize,
     FitMap,
+    /// **定位到格…**（F-R13-2）：输列/行 ⇒ 视口居中到该格中心 + 1×1 选区 + 缩放抬到 ≥50%。
+    ///
+    /// 上游 `MapViewport.Navigation.cs:5-13` 的 `LocateCell` 只被 CheckMap 结果面板的
+    /// 「定位」按钮调用；本仓把语义抽成 `MireditApp::locate_cell`（CheckMap 与本项共用），
+    /// 并在此处另开一个**通用入口**（官方界面没有这一项，也没有快捷键）。
+    LocateCell,
     Language,
     // ── 视图 · 地图光照的 3 个复选子项（官方 `MapLightingMenu` 的子菜单）──
     /// `黎明 / 黄昏(D)`（官方 `Tag="DawnDusk"`）。
@@ -427,6 +433,7 @@ impl Action {
             Action::ZoomOut => "view.zoom_out",
             Action::ActualSize => "view.actual_size",
             Action::FitMap => "view.fit_map",
+            Action::LocateCell => "view.locate_cell",
             Action::Language => "view.language",
             Action::LightDawnDusk => "view.light_dawn_dusk",
             Action::LightDay => "view.light_day",
@@ -484,6 +491,7 @@ impl Action {
             Action::ZoomOut => tx::MENU_ZOOM_OUT,
             Action::ActualSize => tx::MENU_ACTUAL_SIZE,
             Action::FitMap => tx::MENU_FIT_MAP,
+            Action::LocateCell => tx::MENU_LOCATE_CELL,
             Action::Language => tx::MENU_LANGUAGE,
             Action::LightDawnDusk => SUB_LIGHT_DAWN_DUSK,
             Action::LightDay => SUB_LIGHT_DAY,
@@ -664,7 +672,7 @@ pub const EDIT_ITEMS: [Item; 5] = [
 ///
 /// `地图光照`（#3）与 `语言`（#9）是**子菜单**（官方 XAML 里 `MapLightingMenu` 就带 3 个
 /// 子项；`语言` 由 `MainWindow.Localization.cs:15` 追加时也带 2 个）。
-pub const VIEW_ITEMS: [Item; 20] = [
+pub const VIEW_ITEMS: [Item; 21] = [
     it(Action::DarkMode, false),
     // 地砖信息悬浮：官方 XAML 里它前面**有一条分隔线**（深色模式｜地砖信息悬浮|单元格网格）
     it(Action::CellHover, true),
@@ -675,6 +683,7 @@ pub const VIEW_ITEMS: [Item; 20] = [
     it(Action::ZoomOut, false),
     it(Action::ActualSize, false),
     it(Action::FitMap, false),
+    it(Action::LocateCell, true),
     it_sub(Action::Language, true, Sub::Static(LANGUAGE_ITEMS)),
     it(Action::Panel(PanelId::Maps), true),
     it(Action::Panel(PanelId::Tools), false),
@@ -748,7 +757,7 @@ pub const MENUS: [Menu; 5] = [
     },
 ];
 
-/// 全部菜单项总数（= **46**：文件 10 + 编辑 5 + 视图 20 + 工具 9 + 帮助 2）。
+/// 全部菜单项总数（= **47**：文件 10 + 编辑 5 + 视图 21 + 工具 9 + 帮助 2）。
 pub fn item_count() -> usize {
     MENUS.iter().map(|m| m.items.len()).sum()
 }
@@ -861,7 +870,9 @@ pub const fn state(action: Action) -> State {
         | Action::ZoomIn
         | Action::ZoomOut
         | Action::ActualSize
-        | Action::FitMap => State::NeedsMap,
+        | Action::FitMap
+        // 「定位到格…」（F-R13-2）：要开图（按地图尺寸校验坐标）⇒ 与适应地图同档
+        | Action::LocateCell => State::NeedsMap,
         // 「另存为」2026-11-05 起**真实现**：菜单项 / `Ctrl+Shift+S` / `--save-as` 三条入口
         // 都打开同一个路径输入模态（`Overlay::SaveAs`），回车后走
         // [`crate::save::save_as_session`]（复用同一套原子写：tmp → sync → 读回核对 →
@@ -1075,7 +1086,8 @@ mod tests {
     use crate::menu::panels::PanelVis;
     use std::collections::BTreeSet;
 
-    /// **46 项的账**：文件 10 / 编辑 5 / 视图 20 / 工具 9 / 帮助 2（2026-11-06 加「关于」；`n    /// 2026-11-07 加「地砖信息悬浮」与「单元格属性…」）。
+    /// **47 项的账**：文件 10 / 编辑 5 / 视图 21 / 工具 9 / 帮助 2
+    /// （2026-11-06 加「关于」；2026-11-07 加「地砖信息悬浮」「单元格属性…」「定位到格…」）。
     ///
     /// 这条是验收门 §四.2 的机器判据：任何人加/删一项，这里先红。
     #[test]
@@ -1084,12 +1096,12 @@ mod tests {
         assert_eq!(EDIT_ITEMS.len(), 5, "编辑菜单（撤销/重做/填充选区/单元格属性/设置）");
         assert_eq!(
             VIEW_ITEMS.len(),
-            20,
-            "视图菜单（XAML 9 + 语言 1 + 面板 8 + 锁定/重置 2）"
+            21,
+            "视图菜单（XAML 9 + 定位到格 1 + 语言 1 + 面板 8 + 锁定/重置 2）"
         );
         assert_eq!(TOOLS_ITEMS.len(), 9, "工具菜单（含裁剪/扩边/检查地图）");
         assert_eq!(HELP_ITEMS.len(), 2, "帮助菜单（键盘快捷键 + 关于）");
-        assert_eq!(item_count(), 46, "5 个菜单合计");
+        assert_eq!(item_count(), 47, "5 个菜单合计");
         assert_eq!(MENUS.len(), 5);
         // 视图里的面板开关正好 8 个，且与 PanelId::ALL 一一对应
         let panels: Vec<_> = VIEW_ITEMS
@@ -1120,7 +1132,7 @@ mod tests {
                 assert_eq!(MENUS[mi].items[ii].action.id(), id);
             }
         }
-        assert_eq!(ids.len(), 46);
+        assert_eq!(ids.len(), 47);
         assert!(find_by_id("no.such_item").is_none());
     }
 
@@ -1258,7 +1270,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(ready + need_map + todo, 46);
+        assert_eq!(ready + need_map + todo, 47);
         // 任务书 §三.3 点名必须真接上的那一批：逐条钉住，防止有人把它们改回 Todo
         for a in [
             Action::OpenMap,
@@ -1463,8 +1475,8 @@ mod tests {
         // 深色模式后 = 1（新）、网格后 = 3、门后 = 5、适应地图后 = 9、语言后 = 10、面板后 = 18。
         assert_eq!(
             seps(&VIEW_ITEMS),
-            vec![1, 3, 5, 9, 10, 18],
-            "视图：深色模式后 / 网格后 / 门后 / 适应地图后 / 语言后 / 面板后"
+            vec![1, 3, 5, 9, 10, 11, 19],
+            "视图：深色模式后 / 网格后 / 门后 / 缩放四项后（适应地图｜定位到格） / 语言后 / 面板后"
         );
         assert_eq!(
             seps(&TOOLS_ITEMS),
@@ -1572,7 +1584,7 @@ mod tests {
     #[test]
     fn 顶级42项与子项5项计数() {
         // ① 顶级是 42（2026-11-06 帮助 1 → 2；2026-11-07 视图 19 → 20），子项不许把它撑大
-        assert_eq!(item_count(), 46);
+        assert_eq!(item_count(), 47);
         // ② 静态子项 5，且顺序照官方
         assert_eq!(sub_count(), 5, "地图光照 3 + 语言 2");
         assert_eq!(

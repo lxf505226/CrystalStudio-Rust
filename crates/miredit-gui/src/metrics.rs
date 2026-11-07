@@ -1090,6 +1090,12 @@ pub const SHORTCUTS_KEY_COL_W: f32 = 170.0;
 /// `PanBy(new Vector(0, 48))` 等四条 —— 单位是屏幕像素，与缩放无关）。
 pub const PAN_STEP_PX: f32 = 48.0;
 
+/// **定位到格时的最小缩放**（上游 `MapViewport.Navigation.cs:9`：`Zoom = Math.Max(Zoom, .5)`）。
+///
+/// 含义：定位只在缩放**低于** 50% 时抬到 50%；本来就放大着的（100%/200%）**不缩回去**，
+/// 免得"定位一下把细节看丢了"。
+pub const GOTO_MIN_SCALE: f32 = 0.5;
+
 // ───────────────────── 关于对话框（帮助 → 关于 Crystal Studio，2026-11-06 新增） ─────────────────────
 
 /// 关于对话框宽 **640**：最长一行是「本仓 github.com/lxf505226/CrystalStudio-Rust」（38 字符）

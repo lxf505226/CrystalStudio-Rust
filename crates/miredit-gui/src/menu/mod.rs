@@ -45,6 +45,7 @@ pub mod cellprops;
 pub mod check_map;
 pub mod dialog;
 pub mod expand;
+pub mod goto;
 pub mod model;
 pub mod panels;
 pub mod popup;
@@ -118,6 +119,21 @@ pub enum Overlay {
         /// 本格式有没有门字节（Mir3 两档没有 ⇒ 两个门输入框禁用 + 一句原因）。
         有门字节: bool,
     },
+    /// **「视图 → 定位到格…」模态**（F-R13-2）。
+    ///
+    /// 两格输入（列/行，0 基）+ 实时校验：合法 ⇒「定位到 x,y（缩放 ≥ 50%）」，
+    /// 非法 ⇒ 一句中文原因且「定位」按钮灰显（点击不响应、**不关窗**）。
+    /// 几何/绘制/输入/校验在 [`goto`]；提交后落到 `MireditApp::locate_cell`
+    /// （= 上游 `LocateCell`：缩放抬到 ≥0.5、居中到格中心、1×1 选区；不改图不置脏）。
+    GotoCell {
+        /// 两个输入框的原文（顺序 = 列 / 行）。
+        文本: [String; 2],
+        /// 键盘焦点（`0..=1`）。
+        focus: usize,
+        /// 上次提交被拒的原因（越界等），`Some` ⇒ 摘要行改显示它。
+        error: Option<String>,
+    },
+
     /// **「工具 → 地图扩边」模态**（A-015 Expand / R36）。
     ///
     /// 440 宽面板 + 四个「加几格」输入（初值 `"0"`）+ 实时摘要：合法 ⇒「扩边后：W × H 格」，
@@ -1052,11 +1068,11 @@ mod tests {
     use super::*;
     use crate::menu::model::{find_by_id, item_count};
 
-    /// 46 项、5 菜单（`dump` 的计数与静态表必须一致）。
+    /// 47 项、5 菜单（`dump` 的计数与静态表必须一致）。
     #[test]
     fn 表与常量一致() {
         assert_eq!(MENUS.len(), 5);
-        assert_eq!(item_count(), 46);
+        assert_eq!(item_count(), 47);
         assert!(find_by_id("view.dark_mode").is_some());
     }
 
@@ -1563,8 +1579,8 @@ mod tests {
             );
         }
 
-        // 视图菜单 → 语言（菜单内下标 9）：2 行
-        s.hover = Some(9);
+        // 视图菜单 → 语言（菜单内下标 **10**；2026-11-07 起「定位到格…」占了下标 9）：2 行
+        s.hover = Some(10);
         let g = popup::geom_with(&p, &l, 2, s.active(), &[]);
         let sg = g.sub.as_ref().expect("语言必须展开子面板");
         assert_eq!(sg.rows.len(), 2, "简体中文 · English");
@@ -1712,8 +1728,8 @@ mod tests {
         // 分隔线也落地了（原来工具组只有 CheckMap 前那一条）⇒ 官方 11 → 12，
         // 加本仓「关于」前 1 条 = **13**。扩边插在 Crop 与 GenTown 之间，**不再新增**分隔线。
         assert_eq!(
-            seps, 13,
-            "分隔线 13 条（官方 12 + 本仓「关于」前 1 条）"
+            seps, 14,
+            "分隔线 14 条（官方 12 + 本仓「视图→定位到格」前 1 条 + 「关于」前 1 条）"
         );
         // ③ 子项行
         let subs: Vec<&&String> = rows.iter().filter(|l| !l.contains("parent=- ")).collect();

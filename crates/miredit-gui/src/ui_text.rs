@@ -314,6 +314,47 @@ pub const STATUS_CROP_NOOP: &str = "选区已覆盖整张地图，没有可裁�
 /// 没有选区就点「裁剪到选区」时的回执（上游是静默 `return false`，本仓必须说出来）。
 pub const STATUS_CROP_NEED_SELECTION: &str = "先在地图上框选要保留的部分再裁剪"; // EN: Select an area inside the map before cropping.
 
+// ───────────────────────── 视图 → 定位到格（F-R13-2 / R42） ─────────────────────────
+
+/// 视图 → **定位到格…**（本仓新增入口；上游同语义只有 `MapViewport.Navigation.cs:5-13`
+/// 的 `LocateCell`，界面上只有 CheckMap 结果里的「定位」按钮调它）。
+///
+/// 省略号表示"点了还要输坐标"（与「打开地图…」「另存为…」同一约定）。
+pub const MENU_LOCATE_CELL: &str = "定位到格…"; // EN: Go to Cell… (本仓新增入口)
+
+/// 定位到格模态的标题。
+pub const GOTO_DLG_TITLE: &str = "定位到格"; // EN: Go to Cell
+
+/// 定位到格模态的说明（点明"只移动视口 + 设 1×1 选区，不改地图"）。
+pub const GOTO_DLG_HINT: &str = "输入列、行（0 基），回车定位。"; // EN: Type column and row (0-based), Enter to go.
+
+/// 定位到格模态的第二行说明（只读语义）。
+pub const GOTO_DLG_HINT2: &str = "只移动视口并选中该格，不改地图。"; // EN: Only moves the view and selects the cell; the map is untouched.
+
+/// 两个输入框的标签（顺序 = 列 / 行）。
+pub const GOTO_FIELDS: [&str; 2] = [
+    "列（x）", // EN: Column (x)
+    "行（y）", // EN: Row (y)
+];
+
+/// 合法时的摘要（官方 `LocateCell` 会把缩放抬到 ≥50%）。
+pub const GOTO_SUMMARY_TMPL: &str = "定位到 {x},{y}（缩放 ≥ {pct}%）"; // EN: Go to {x},{y} (zoom ≥ {pct}%)
+
+/// 输入不是整数（含空着）。
+pub const GOTO_ERR_NOT_INT: &str = "列与行都要填整数，且不能为空"; // EN: Column and row must be whole numbers.
+
+/// 越界原因（`{x}`/`{y}` = 输入值，`{w}`/`{h}` = 地图宽高）。
+pub const GOTO_ERR_RANGE_TMPL: &str = "超出地图范围：这张图是 {w} × {h} 格（列 0..{xmax}、行 0..{ymax}）"; // EN: Out of range: this map is {w} × {h} cells
+
+/// 定位成功后的状态栏回执（= 上游 `LocateCell` 的等价物；`{x}`/`{y}` = 格坐标）。
+pub const STATUS_GOTO_OK_TMPL: &str = "已定位到单元格 {x},{y}"; // EN: Located cell {x},{y} ｜ 官方: 同 CheckMap 的「定位」
+
+/// 模态按钮：执行定位。
+pub const GOTO_OK: &str = "定位"; // EN: Go ｜ 官方: Locate
+
+/// 模态按钮：取消。
+pub const GOTO_CANCEL: &str = "取消"; // EN: Cancel
+
 /// 扩边模态标题（官方 `Title = "Expand Map"`，中文取 Strings.json 的「地图扩边」）。
 pub const EXPAND_TITLE: &str = "地图扩边"; // EN: Expand Map ｜ 官方: ExpandMap
 
@@ -406,7 +447,9 @@ pub const CHECK_MAP_LOCATE: &str = "定位"; // EN: Locate ｜ 官方: Locate
 pub const CHECK_MAP_CLOSE: &str = "关闭"; // EN: Close ｜ 官方: Close
 
 /// 「定位」成功后的状态栏回执。占位符：`{x}` / `{y}`。
-pub const STATUS_CHECK_MAP_LOCATE_TMPL: &str = "已定位到单元格 {x},{y}"; // EN: Located cell {x},{y}
+/// ⚠ 字面量只有一份：这里引用 [`STATUS_GOTO_OK_TMPL`]（2026-11-07 起两者同句 ——
+/// CheckMap 的「定位」与视图菜单的「定位到格」走的是**同一个** `LocateCell` 等价物）。
+pub const STATUS_CHECK_MAP_LOCATE_TMPL: &str = STATUS_GOTO_OK_TMPL; // EN: Located cell {x},{y}
 
 /// 检查完成后的状态栏回执。占位符：`{total}` / `{shown}`。
 pub const STATUS_CHECK_MAP_TMPL: &str = "检查地图：共 {total} 条，显示 {shown} 条"; // EN: Check map: {total} findings, showing {shown}
@@ -2050,6 +2093,17 @@ pub const ALL: &[(&str, &str)] = &[
     ("MENU_EXTRACT_OBJECTS", MENU_EXTRACT_OBJECTS),
     ("MENU_CROP_SELECTION", MENU_CROP_SELECTION),
     ("MENU_EXPAND_MAP", MENU_EXPAND_MAP),
+    ("MENU_LOCATE_CELL", MENU_LOCATE_CELL),
+    ("GOTO_DLG_TITLE", GOTO_DLG_TITLE),
+    ("GOTO_DLG_HINT", GOTO_DLG_HINT),
+    ("GOTO_DLG_HINT2", GOTO_DLG_HINT2),
+    ("GOTO_FIELDS", GOTO_FIELDS[0]),
+    ("GOTO_SUMMARY_TMPL", GOTO_SUMMARY_TMPL),
+    ("GOTO_ERR_NOT_INT", GOTO_ERR_NOT_INT),
+    ("GOTO_ERR_RANGE_TMPL", GOTO_ERR_RANGE_TMPL),
+    ("STATUS_GOTO_OK_TMPL", STATUS_GOTO_OK_TMPL),
+    ("GOTO_OK", GOTO_OK),
+    ("GOTO_CANCEL", GOTO_CANCEL),
     ("EXPAND_TITLE", EXPAND_TITLE),
     ("EXPAND_HINT", EXPAND_HINT),
     ("EXPAND_HINT2", EXPAND_HINT2),

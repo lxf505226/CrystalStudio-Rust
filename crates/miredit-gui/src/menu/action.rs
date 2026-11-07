@@ -564,6 +564,31 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             *cx.lighting = MapLighting::Night;
             Outcome::ok(tx::MENU_LIGHT_NIGHT.to_owned())
         }
+        // ───────────── 视图：定位到格…（F-R13-2） ─────────────
+        //
+        // 上游 `MapViewport.Navigation.cs:5-13` 的 `LocateCell` 没有输入界面（只被 CheckMap
+        // 结果面板的「定位」按钮调用）；本仓在此补一个通用入口：弹两格输入模态，
+        // 提交后落 [`MireditApp::locate_cell`]（同一处实现，CheckMap 也用它）。
+        //
+        // 只切浮层状态（真正的居中/选区在提交时做），**不写回执**（模态自己写着摘要）。
+        Action::LocateCell => {
+            if cx.doc.doc.is_none() {
+                return Outcome::refused(need_map_receipt());
+            }
+            // 初值（R42）：**当前选区中心** → 否则**鼠标所在格** → 否则 `0,0`
+            let 起点 = cx
+                .edit
+                .selection()
+                .map(|s| ((s.x0 + s.x1) / 2, (s.y0 + s.y1) / 2))
+                .or(cx.hover)
+                .unwrap_or((0, 0));
+            *cx.overlay = crate::menu::Overlay::GotoCell {
+                文本: [起点.0.to_string(), 起点.1.to_string()],
+                focus: 0,
+                error: None,
+            };
+            Outcome::opened_overlay()
+        }
         // ───────────── 工具：裁剪到选区（A-015 Crop） ─────────────
         //
         // 上游 `MainWindow.Crop.cs:5-9`：`busy` / 印章图不处理；`Viewport.CropSelection()`

@@ -1494,6 +1494,34 @@ impl MireditApp {
                     ui.ctx().request_repaint();
                 }
             }
+        } else if matches!(self.overlay, Overlay::GotoCell { .. }) {
+            // 视图 → 定位到格（F-R13-2）：Esc / 取消 ⇒ 关；「定位」⇒ 居中 + 1×1 选区 + 关窗。
+            let cells = self
+                .doc
+                .doc
+                .as_ref()
+                .map(|d| (d.map.width, d.map.height))
+                .unwrap_or((0, 0));
+            match menu::goto::interact(ui, l, &mut self.overlay, cells) {
+                menu::goto::动作::None => {}
+                menu::goto::动作::Cancel => act = menu::dialog::DialogAction::Cancel,
+                menu::goto::动作::Apply { x, y } => {
+                    match self.goto_apply(x, y, l.viewport) {
+                        // 合法：回执上屏、关模态
+                        Ok(text) => {
+                            self.op = Some((text, false));
+                            self.overlay = Overlay::None;
+                        }
+                        // 越界：**模态不关、视图/选区不动**，原因写进摘要行
+                        Err(why) => {
+                            if let Overlay::GotoCell { error, .. } = &mut self.overlay {
+                                *error = Some(why);
+                            }
+                        }
+                    }
+                    ui.ctx().request_repaint();
+                }
+            }
         } else if matches!(self.overlay, Overlay::ExpandMap { .. }) {
             // 地图扩边模态（A-015 Expand）：Esc / 取消 ⇒ 关；「地图扩边」⇒ 交给内核改尺寸。
             let cells = self
@@ -2092,15 +2120,75 @@ impl MireditApp {
         }
     }
 
-    /// 「检查地图」→「定位」：把世界格 `(x, y)` 居中，并把选区设成 **1×1**。
+    /// 「定位到格…」模态的**提交**（`menu::goto` 的 `Apply` 落到这里）。
     ///
-    /// 上游 `MainWindow.MapCheck.cs:30-35`：`Viewport.LocateCell(issue.X, issue.Y)` +
-    /// `UpdateCellInspector(x, y)` + `dialog.DialogResult = true`（关窗）。本仓的
-    /// 「单元格信息」面板每帧按悬停/选区自动更新（`cellinfo` / `dock_right`）⇒
-    /// 这里只需要「居中 + 设选区」两件事，关窗由调用方负责。
+    /// 合法 ⇒ `Ok(回执文案)`，视口/选区都已经改好（由 [`Self::locate_cell`] 做）；
+    /// 越界 ⇒ `Err(中文原因)`，且**视口、选区、缩放全部保持原样**（上游 `Document.Contains`
+    /// 失败即 `return`；本仓只是把原因说出来，绝不部分生效）。
+    fn goto_apply(&mut self, x: u16, y: u16, canvas: egui::Rect) -> Result<String, String> {
+        let (w, h) = self
+            .doc
+            .doc
+            .as_ref()
+            .map(|d| (d.map.width, d.map.height))
+            .unwrap_or((0, 0));
+        if x >= w || y >= h {
+            return Err(tx::fill(
+                tx::GOTO_ERR_RANGE_TMPL,
+                &[
+                    ("w", &w.to_string()),
+                    ("h", &h.to_string()),
+                    ("xmax", &w.saturating_sub(1).to_string()),
+                    ("ymax", &h.saturating_sub(1).to_string()),
+                ],
+            ));
+        }
+        Ok(self.locate_cell(x, y, canvas))
+    }
+
+    /// **定位到格**（= 上游 `MapViewport.Navigation.cs:5-13` 的 `LocateCell`）：一处实现，
+    /// CheckMap 结果面板的「定位」按钮与「视图 → 定位到格…」模态**共用**。
     ///
-    /// 返回状态栏回执文案（定位是**只读**动作：不置脏、不进撤销栈，选区本来就不入栈）。
+    /// 逐条对照上游：
+    /// 1. `if (!Document.Contains(x, y)) return;` —— 越界**什么都不做**；本仓返回一句原因
+    ///    （拒绝必说原因），先把缩放/选区/视口都保持原样；
+    /// 2. `CancelInteraction()` —— 本仓对应「退掉待放置印章 + 结束进行中的笔画」；
+    /// 3. `Zoom = Math.Max(Zoom, .5)` —— 只抬不缩（[`m::GOTO_MIN_SCALE`]）；
+    /// 4. `Selection = new Rect(x, y, 1, 1)` —— 1×1 选区（闭区间，本仓 `Selection` 同语义）；
+    /// 5. `CenterOnWorld(x*48 + 24, y*32 + 16)` —— 居中到**格中心**
+    ///    （[`CanvasView::center_on_cell`] 内部就是 `(cx+0.5)*CELL_W`，与上游同式）。
+    ///
+    /// 只读动作：**不置脏、不进撤销栈、不改地图字节**（选区是纯 UI 状态）。
+    /// 「单元格信息」面板每帧按悬停/选区自动更新 ⇒ 不需要上游那句 `UpdateCellInspector`。
     fn locate_cell(&mut self, x: u16, y: u16, canvas: egui::Rect) -> String {
+        // ① 越界 ⇒ 什么都不做，只回报原因（上游是静默 return）
+        let (w, h) = self
+            .doc
+            .doc
+            .as_ref()
+            .map(|d| (d.map.width, d.map.height))
+            .unwrap_or((0, 0));
+        if x >= w || y >= h {
+            return tx::fill(
+                tx::GOTO_ERR_RANGE_TMPL,
+                &[
+                    ("w", &w.to_string()),
+                    ("h", &h.to_string()),
+                    ("xmax", &w.saturating_sub(1).to_string()),
+                    ("ymax", &h.saturating_sub(1).to_string()),
+                ],
+            );
+        }
+        // ② `CancelInteraction()`：退掉待放置印章、结算进行中的笔画
+        self.armed = None;
+        if self.edit.stroke_active() {
+            let _ = self.edit.end();
+        }
+        // ③ `Zoom = Math.Max(Zoom, .5)`：只抬不缩
+        if self.view.scale < crate::metrics::GOTO_MIN_SCALE {
+            self.view.scale = crate::metrics::GOTO_MIN_SCALE;
+        }
+        // ④⑤ 居中到格中心
         self.view.center_on_cell(canvas, f32::from(x), f32::from(y));
         if let Some(d) = self.doc.doc.as_mut() {
             self.edit
@@ -2783,6 +2871,17 @@ impl eframe::App for MireditApp {
                             .unwrap_or((0, 0));
                         let 判定 = menu::expand::校验(文本, cells);
                         menu::expand::draw(&p, &l, 文本, *focus, &判定, error.as_deref())
+                    }
+                    // 视图 → 定位到格（F-R13-2）：420 宽模态，摘要实时反映两个输入。
+                    Overlay::GotoCell { 文本, focus, error } => {
+                        let cells = self
+                            .doc
+                            .doc
+                            .as_ref()
+                            .map(|d| (d.map.width, d.map.height))
+                            .unwrap_or((0, 0));
+                        let 判定 = menu::goto::校验(文本, cells);
+                        menu::goto::draw(&p, &l, 文本, *focus, &判定, error.as_deref())
                     }
                     // 工具 → 检查地图（A-015）：760×480 只读诊断面板。
                     // 陈旧判定：浮层里存的是**检查那一刻**的 `map_gen`，与当前值不同 ⇒
@@ -5490,6 +5589,160 @@ mod tests {
         assert!(!text.is_empty());
     }
 
+    // ───────────────────── 视图 → 定位到格…（F-R13-2 / R42） ─────────────────────
+
+    /// 菜单入口：视图菜单多了一项、总数 47，且**无图时是 `NeedsMap`**（灰显不执行）。
+    #[test]
+    fn 定位到格菜单项与无图态() {
+        use menu::model::{state, Action, State, VIEW_ITEMS};
+        assert_eq!(VIEW_ITEMS.len(), 21, "视图菜单 20 → 21");
+        assert_eq!(menu::model::item_count(), 47, "总数 46 → 47");
+        assert_eq!(Action::LocateCell.id(), "view.locate_cell");
+        assert_eq!(state(Action::LocateCell), State::NeedsMap, "要开图才能校验坐标");
+        // 无图 ⇒ 拒绝回执，且不打开任何模态
+        let mut app = 空应用();
+        app.dispatch_menu(Action::LocateCell, 画布());
+        let (text, warn) = app.op.as_ref().expect("必须有拒绝回执");
+        assert!(text.contains("需要先开图"), "{text}");
+        assert!(*warn);
+        assert_eq!(app.overlay, Overlay::None, "无图不许开模态");
+    }
+
+    /// 打开模态时的**初值**（R42）：当前选区中心 → 否则鼠标格 → 否则 `0,0`。
+    #[test]
+    fn 定位到格初值取选区中心或鼠标格() {
+        let mut app = 尺寸应用(8, 8);
+        // ① 没有选区、没有 hover ⇒ 0,0
+        app.dispatch_menu(menu::model::Action::LocateCell, 画布());
+        match &app.overlay {
+            Overlay::GotoCell { 文本, focus, error } => {
+                assert_eq!(文本, &["0".to_string(), "0".to_string()]);
+                assert_eq!(*focus, 0);
+                assert!(error.is_none());
+            }
+            other => panic!("应打开定位模态：{other:?}"),
+        }
+        // ② 有 hover ⇒ 取鼠标格
+        app.overlay = Overlay::None;
+        app.hover = Some((5, 6));
+        app.dispatch_menu(menu::model::Action::LocateCell, 画布());
+        match &app.overlay {
+            Overlay::GotoCell { 文本, .. } => assert_eq!(文本, &["5".to_string(), "6".to_string()]),
+            other => panic!("应打开定位模态：{other:?}"),
+        }
+        // ③ 有选区（优先于 hover）⇒ 取选区中心
+        app.overlay = Overlay::None;
+        assert!(app.edit.set_selection(
+            &mut app.doc.doc.as_mut().expect("有图").map,
+            miredit_core::Selection::new(2, 1, 5, 4)
+        ));
+        app.dispatch_menu(menu::model::Action::LocateCell, 画布());
+        match &app.overlay {
+            Overlay::GotoCell { 文本, .. } => {
+                assert_eq!(文本, &["3".to_string(), "2".to_string()], "(2..5)/2=3、(1..4)/2=2")
+            }
+            other => panic!("应打开定位模态：{other:?}"),
+        }
+    }
+
+    /// 合法提交：缩放抬到 ≥0.5（只抬不缩）、居中到**格中心**、1×1 选区；
+    /// **不改地图字节 / 不脏 / 不入撤销栈 / `map_gen` 不变**（上游 `LocateCell` 全语义）。
+    #[test]
+    fn 定位到格改缩放居中与选区() {
+        let mut app = 尺寸应用(8, 8);
+        let 画布矩形 = 画布();
+        let 前字节 = app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节");
+        let 前代号 = app.doc.map_gen;
+
+        // ① 缩放 0.25（低于阈值）⇒ 抬到 0.5
+        app.view.scale = 0.25;
+        let text = app
+            .goto_apply(3, 5, 画布矩形)
+            .expect("图内坐标应成功");
+        assert!((app.view.scale - 0.5).abs() < 1e-6, "0.25 ⇒ 0.5，实际 {}", app.view.scale);
+        assert_eq!(text, tx::fill(tx::STATUS_CHECK_MAP_LOCATE_TMPL, &[("x", "3"), ("y", "5")]));
+        // 居中到格中心：pan = 格中心世界像素 - 画布一半/scale
+        let 中心x = (3.0 + 0.5) * 48.0;
+        let 中心y = (5.0 + 0.5) * 32.0;
+        let want_x = 中心x - 画布矩形.width() * 0.5 / 0.5;
+        let want_y = 中心y - 画布矩形.height() * 0.5 / 0.5;
+        // `center_on_cell` 末尾会 `snap()` 到**整屏幕像素** ⇒ 世界坐标的量化步长是 1/scale
+        // （scale=0.5 时 2 世界像素一格），所以容差取「1 屏幕像素」而不是绝对值。
+        let tol = 1.0 / app.view.scale + 1e-3;
+        assert!((app.view.pan_x - want_x).abs() <= tol, "pan_x {} vs {want_x}（tol {tol}）", app.view.pan_x);
+        assert!((app.view.pan_y - want_y).abs() <= tol, "pan_y {} vs {want_y}（tol {tol}）", app.view.pan_y);
+        // 居中判据的**另一面**：格中心应落在画布中心附近（这才是"居中到格中心"的本义）
+        let 屏幕上格中心x = (中心x - app.view.pan_x) * app.view.scale;
+        let 屏幕上格中心y = (中心y - app.view.pan_y) * app.view.scale;
+        assert!(
+            (屏幕上格中心x - 画布矩形.width() * 0.5).abs() <= 1.0,
+            "格中心没落在画布中心：{屏幕上格中心x} vs {}",
+            画布矩形.width() * 0.5
+        );
+        assert!(
+            (屏幕上格中心y - 画布矩形.height() * 0.5).abs() <= 1.0,
+            "格中心没落在画布中心：{屏幕上格中心y} vs {}",
+            画布矩形.height() * 0.5
+        );
+        // 1×1 选区
+        assert_eq!(
+            app.edit.selection(),
+            Some(miredit_core::Selection::new(3, 5, 3, 5)),
+            "定位必须把选区设成 1×1"
+        );
+        // 只读：不脏、不入栈、字节不变、代号不变
+        assert!(!app.edit.dirty(), "定位不许置脏");
+        assert_eq!(app.edit.undo_len(), 0, "定位不许入撤销栈");
+        assert_eq!(app.doc.map_gen, 前代号, "定位不许改地图代号");
+        assert_eq!(
+            app.doc.doc.as_mut().expect("有图").to_bytes().expect("出字节"),
+            前字节,
+            "定位不许改地图字节"
+        );
+
+        // ② 缩放 2.0（高于阈值）⇒ **保持 2.0**（只抬不缩）
+        app.view.scale = 2.0;
+        app.goto_apply(0, 0, 画布矩形).expect("图内");
+        assert!((app.view.scale - 2.0).abs() < 1e-6, "2.0 不许被缩回，实际 {}", app.view.scale);
+    }
+
+    /// 边界：`(0,0)` 与 `(w-1,h-1)` 都要能定位；`(w, h)` 必须拒绝**且什么都不动**。
+    #[test]
+    fn 定位到格边界与拒绝() {
+        let mut app = 尺寸应用(8, 8);
+        let 画布矩形 = 画布();
+        // 左上角
+        app.goto_apply(0, 0, 画布矩形).expect("(0,0) 合法");
+        assert_eq!(app.edit.selection(), Some(miredit_core::Selection::new(0, 0, 0, 0)));
+        // 右下角
+        app.goto_apply(7, 7, 画布矩形).expect("(7,7) 合法");
+        assert_eq!(app.edit.selection(), Some(miredit_core::Selection::new(7, 7, 7, 7)));
+        // 越界：视图/选区/缩放全不动
+        app.view.scale = 0.3;
+        let (前pan_x, 前pan_y) = (app.view.pan_x, app.view.pan_y);
+        let 前选区 = app.edit.selection();
+        for (x, y) in [(8u16, 0u16), (0, 8), (8, 8), (99, 99)] {
+            let e = app.goto_apply(x, y, 画布矩形).expect_err("越界必须拒绝");
+            assert!(e.contains("超出地图范围"), "{e}");
+            assert_eq!((app.view.pan_x, app.view.pan_y), (前pan_x, 前pan_y), "越界不许动视口");
+            assert_eq!(app.view.scale, 0.3, "越界不许动缩放");
+            assert_eq!(app.edit.selection(), 前选区, "越界不许动选区");
+        }
+    }
+
+    /// **CheckMap 的「定位」不回归**：它走的是同一个 `locate_cell`（缩放抬到 ≥0.5、1×1 选区）。
+    #[test]
+    fn 检查地图定位不回归() {
+        let mut app = 尺寸应用(8, 8);
+        app.view.scale = 0.25;
+        let text = app.locate_cell(2, 3, 画布());
+        assert_eq!(text, tx::fill(tx::STATUS_CHECK_MAP_LOCATE_TMPL, &[("x", "2"), ("y", "3")]));
+        assert_eq!(app.edit.selection(), Some(miredit_core::Selection::new(2, 3, 2, 3)));
+        assert!((app.view.scale - 0.5).abs() < 1e-6, "CheckMap 定位也要抬到 0.5");
+        assert!(!app.edit.dirty());
+        assert_eq!(app.edit.undo_len(), 0);
+    }
+
     // ───────────────────── 键位 R9-F2：工具键 / 阻挡开关 / 平移 ─────────────────────
 
     /// **工具键 `B/P/E/V/K` 各选自己的槽位**（上游 `MainWindow.axaml.cs:989`）。
@@ -5825,7 +6078,17 @@ mod tests {
         }
         assert_eq!(app.view.pan_y, 一步后, "没有按键事件的帧不许自己漂移（不按帧积分）");
 
-        // ② 同一帧里三个 repeat 事件 ⇒ 仍然只走一步
+        // ② **跨帧**：两帧各一个 repeat ⇒ 两步（96px）—— repeat 事件算按下（R42 补测）
+        let 前 = app.view.pan_y;
+        按一次重复键(&mut app, egui::Key::W, 1);
+        按一次重复键(&mut app, egui::Key::W, 1);
+        assert!(
+            (app.view.pan_y - (前 - 2.0 * crate::metrics::PAN_STEP_PX)).abs() < 0.01,
+            "两帧各一个 repeat 应走两步（96px）：{} → {}",
+            前,
+            app.view.pan_y
+        );
+        // ③ 同一帧里三个 repeat 事件 ⇒ 仍然只走一步
         let 前 = app.view.pan_y;
         按一次重复键(&mut app, egui::Key::W, 3);
         assert!(
