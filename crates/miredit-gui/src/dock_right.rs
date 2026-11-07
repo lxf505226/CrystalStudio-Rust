@@ -649,6 +649,32 @@ pub struct MiniDraw {
 
 /// 画小地图：**有地图** ⇒ 按真实几何画地图区（+ 内容图）+ 视口框；
 /// **没地图** ⇒ 只画空块 + 如实文案。
+/// 视口框的三层绘制计划（上游 `MapMinimap.Avalonia.cs:61-67`）：**顺序即语义**。
+///
+/// 每项 = `(向外扩张量, 环宽, 颜色)`；`环宽 == 0` 表示"填充层"。
+///
+/// # 为什么要「扩张 + 环宽」两个量（2026-11-07 逐像素实测后才改对）
+///
+/// 上游两条 `Pen` 是**居中**笔画：`Pen(Black,4)` 覆盖「边外 2px ~ 边内 2px」、
+/// `Pen(White,2)` 覆盖「边内 1px」。视觉上是**黑在外、白在内**。
+///
+/// 本仓 [`pt::border_w`] 只能**内贴**。若把两条都贴内侧（第一版就是这样）：
+/// 黑占边内 0..4、白再占 0..2 ⇒ 白把黑的**外侧**2px 盖掉 ⇒ 视觉变成「白在外、黑在内」，
+/// **正好与上游相反**。实测剖面 `白2 → 黑2 → 白2` 抓到的就是这个。
+///
+/// 所以黑边必须先 `expand(2)` 再用宽 4 —— 边外 2 + 边内 2，与居中笔画等价；
+/// 白边仍贴内侧（上游是边内 1px，本仓 2px ⇒ **位置差 1px**，如实在绘制处登记）。
+pub(crate) fn 视口框计划() -> [(f32, f32, egui::Color32); 3] {
+    [
+        // ① `fill(ARGB(35,255,255,255))`：铺满视口框内部
+        (0.0, 0.0, egui::Color32::from_white_alpha(35)),
+        // ② `Pen(Black, 4)`：居中 ⇒ 边外 2 + 边内 2
+        (2.0, m::MINIMAP_VIEWBOX_OUTER_W, egui::Color32::BLACK),
+        // ③ `Pen(White, 2)`：居中 ⇒ 边内 1；本仓内贴 2（差 1px，已登记）
+        (0.0, m::MINIMAP_VIEWBOX_INNER_W, egui::Color32::WHITE),
+    ]
+}
+
 fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap, art: &MiniArt<'_>) -> MiniDraw {
     let mut 记录 = MiniDraw::default();
     let c = l.p_minimap.content;
@@ -729,12 +755,27 @@ fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap, art: &MiniArt<'_>) -> M
         MiniArt::None => {}
     }
 
-    pt::border(p, map, t::ui().checkbox_border);
-    // 视口框：位置/大小全部来自真实 pan/scale/地图尺寸
+    // 视口框：位置/大小全部来自真实 pan/scale/地图尺寸。
+    //
+    // 上游 `MapMinimap.Avalonia.cs:61-68` 的顺序（逐字）：
+    //   ① `fill(ARGB(35,255,255,255))` ② `Pen(Black, 4)` ③ `Pen(White, 2)`
+    //   最后 `:68` 才给地图区描 1px 外框（所以外框画在视口框**之后**）。
+    //
+    // ⚠ 如实登记的差异：上游两条 `Pen` 是**居中**描边（笔画跨在矩形线上），
+    //   本仓 [`pt::border_w`] 是**内贴**（笔画全在矩形内）⇒ **环宽一致、位置差 1px**。
+    //   环宽（4/2）与颜色是上游硬编码的 `Pens.Black` / `Pens.White`，不走主题 —— 照抄。
     if vb.is_positive() {
-        pt::fill(p, vb, t::ui().title_bar_text);
-        pt::border(p, vb, t::ui().menu_bar_text);
+        for (扩张, 宽度, 颜色) in 视口框计划() {
+            let r = if 扩张 > 0.0 { vb.expand(扩张) } else { vb };
+            if 宽度 <= 0.0 {
+                pt::fill(p, r, 颜色);
+            } else {
+                pt::border_w(p, r, 宽度, 颜色);
+            }
+        }
     }
+    // 地图区 1px 外框（上游 `:68` 的 `Pen(Line, 1)`）——顺序在视口框之后，与上游一致
+    pt::border(p, map, t::ui().checkbox_border);
     记录
 }
 
@@ -1300,6 +1341,34 @@ mod tests {
         );
         // 地图尺寸为 0（坏文件）也一样
         assert!(minimap_rects(block, &MiniMap::new(Some((0, 0)), (0, 0, 10, 10))).is_none());
+    }
+
+    /// **视口框按上游三层顺序与环宽绘制**（`MapMinimap.Avalonia.cs:61-67`）。
+    ///
+    /// 这条钉的是**顺序**（先填充后描边）、**环宽**（4 外 2 内）、**颜色**（半透明白 / 纯黑 /
+    /// 纯白，上游硬编码 `Pens.Black/White` 不走主题）。像素级位置不验（`border_w` 是内贴、
+    /// 上游是居中，差 1px 已在绘制处如实登记）。
+    #[test]
+    fn 视口框按上游三层顺序与环宽绘制() {
+        let 计划 = 视口框计划();
+        assert_eq!(计划.len(), 3, "上游是三层：填充 + 黑边 + 白边");
+        // ① 填充：没有环宽、不向外扩张
+        assert_eq!((计划[0].0, 计划[0].1), (0.0, 0.0), "第一层必须是填充（环宽哨兵 0）");
+        assert_eq!(
+            计划[0].2,
+            egui::Color32::from_white_alpha(35),
+            "填充色必须是 ARGB(35,255,255,255)"
+        );
+        // ② 黑边：宽 4 且**向外扩 2**（上游 `Pen` 是居中笔画 = 边外 2 + 边内 2）。
+        //    扩张量若为 0（第一版的错），白边会把黑的外侧盖掉 ⇒ 视觉变成「白在外」，
+        //    与上游相反 —— 逐像素剖面实测才抓到，这两条断言就是钉它的。
+        assert_eq!(计划[1].1, 4.0, "黑边宽 4（Pen(Black,4)）");
+        assert_eq!(计划[1].0, 2.0, "黑边必须向外扩 2（居中笔画的外半）");
+        assert_eq!(计划[1].2, egui::Color32::BLACK, "黑边颜色是纯黑（上游硬编码）");
+        // ③ 白边：贴内侧宽 2（上游居中 2 ⇒ 边内 1；本仓差 1px，已在绘制处登记）
+        assert_eq!(计划[2].0, 0.0, "白边不外扩");
+        assert_eq!(计划[2].1, 2.0, "白边宽 2（Pen(White,2)）");
+        assert_eq!(计划[2].2, egui::Color32::WHITE, "白边颜色是纯白（上游硬编码）");
     }
 
     /// **地图块（布局基线）不动**：200×138，左上 (1222, 107)。

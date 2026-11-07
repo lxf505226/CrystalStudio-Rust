@@ -611,6 +611,14 @@ pub const MINIMAP_FIT_INSET: f32 = 6.0;
 /// 为什么需要：视口缩到极小（例如 4× 放大时可见区只有几格）时，按真实比例换算出的框
 /// 边长会 **< 1px**，`Rect` 退化后连边框都画不出来 —— 那等于"看不见"，
 /// 同样是失真。抬到 1px 只是承认"屏幕上最近的相邻像素就是 1px"，位置仍严格按真实值算。
+/// 视口框**外层**黑边宽度（上游 `MapMinimap.Avalonia.cs:66` 的 `Pen(Black, 4)`）。
+///
+/// ⚠ 与上游的差异：上游笔画**居中**在矩形线上，本仓 [`crate::paint::border_w`] **内贴** ⇒
+/// 环宽一致、位置差 1px（已如实登记在 `dock_right::draw_minimap`）。
+pub const MINIMAP_VIEWBOX_OUTER_W: f32 = 4.0;
+/// 视口框**内层**白边宽度（`MapMinimap.Avalonia.cs:66` 的 `Pen(White, 2)`）。
+pub const MINIMAP_VIEWBOX_INNER_W: f32 = 2.0;
+
 pub const MINIMAP_VIEWBOX_MIN_PX: f32 = 1.0;
 
 /// 状态栏 `Cell 11, 22` 文本右端到 `● Libraries not loaded` 圆点左端的间距 52。
