@@ -18,9 +18,9 @@
 //!
 //! # 三、深色那套从哪来（**不是自己发明的**）
 //!
-//! 官方 `CrystalStudio/ThemeService.Avalonia.cs:35-57` 的 `ApplyPalette(bool dark, …)`
+//! 官方 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:35-57` 的 `ApplyPalette(bool dark, …)`
 //! 是**同一份 XAML 资源**的双向变换：XAML 里那些 `ThemeXXXXXX` 键就是**深色值**
-//! （`App.axaml:1` 的 `RequestedThemeVariant="Dark"` 即默认深色），浅色是算出来的。
+//! （`_upstream/CrystalStudio/App.axaml:1` 的 `RequestedThemeVariant="Dark"` 即默认深色），浅色是算出来的。
 //! 实测两条交叉验证（本文档作者按 `:47` 的公式手算）：
 //!
 //! ```text
@@ -79,42 +79,42 @@ pub struct Palette {
     /// 状态栏底色。
     pub status_bar: Color32,
 
-    // ── 标签条（中列多地图标签，上游 `EditorControls.axaml:58-66` 的 `PaletteTabItem`） ──
+    // ── 标签条（中列多地图标签，上游 `_upstream/CrystalStudio/EditorControls.axaml:58-66` 的 `PaletteTabItem`） ──
     /// 标签条**容器**底色（每张标签的 `Border#Chrome` 背景是 `Transparent`，透出的就是它）。
     ///
-    /// 官方: `MainWindow.MapTabs.cs:36`
+    /// 官方: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:36`
     ///       `mapTabs.SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028")`；
-    ///       键定义 `App.axaml:8` `Theme1C2028` = `#1C2028`。
+    ///       键定义 `_upstream/CrystalStudio/App.axaml:8` `Theme1C2028` = `#1C2028`。
     /// ⚠ 不复用 `menu_bar`：两者深色同值（都是 `Panel`/`Theme1C2028`），但**角色不同**
     ///   （菜单条 vs 标签条容器），本仓历史上"借错角色"已出过多次缺陷
     ///   （见 `status_bar` / `status_bar_text` / `check_box_border` 的订正记录）。
     pub tab_strip_bg: Color32,
     /// 标签**悬停**底色（上游 `:pointerover`）。
     ///
-    /// 官方: `EditorControls.axaml:63`
+    /// 官方: `_upstream/CrystalStudio/EditorControls.axaml:63`
     ///       `^:pointerover /template/ Border#Chrome` 的 `Background = {DynamicResource Theme29313E}`；
-    ///       键定义 `App.axaml:14` `Theme29313E` = `#29313E`。
+    ///       键定义 `_upstream/CrystalStudio/App.axaml:14` `Theme29313E` = `#29313E`。
     pub tab_hover_bg: Color32,
     /// **选中**标签的底边线色（`BorderThickness="0,0,0,2"` 那 2px 的 bottom 边）。
     ///
-    /// 官方: `EditorControls.axaml:64`
+    /// 官方: `_upstream/CrystalStudio/EditorControls.axaml:64`
     ///       `^:selected /template/ Border#Chrome` 的 `BorderBrush = {DynamicResource Theme8CA1FF}`；
-    ///       键定义 `App.axaml:47` `Theme8CA1FF` = `#8CA1FF`。
+    ///       键定义 `_upstream/CrystalStudio/App.axaml:47` `Theme8CA1FF` = `#8CA1FF`。
     /// ⚠ **不是 `accent_dark`**：深色下 `accent_dark` 是 `Accent` `#8498FF`
-    ///   （`ThemeService.Avalonia.cs:51` 用 accent 覆盖了 `Theme6378DF`，与 `Theme8CA1FF` 无关）；
+    ///   （`_upstream/CrystalStudio/ThemeService.Avalonia.cs:51` 用 accent 覆盖了 `Theme6378DF`，与 `Theme8CA1FF` 无关）；
     ///   上游这一条是**独立的键**，照抄才不丢 `#8CA1FF` 与 `#8498FF` 的色差。
     pub tab_selected_underline: Color32,
     /// **关闭符悬停底**（标签条上那个 `×` 被指针压住时的底色）。
     ///
-    /// 官方: 关闭钮用的是 `QuietButton`（`MainWindow.MapTabs.cs:58` `close.Theme =
+    /// 官方: 关闭钮用的是 `QuietButton`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:58` `close.Theme =
     ///       (Style)this.FindResource("QuietButton")`），而 `QuietButton`
-    ///       （`EditorControls.axaml:17`）是 `BasedOn="{StaticResource {x:Type Button}}"`
+    ///       （`_upstream/CrystalStudio/EditorControls.axaml:17`）是 `BasedOn="{StaticResource {x:Type Button}}"`
     ///       **只覆盖 `Background` / `BorderBrush` 为 `Transparent`** ⇒ 基模板那条
     ///       `^:pointerover /template/ Border#Chrome` 的 `Background`
-    ///       （`EditorControls.axaml:12`）= `Theme394354`（`App.axaml:26` = `#394354`）
+    ///       （`_upstream/CrystalStudio/EditorControls.axaml:12`）= `Theme394354`（`_upstream/CrystalStudio/App.axaml:26` = `#394354`）
     ///       **照样生效** ⇒ 上游**有** hover 底，不是"无 hover"。
     /// ⚠ 它**不是** `tab_hover_bg`（那个是 `PaletteTabItem` 的 `Theme29313E`，
-    ///   `EditorControls.axaml:63`）：两个键不同色（`#394354` vs `#29313E`），不许互相顶替。
+    ///   `_upstream/CrystalStudio/EditorControls.axaml:63`）：两个键不同色（`#394354` vs `#29313E`），不许互相顶替。
     pub close_hover_bg: Color32,
 
     // ── 文字 ──
@@ -125,12 +125,12 @@ pub struct Palette {
     /// **状态栏正文色**（`Status` 那段「就绪」/「打开失败…」的文字）。
     ///
     /// ⚠ **不是 `text` 的别名**：官方给状态栏正文**单独的键** `ThemeADB8C9`
-    /// （`App.axaml:55`；消费点 `MainWindow.axaml:84` 的 `Status` TextBlock
+    /// （`_upstream/CrystalStudio/App.axaml:55`；消费点 `_upstream/CrystalStudio/MainWindow.axaml:84` 的 `Status` TextBlock
     /// `Foreground="{DynamicResource ThemeADB8C9}"`），深色下它比 `text`
     /// （`Window` 的 `Foreground` `#E5E9F0`）**暗一档**。借用 `text` 会让状态栏正文
     /// 比官方亮一档 —— 审计项 H A-004 就是这一条。
     ///
-    /// 浅色侧两者**同值** `#434D5A`，那是 `ThemeService.Avalonia.cs:47` 常量支的结果
+    /// 浅色侧两者**同值** `#434D5A`，那是 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:47` 常量支的结果
     /// （见 `LIGHT.status_bar_text` 的算式），不是抄错角色。
     pub status_bar_text: Color32,
 
@@ -145,13 +145,15 @@ pub struct Palette {
     pub accent_button_text: Color32,
     /// 画布上**鼠标所在格**的描边色：深蓝 `#00008B` @ α 0.7（预乘落 `rgba_pm(0, 0, 97, 179)`）。
     ///
-    /// **上游出处（逐字）**：GitHub `fluttergo/CrystalStudio@a78affdf` 的
-    /// `CrystalStudio/MapViewport.cs:144`
+    /// **上游出处（逐字）**：`fluttergo/CrystalStudio@a78affdf` 的 `MapViewport.cs:144`
     /// `private static readonly ScenePen hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4);`
     /// —— 颜色 `Colors.DarkBlue`（Avalonia/System.Drawing 常量 = `#00008B`，即 RGB(0,0,139)）、
-    /// 不透明度 `.7`；`MapViewport.cs:305` 用它描悬停格。
-    /// ⚠ 本地 `_upstream` 是 `901dbe2f` **旧快照**（604 行），`DarkBlue` **0 命中**；
-    /// 真值来自 `a78affdf`（617 行），取证说明同 `metrics::CELL_HOVER_STROKE`。
+    /// 不透明度 `.7`；同版 `:305` 用它描悬停格。
+    /// ⚠ 本地 `_upstream` = `f84566bc` **快照**（`MapViewport.cs` 604 行），`DarkBlue` **0 命中**；
+    /// 该符号是 `a78affdf` **引入**的（属"某提交引入"的历史事实，故此处保留 `@<sha>`；
+    /// 行号位置一律不声称对应某个提交）。该版 616 行，取证说明同 `metrics::CELL_HOVER_STROKE`。
+    /// ⚠ `:144` / `:305` 都是 `a78affdf` **版内行号**，离线不可复核；本地 `f84566bc` 的
+    /// `MapViewport.cs:144` 是 `public MapViewport()` 构造函数，**不是**这个符号。
     ///
     /// ⚠ **两套主题同值，因为上游是硬编码常量、不是主题刷**：
     /// 上游这一行**不经** `ThemeService.Brush(...)` —— 对比同文件 `:143`
@@ -166,7 +168,7 @@ pub struct Palette {
     pub cell_hover_outline: Color32,
     /// **悬停地砖信息浮层**里「不可行走」那行的字色（红）。
     ///
-    /// ⚠ 官方 `MainWindow.CellHover.cs:61`
+    /// ⚠ 官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:61`
     /// `CellHoverWalkability.Foreground = blocked ? Brushes.Red : ThemeService.Brush("ThemeE5E9F0")`：
     /// 「可行走」用主题色 `ThemeE5E9F0`（= 本板的 `text`），**「不可行走」直接写
     /// `Brushes.Red`、不经 `ThemeService`** ⇒ 主题无关常量，两套板同值（已入 `same_ok`），
@@ -175,10 +177,10 @@ pub struct Palette {
     /// 画布上**单元格网格线**的颜色（视图 → 单元格网格，1px 世界格边界线）。
     ///
     /// ⚠ 它压在**地图位图**上，不是压在面板底色上。官方为此**专门**定义了 `CanvasGrid`
-    /// （`ThemeService.Avalonia.cs:55`，半透明刷、**不是任何控件的边框色**），
-    /// 消费点 `MapViewport.Presentation.cs:57@901dbe2f`
+    /// （`_upstream/CrystalStudio/ThemeService.Avalonia.cs:55`，半透明刷、**不是任何控件的边框色**），
+    /// 消费点 `_upstream/CrystalStudio/MapViewport.Presentation.cs:57`
     /// `new ScenePen(ThemeService.Brush("CanvasGrid"), 1 / Zoom)` —— **笔宽 = `1/Zoom`**
-    /// （世界单位，屏上恒 1px）。旧注释引的「`MapViewport.cs:137` 固定 0.6」那行已被
+    /// （世界单位，屏上恒 1px）。旧注释引的「`_upstream/CrystalStudio/MapViewport.cs:137` 固定 0.6」那行已被
     /// 上游 `901dbe2f` 删除，别再照它算。
     /// 两套板都是**预乘**半透明值（见各板里的换算算式）。
     pub grid_line: Color32,
@@ -202,7 +204,7 @@ pub struct Palette {
     pub color_swatch: Color32,
     /// 层列表里 `低位阻挡` 的标记块 / 拒绝回执的警示色。
     ///
-    /// ⚠ 官方 `CollisionMarkers.cs:6-7` 是 `static readonly`、**不经 `ThemeService`**
+    /// ⚠ 官方 `_upstream/CrystalStudio/CollisionMarkers.cs:6-7` 是 `static readonly`、**不经 `ThemeService`**
     /// ⇒ **主题无关常量**，两套板同值（已入 `tests::两套色板逐字段不同` 的 `same_ok`）。
     pub collision_low_mark: Color32,
     /// 层列表里 `高位阻挡` 的标记块（同上，官方主题无关常量）。
@@ -229,7 +231,7 @@ pub struct Palette {
     pub selection_stroke: Color32,
     /// 矩形选区的**半透明填充**色（预乘）。
     ///
-    /// ⚠ 官方 `MapViewport.cs:295` 是写死的 `Color.FromArgb(30, 110, 150, 255)`、**不经 `ThemeService`**
+    /// ⚠ 官方 `_upstream/CrystalStudio/MapViewport.cs:303` 是写死的 `Color.FromArgb(30, 110, 150, 255)`、**不经 `ThemeService`**
     /// ⇒ **主题无关常量**，两套板同值（已入 `same_ok`）。
     pub selection_fill: Color32,
     /// 印章**待放置轮廓框**的线色。
@@ -274,11 +276,11 @@ pub const LIGHT: Palette = Palette {
     // 画布底层。截图 (300,200)-(600,400) 区域直方图：`#EFF2F5` 占 89.3%。
     canvas_bg: Color32::from_rgb(0xEF, 0xF2, 0xF5),
     // 状态栏。截图 (200,916)-(1100,936) 区域直方图：`#F7F8F9` 占 100.0%。
-    //   官方角色：`MainWindow.axaml:84` `<Border Grid.Row="4" Background="{DynamicResource Theme171B22}"
+    //   官方角色：`_upstream/CrystalStudio/MainWindow.axaml:84` `<Border Grid.Row="4" Background="{DynamicResource Theme171B22}"
     //   BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">` —— `Grid.Row="4"` 就是**状态栏**
     //   （同一行里还有 `Status` / `Coordinates` / `LibraryDot` 三个状态控件）；
-    //   键定义 `App.axaml:5` `Theme171B22` = `#171B22`。
-    //   浅色值按 `ThemeService.Avalonia.cs:47` 现算（非蓝键 B−R=11≤35、lum<0.4 那一支）：
+    //   键定义 `_upstream/CrystalStudio/App.axaml:5` `Theme171B22` = `#171B22`。
+    //   浅色值按 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:47` 现算（非蓝键 B−R=11≤35、lum<0.4 那一支）：
     //     lum    = (23×.2126 + 27×.7152 + 34×.0722)/255 = 26.655/255 = 0.104529
     //     amount = clamp(lum×1.4 − 0.07, 0, 0.65) = clamp(0.146341 − 0.07) = 0.076341
     //     Blend(White, #A3ADB9, amount) = 255 − (255−通道)×amount
@@ -288,8 +290,8 @@ pub const LIGHT: Palette = Palette {
     //   ⇒ 截图直方图与官方公式**逐字节相同**：源键无疑（同款手算已入用例 `官方浅色变换可复算`）。
     status_bar: Color32::from_rgb(0xF7, 0xF8, 0xF9),
 
-    // 标签条容器底。官方: `MainWindow.MapTabs.cs:36` 的 `Theme1C2028`（`App.axaml:8` = `#1C2028`），
-    //   浅色按 `ThemeService.Avalonia.cs:47` 现算（**非蓝键** B−R = 40−28 = 12 ≤ 35、lum < 0.4 那一支）：
+    // 标签条容器底。官方: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:36` 的 `Theme1C2028`（`_upstream/CrystalStudio/App.axaml:8` = `#1C2028`），
+    //   浅色按 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:47` 现算（**非蓝键** B−R = 40−28 = 12 ≤ 35、lum < 0.4 那一支）：
     //     lum    = (28×.2126 + 32×.7152 + 40×.0722)/255 = 31.7272/255 = 0.124420
     //     amount = clamp(lum×1.4 − 0.07, 0, 0.65) = clamp(0.174188 − 0.07) = 0.104188
     //     Blend(White, #A3ADB9, amount) = 255 − (255−通道)×amount
@@ -299,7 +301,7 @@ pub const LIGHT: Palette = Palette {
     //   旁证（闭环）：参考截图页签条 (700, 66..103) 直方图 = `#F5F6F7`（见 `metrics::TABSTRIP_H` 的来源）。
     //   ⚠ 与 `LIGHT.menu_bar` 同值 —— 那是**官方变换的结论**（两个键在深色同值），不是抄错角色。
     tab_strip_bg: Color32::from_rgb(0xF5, 0xF6, 0xF7),
-    // 标签悬停底。官方: `EditorControls.axaml:63` 的 `Theme29313E`（`App.axaml:14` = `#29313E`），
+    // 标签悬停底。官方: `_upstream/CrystalStudio/EditorControls.axaml:63` 的 `Theme29313E`（`_upstream/CrystalStudio/App.axaml:14` = `#29313E`），
     //   浅色按 `:47` 现算（**非蓝键** B−R = 62−41 = 21 ≤ 35、lum < 0.4 那一支）：
     //     lum    = (41×.2126 + 49×.7152 + 62×.0722)/255 = 48.2378/255 = 0.189168
     //     amount = clamp(0.264835 − 0.07) = 0.194835
@@ -307,7 +309,7 @@ pub const LIGHT: Palette = Palette {
     //       G: 255 − 82×0.194835 = 239.024 → 239 = 0xEF
     //       B: 255 − 70×0.194835 = 241.362 → 241 = 0xF1   ⇒ **#EDEFF1**
     tab_hover_bg: Color32::from_rgb(0xED, 0xEF, 0xF1),
-    // 选中标签下划线。官方: `EditorControls.axaml:64` 的 `Theme8CA1FF`（`App.axaml:47` = `#8CA1FF`），
+    // 选中标签下划线。官方: `_upstream/CrystalStudio/EditorControls.axaml:64` 的 `Theme8CA1FF`（`_upstream/CrystalStudio/App.axaml:47` = `#8CA1FF`），
     //   浅色按 `:43`/`:46` 现算（**蓝键** B−R = 255−140 = 115 > 35、B−G = 255−161 = 94 > 12；
     //   lum = (140×.2126 + 161×.7152 + 255×.0722)/255 = 163.322/255 = 0.640478 ≥ 0.4）
     //   ⇒ `:46` 后半支 `Blend(accent, dark ? White : Black, dark ? 0.3 : 0.15)`
@@ -318,9 +320,9 @@ pub const LIGHT: Palette = Palette {
     //   旁证（闭环）：参考截图页签下划线 y=103..104 直方图 = `#AD7F22`（`metrics::TAB_W` 的来源），
     //   与本字段**逐字节相同** ⇒ 源键无疑（同 `LIGHT.accent_dark` 的算式，两者同值、语义不同）。
     tab_selected_underline: Color32::from_rgb(0xAD, 0x7F, 0x22),
-    // 关闭符悬停底。官方: `EditorControls.axaml:17` `QuietButton` 继承基模板的
-    //   `:pointerover /template/ Border#Chrome` 底（`EditorControls.axaml:12`）= `Theme394354`
-    //   （`App.axaml:26` = `#394354`），浅色按 `:47` 现算（**非蓝键** B−R = 84−57 = 27 ≤ 35、
+    // 关闭符悬停底。官方: `_upstream/CrystalStudio/EditorControls.axaml:17` `QuietButton` 继承基模板的
+    //   `:pointerover /template/ Border#Chrome` 底（`_upstream/CrystalStudio/EditorControls.axaml:12`）= `Theme394354`
+    //   （`_upstream/CrystalStudio/App.axaml:26` = `#394354`），浅色按 `:47` 现算（**非蓝键** B−R = 84−57 = 27 ≤ 35、
     //   lum < 0.4 那一支）：
     //     lum    = (57×.2126 + 67×.7152 + 84×.0722)/255 = 66.1014/255 = 0.259221
     //     amount = clamp(0.362910 − 0.07) = 0.292910
@@ -333,9 +335,9 @@ pub const LIGHT: Palette = Palette {
     text: Color32::from_rgb(0x43, 0x4D, 0x5A),
     // 次要文字。搜索框占位符最暗像素 (1158,406) = `#9EA4AB`。
     text_muted: Color32::from_rgb(0x9E, 0xA4, 0xAB),
-    // 状态栏正文。官方: `MainWindow.axaml:84` 的 `Status` TextBlock
-    //       `Foreground="{DynamicResource ThemeADB8C9}"`，键定义 `App.axaml:55` = `#ADB8C9`。
-    //       浅色按 `ThemeService.Avalonia.cs:43-47` 现算（**非蓝键、lum ≥ 0.4 那一支**）：
+    // 状态栏正文。官方: `_upstream/CrystalStudio/MainWindow.axaml:84` 的 `Status` TextBlock
+    //       `Foreground="{DynamicResource ThemeADB8C9}"`，键定义 `_upstream/CrystalStudio/App.axaml:55` = `#ADB8C9`。
+    //       浅色按 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:43-47` 现算（**非蓝键、lum ≥ 0.4 那一支**）：
     //         blue   = B−R = 201−173 = 28 ≤ 35 ⇒ 不是蓝键（不走 `:46`）
     //         lum    = (173×.2126 + 184×.7152 + 201×.0722)/255 = 182.889/255 = 0.71721 ≥ 0.4
     //         ⇒ `:47` 的后半支是**常量** `Color.FromRgb(67, 77, 90)` = **#434D5A**
@@ -352,7 +354,7 @@ pub const LIGHT: Palette = Palette {
     accent_soft: Color32::from_rgb(0xF7, 0xEF, 0xDE),
     // 金按钮文字。`Set Library Folder` 文字区域最暗像素 = `#000000`。
     accent_button_text: Color32::from_rgb(0x00, 0x00, 0x00),
-    // 悬停格描边。官方: MapViewport.cs:144@a78affdf
+    // 悬停格描边。官方: `a78affdf` 引入的 `MapViewport.cs` `hoverCellOutline`（本地 `_upstream` 快照无此符号）
     //       `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`（**写死常量**，不经 ThemeService）。
     //       `Colors.DarkBlue` = `#00008B`（RGB 0,0,139）、α = 0.7。
     //       预乘换算（**截断**口径，与本文件 `grid_line`/`selection_fill` 一致）：
@@ -367,15 +369,15 @@ pub const LIGHT: Palette = Palette {
     //       ⚠ 历史引用：本字段旧值 `#D2AA59`（截图 (607..896,813..911) 金色像素众数，
     //         占该掩码 82%）——那是**截图采样**，与源码真值冲突时源码优先，已订正。
     cell_hover_outline: rgba_pm(0, 0, 97, 179),
-    // 悬停浮层「不可行走」字色。官方: MainWindow.CellHover.cs:61 `Brushes.Red`（写死常量、
+    // 悬停浮层「不可行走」字色。官方: _upstream/CrystalStudio/MainWindow.CellHover.cs:61 `Brushes.Red`（写死常量、
     //       不经 ThemeService）⇒ 两套板同值；α=255 ⇒ 预乘与原值相同。
     hover_blocked_text: rgba_pm(255, 0, 0, 255),
-    // 网格线。官方: ThemeService.Avalonia.cs:55 `resources["CanvasGrid"] = … : Color.FromArgb(60, 73, 89, 108)`
+    // 网格线。官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:55 `resources["CanvasGrid"] = … : Color.FromArgb(60, 73, 89, 108)`
     //       ⇒ 浅色是 **24% 半透明深灰蓝**（官方**专用**的网格键，不是任何控件的边框色；
-    //       旧值 `#D3D8DD` 其实是复选框边框 `Theme586477`（App.axaml:36）的官方浅色变换 —— 抄错了角色）。
-    //       消费点 MapViewport.Presentation.cs:57@901dbe2f
+    //       旧值 `#D3D8DD` 其实是复选框边框 `Theme586477`（_upstream/CrystalStudio/App.axaml:36）的官方浅色变换 —— 抄错了角色）。
+    //       消费点 _upstream/CrystalStudio/MapViewport.Presentation.cs:57
     //       `new ScenePen(ThemeService.Brush("CanvasGrid"), 1 / Zoom)` ⇒ **笔宽 = 1/Zoom**
-    //       （世界单位；屏上恒 1px）。旧注释引的「`MapViewport.cs:137` 固定 0.6」已被上游
+    //       （世界单位；屏上恒 1px）。旧注释引的「`_upstream/CrystalStudio/MapViewport.cs:137` 固定 0.6」已被上游
     //       `901dbe2f` 删除 —— 颜色键没变，只是笔宽换了口径，别再照 0.6 算。
     //       预乘换算（**截断**口径，与 `rgba_pm` 一致）：73×60/255=17.2→17、89×60/255=20.9→20、108×60/255=25.4→25。
     grid_line: rgba_pm(17, 20, 25, 60),
@@ -396,12 +398,12 @@ pub const LIGHT: Palette = Palette {
     scrollbar: Color32::from_rgb(0x7A, 0x7A, 0x7A),
     // 当前画笔色块。截图 (17,270)-(28,280)：`#AD7F22` 占 63.6%。
     color_swatch: Color32::from_rgb(0xAD, 0x7F, 0x22),
-    // 低位阻挡标记。官方: CollisionMarkers.cs:6 `Color.FromArgb(90, 240, 85, 105)`（红、**35% 半透明**）。
+    // 低位阻挡标记。官方: _upstream/CrystalStudio/CollisionMarkers.cs:6 `Color.FromArgb(90, 240, 85, 105)`（红、**35% 半透明**）。
     //       截图 (44,428)-(56,442) 的 `#F05569` = 官方 RGB **逐字节相同** ⇒ 源键无疑，只是**漏了 α90**
     //       （截图直方图取的是众数，把 α 抹成了不透明）。官方不经 `ThemeService` ⇒ 与 DARK 同值。
     //       预乘（截断）: 240×90/255=84.7→84、85×90/255=30.0→30、105×90/255=37.1→37。
     collision_low_mark: rgba_pm(84, 30, 37, 90),
-    // 高位阻挡标记。官方: CollisionMarkers.cs:7 `Color.FromArgb(90, 65, 165, 245)`（蓝、35% 半透明）。
+    // 高位阻挡标记。官方: _upstream/CrystalStudio/CollisionMarkers.cs:7 `Color.FromArgb(90, 65, 165, 245)`（蓝、35% 半透明）。
     //       截图 (44,454)-(56,468) 的 `#41A5F5` = 官方 RGB 同值。预乘（截断）:
     //       65×90/255=22.9→22、165×90/255=58.2→58、245×90/255=86.5→86。
     collision_high_mark: rgba_pm(22, 58, 86, 90),
@@ -423,7 +425,7 @@ pub const LIGHT: Palette = Palette {
     stamp_missing_bg: Color32::from_rgb(0xE3, 0xE6, 0xE9),
     // 选区虚线 = 页签下划线的实测值 `#AD7F22`。
     selection_stroke: Color32::from_rgb(0xAD, 0x7F, 0x22),
-    // 选区填充。官方: MapViewport.cs:295 `new ImmutableSolidColorBrush(Color.FromArgb(30, 110, 150, 255))`
+    // 选区填充。官方: _upstream/CrystalStudio/MapViewport.cs:303 `new ImmutableSolidColorBrush(Color.FromArgb(30, 110, 150, 255))`
     //       —— 写死的固定蓝、**不经 `ThemeService`** ⇒ 主题无关常量，与 DARK 同值
     //       （旧值 `rgba_pm(32,23,6,40)` 是自造的"accent 金 × α40"，与官方既不同色也不同 α30；
     //        报告 D5 只点了深色，浅色侧按同一判据补齐）。
@@ -451,14 +453,14 @@ pub const DARK: Palette = Palette {
     // 官方: **没有"标题栏"这个角色** —— CrystalStudio 全仓 grep `ExtendClientArea` / `SystemDecorations`
     //       零命中 ⇒ 窗口用的是 OS 原生标题栏（DWM 画），`App.axaml` 里自然没有标题栏键。
     //       本仓自绘标题栏是 `with_decorations(false)` 的副产物（`window.rs:27-28`）⇒ 这一档**必须映射**。
-    //       深色取官方**窗口外框档** `Theme14171D`：`App.axaml:83` `Selector="Window"` 的
+    //       深色取官方**窗口外框档** `Theme14171D`：`_upstream/CrystalStudio/App.axaml:83` `Selector="Window"` 的
     //       `Background="{DynamicResource Theme14171D}"`（窗口自身底色；同一个键又被
-    //       `ThemeService.Avalonia.cs:53` 用作 `CanvasBackground`，即本文件 `view_surround`）
+    //       `_upstream/CrystalStudio/ThemeService.Avalonia.cs:53` 用作 `CanvasBackground`，即本文件 `view_surround`）
     //       ⇒ 深色下 `title_bar` 与 `view_surround` **同键同值**，不是漏抄。
     //       浅色侧**不是**这个键的变换：`#604715` 是截图里 DWM 按系统强调色画的标题栏
     //       （(300,6)-(1200,26) 直方图 100%），官方应用资源里没有金色标题栏 ⇒ 两套本来就不对称。
-    //       ⚠ 旧值 `#171B22` 是**状态栏**色（`MainWindow.axaml:84`）⇒ 借错了角色，本次归位。
-    //       旁证（浅色闭环）：`Theme14171D` 按 `ThemeService.Avalonia.cs:47` 变换 = `#F9FAFB`
+    //       ⚠ 旧值 `#171B22` 是**状态栏**色（`_upstream/CrystalStudio/MainWindow.axaml:84`）⇒ 借错了角色，本次归位。
+    //       旁证（浅色闭环）：`Theme14171D` 按 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:47` 变换 = `#F9FAFB`
     //       = 本文件 `LIGHT.view_surround`（算式同 `LIGHT.status_bar`，已入 `官方浅色变换可复算`）。
     //
     // ⚠ 本节的不透明色一律写 `Color32::from_rgb(r, g, b)` 三通道，**不写 `0xRRGG_BB` 那种分组**
@@ -466,59 +468,59 @@ pub const DARK: Palette = Palette {
     //   ① `clippy::unusual_byte_groupings` 会对"分组长度不等"（4+2）逐条报警，而本单的门是 NEW=0；
     //   ② `0x2026_32` 这种还会被当成**字面量后缀**（`_32` = i32）直接编译失败 —— 实测踩过。
     title_bar: Color32::from_rgb(0x14, 0x17, 0x1D),
-    // 官方: App.axaml:83 `Selector="Window"` 的 `Foreground` = `ThemeE5E9F0`。
+    // 官方: _upstream/CrystalStudio/App.axaml:83 `Selector="Window"` 的 `Foreground` = `ThemeE5E9F0`。
     title_bar_text: Color32::from_rgb(0xE5, 0xE9, 0xF0),
-    // 官方: ThemeService.Avalonia.cs:50 `resources["Panel"] = Brush("Theme1C2028")`；
-    //       同值见 App.axaml:70 命名刷 `Panel`、MainWindow.axaml:5 顶部条。
+    // 官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:50 `resources["Panel"] = Brush("Theme1C2028")`；
+    //       同值见 _upstream/CrystalStudio/App.axaml:70 命名刷 `Panel`、_upstream/CrystalStudio/MainWindow.axaml:5 顶部条。
     menu_bar: Color32::from_rgb(0x1C, 0x20, 0x28),
-    // 官方: App.axaml:83 Window Foreground。
+    // 官方: _upstream/CrystalStudio/App.axaml:83 Window Foreground。
     menu_bar_text: Color32::from_rgb(0xE5, 0xE9, 0xF0),
 
     // 官方: 同 `menu_bar`（`Panel`）。
     panel_bg: Color32::from_rgb(0x1C, 0x20, 0x28),
-    // 官方: App.axaml:9 `Theme202632` = `#202632`（EditorControls.axaml:13 按下态底色）。
+    // 官方: _upstream/CrystalStudio/App.axaml:9 `Theme202632` = `#202632`（_upstream/CrystalStudio/EditorControls.axaml:13 按下态底色）。
     // ⚠ 映射是我选的：标题条要比面板体**可辨**（浅色里 `#E3E6E9` 比 `#F5F6F7` 暗一档；
     //   官方深色里 `Panel` 更暗 ⇒ 对应的是比它**亮一档**的 `#202632`）。
     panel_header: Color32::from_rgb(0x20, 0x26, 0x32),
-    // 官方: ThemeService.Avalonia.cs:53 `resources["CanvasBackground"] = Brush("Theme14171D")`。
+    // 官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:53 `resources["CanvasBackground"] = Brush("Theme14171D")`。
     view_surround: Color32::from_rgb(0x14, 0x17, 0x1D),
-    // 官方: ThemeService.Avalonia.cs:54
+    // 官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:54
     //       `resources["CanvasPaper"] = dark ? Color.FromRgb(31, 37, 43) : Color.FromRgb(239, 242, 245)`
     //       ⇒ 深色 = (31,37,43) = `#1F252B`（浅色那半正是本文件 `LIGHT.canvas_bg` 的 `#EFF2F5`，闭环可验）。
     canvas_bg: Color32::from_rgb(0x1F, 0x25, 0x2B),
-    // 官方: MainWindow.axaml:84 `<Border Grid.Row="4" Background="{DynamicResource Theme171B22}"
+    // 官方: _upstream/CrystalStudio/MainWindow.axaml:84 `<Border Grid.Row="4" Background="{DynamicResource Theme171B22}"
     //       BorderBrush="{DynamicResource Line}" BorderThickness="0,1,0,0">` —— `Grid.Row="4"` = **状态栏**
-    //       （同行还有 `Status` / `Coordinates` / `LibraryDot` 三个状态控件）；键定义 `App.axaml:5`。
+    //       （同行还有 `Status` / `Coordinates` / `LibraryDot` 三个状态控件）；键定义 `_upstream/CrystalStudio/App.axaml:5`。
     //       ⇒ 深色 = `#171B22`，**比 `Panel`（`#1C2028`）暗一档**。
-    //       旧值 `#1C2028` 抄的是 `Panel`（面板体 / 工具栏 / 菜单条，`App.axaml:8` +
-    //       `ThemeService.Avalonia.cs:50` `resources["Panel"] = Brush("Theme1C2028")`，
-    //       消费点 `MainWindow.axaml:5/6/8/27`）⇒ 深色下状态栏与面板同色，丢掉官方那条更暗的横带。
+    //       旧值 `#1C2028` 抄的是 `Panel`（面板体 / 工具栏 / 菜单条，`_upstream/CrystalStudio/App.axaml:8` +
+    //       `_upstream/CrystalStudio/ThemeService.Avalonia.cs:50` `resources["Panel"] = Brush("Theme1C2028")`，
+    //       消费点 `_upstream/CrystalStudio/MainWindow.axaml:5/6/8/27`）⇒ 深色下状态栏与面板同色，丢掉官方那条更暗的横带。
     //       浅色侧按 `:47` 现算 = `#F7F8F9`，与截图直方图逐字节相同（算式见 `LIGHT.status_bar`）。
     status_bar: Color32::from_rgb(0x17, 0x1B, 0x22),
 
-    // 官方: `MainWindow.MapTabs.cs:36` `mapTabs.SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028")`；
-    //       键定义 `App.axaml:8` `Theme1C2028` = `#1C2028`（同 `Panel`，`ThemeService.Avalonia.cs:50`）。
+    // 官方: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:36` `mapTabs.SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028")`；
+    //       键定义 `_upstream/CrystalStudio/App.axaml:8` `Theme1C2028` = `#1C2028`（同 `Panel`，`_upstream/CrystalStudio/ThemeService.Avalonia.cs:50`）。
     //       浅色侧按 `:47` 现算 = `#F5F6F7`，与参考截图页签条直方图逐字节相同（算式见 `LIGHT.tab_strip_bg`）。
     tab_strip_bg: Color32::from_rgb(0x1C, 0x20, 0x28),
-    // 官方: `EditorControls.axaml:63` `^:pointerover /template/ Border#Chrome` 的 `Background` = `Theme29313E`；
-    //       键定义 `App.axaml:14` = `#29313E`。
+    // 官方: `_upstream/CrystalStudio/EditorControls.axaml:63` `^:pointerover /template/ Border#Chrome` 的 `Background` = `Theme29313E`；
+    //       键定义 `_upstream/CrystalStudio/App.axaml:14` = `#29313E`。
     tab_hover_bg: Color32::from_rgb(0x29, 0x31, 0x3E),
-    // 官方: `EditorControls.axaml:64` `^:selected /template/ Border#Chrome` 的 `BorderBrush` = `Theme8CA1FF`；
-    //       键定义 `App.axaml:47` = `#8CA1FF`。
+    // 官方: `_upstream/CrystalStudio/EditorControls.axaml:64` `^:selected /template/ Border#Chrome` 的 `BorderBrush` = `Theme8CA1FF`；
+    //       键定义 `_upstream/CrystalStudio/App.axaml:47` = `#8CA1FF`。
     //       ⚠ 别改成 `accent_dark`（= `#8498FF`）：两者在深色下**不同色**，见字段文档。
     tab_selected_underline: Color32::from_rgb(0x8C, 0xA1, 0xFF),
-    // 官方: `EditorControls.axaml:12` `^:pointerover /template/ Border#Chrome` 的
-    //       `Background` = `Theme394354`；键定义 `App.axaml:26` = `#394354`。
+    // 官方: `_upstream/CrystalStudio/EditorControls.axaml:12` `^:pointerover /template/ Border#Chrome` 的
+    //       `Background` = `Theme394354`；键定义 `_upstream/CrystalStudio/App.axaml:26` = `#394354`。
     //       `QuietButton`（`:17`）只把常态 `Background` 覆盖成 `Transparent`，
     //       `:pointerover` 那条**没被覆盖** ⇒ 关闭符悬停时就是它。
     //       浅色侧按 `:47` 现算 = `#E4E6EA`，与参考截图无关（截图里没有悬停态）。
     close_hover_bg: Color32::from_rgb(0x39, 0x43, 0x54),
 
-    // 官方: App.axaml:83 Window Foreground `#E5E9F0`。
+    // 官方: _upstream/CrystalStudio/App.axaml:83 Window Foreground `#E5E9F0`。
     text: Color32::from_rgb(0xE5, 0xE9, 0xF0),
-    // 官方: ThemeService.Avalonia.cs:50 `resources["Muted"] = Brush("Theme929CAB")`。
+    // 官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:50 `resources["Muted"] = Brush("Theme929CAB")`。
     text_muted: Color32::from_rgb(0x92, 0x9C, 0xAB),
-    // 官方: App.axaml:55 `ThemeADB8C9` = `#ADB8C9`；消费点 `MainWindow.axaml:84`
+    // 官方: _upstream/CrystalStudio/App.axaml:55 `ThemeADB8C9` = `#ADB8C9`；消费点 `_upstream/CrystalStudio/MainWindow.axaml:84`
     //       `Status` TextBlock 的 `Foreground="{DynamicResource ThemeADB8C9}"`。
     //       ⚠ 状态栏那一行有**三个文字角色**，别合并：正文 = 本键（`#ADB8C9`）、
     //       `Coordinates` 与 `LibraryStatus` = `Muted`（`#929CAB`，见 `text_muted`）、
@@ -527,71 +529,71 @@ pub const DARK: Palette = Palette {
     //       浅色侧没有视觉变化（`:47` 的常量支恰好也是 `#434D5A`）。
     status_bar_text: Color32::from_rgb(0xAD, 0xB8, 0xC9),
 
-    // 官方: App.axaml:70 命名刷 `Accent` = `#8498FF`（ThemeService.Avalonia.cs:32 的默认 accent
+    // 官方: _upstream/CrystalStudio/App.axaml:70 命名刷 `Accent` = `#8498FF`（_upstream/CrystalStudio/ThemeService.Avalonia.cs:32 的默认 accent
     //       也是 `Color.FromRgb(132,152,255)`）。
     accent: Color32::from_rgb(0x84, 0x98, 0xFF),
-    // 官方: ThemeService.Avalonia.cs:51 `resources["Theme6378DF"] = new ImmutableSolidColorBrush(accent);`
+    // 官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:51 `resources["Theme6378DF"] = new ImmutableSolidColorBrush(accent);`
     //       —— 这行在变换循环（`:39-49`）**之后**执行，连蓝键公式算出的 `#A8B6FF` 也一并覆盖
     //       ⇒ 深色下 `Theme6378DF` **恒等于 `accent`**（默认 `#8498FF`）。
-    //       `App.axaml:40` 的 `#6378DF` 只是 XAML **声明值**（上屏前就被覆盖）；旧值抄的正是这个声明值。
+    //       `_upstream/CrystalStudio/App.axaml:40` 的 `#6378DF` 只是 XAML **声明值**（上屏前就被覆盖）；旧值抄的正是这个声明值。
     accent_dark: Color32::from_rgb(0x84, 0x98, 0xFF),
-    // 官方: 键 `Theme2B355A`（App.axaml:18；EditorControls.axaml:30 选中态 `Border#Chrome` 底）是**蓝键**：
-    //       B-R=90-43=47>35、B-G=90-53=37>12（判据 `ThemeService.Avalonia.cs:43`），
+    // 官方: 键 `Theme2B355A`（_upstream/CrystalStudio/App.axaml:18；_upstream/CrystalStudio/EditorControls.axaml:30 选中态 `Border#Chrome` 底）是**蓝键**：
+    //       B-R=90-43=47>35、B-G=90-53=37>12（判据 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:43`），
     //       亮度 =(43×.2126+53×.7152+90×.0722)/255 = 0.210 < 0.4 ⇒ 走 `:46` 第一支
     //       `Blend(#191D23, accent, 0.28)` = (25×.72+132×.28, 29×.72+152×.28, 35×.72+255×.28)
     //       = (54.96, 63.44, 96.60) 截断 ⇒ `#363F60`。旧值抄的是 XAML 声明值 `#2B355A`（上屏前被重算）。
     accent_soft: Color32::from_rgb(0x36, 0x3F, 0x60),
-    // 官方: ThemeService.Avalonia.cs:52 `OnAccent` = 亮度 > 145 ? 黑 : 白。
+    // 官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:52 `OnAccent` = 亮度 > 145 ? 黑 : 白。
     //       accent `#8498FF` 亮度 = 132×.2126 + 152×.7152 + 255×.0722 = 155.2 > 145 ⇒ 黑。
     accent_button_text: Color32::from_rgb(0x00, 0x00, 0x00),
-    // 悬停格描边（**与浅色板同值**）：官方 MapViewport.cs:144@a78affdf 写死
+    // 悬停格描边（**与浅色板同值**）：官方 `a78affdf` 引入的 `hoverCellOutline` 写死
     //       `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`，不经 ThemeService ⇒ 深色板不另算。
     //       预乘换算（**截断**口径）：α=0.7×255=178.5→179；R=G=0；
     //       B=139×179/255=97.57→97 ⇒ `rgba_pm(0, 0, 97, 179)`（算式与浅色板同一条，见上）。
     //       ⚠ 历史引用：深色板旧值 `#A8B6FF` 来自
-    //         `ThemeService.Avalonia.cs:46` 的 `Blend(accent, White, 0.30)` 公式 ——
+    //         `_upstream/CrystalStudio/ThemeService.Avalonia.cs:46` 的 `Blend(accent, White, 0.30)` 公式 ——
     //         那是"强调色描边"角色（`ThemeXXXXXX` 类主题刷）的推导，**不是**悬停框的真值来源；
     //         悬停框上游是硬编码常量，故深浅同值。该推导已作废，保留仅为追溯。
     cell_hover_outline: rgba_pm(0, 0, 97, 179),
     // 同上：官方写死的 `Brushes.Red`，深色板同值。
     hover_blocked_text: rgba_pm(255, 0, 0, 255),
-    // 官方: ThemeService.Avalonia.cs:55 `resources["CanvasGrid"] = … : Color.FromArgb(38, 160, 177, 199)`
+    // 官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:55 `resources["CanvasGrid"] = … : Color.FromArgb(38, 160, 177, 199)`
     //       ⇒ 深色是 **15% 半透明浅蓝灰**（官方**专用**的网格键，不是任何控件的边框色；
-    //       旧值 `#353E4C` 是 `Theme353E4C`（App.axaml:22）—— 那是 TextBox 的 BorderBrush，抄错了角色）。
-    //       消费点 MapViewport.Presentation.cs:57@901dbe2f
+    //       旧值 `#353E4C` 是 `Theme353E4C`（_upstream/CrystalStudio/App.axaml:22）—— 那是 TextBox 的 BorderBrush，抄错了角色）。
+    //       消费点 _upstream/CrystalStudio/MapViewport.Presentation.cs:57
     //       `new ScenePen(ThemeService.Brush("CanvasGrid"), 1 / Zoom)` ⇒ **笔宽 = 1/Zoom**
-    //       （世界单位；屏上恒 1px）。旧注释引的「`MapViewport.cs:137` 固定 0.6」已被上游
+    //       （世界单位；屏上恒 1px）。旧注释引的「`_upstream/CrystalStudio/MapViewport.cs:137` 固定 0.6」已被上游
     //       `901dbe2f` 删除 —— 颜色键没变，只是笔宽换了口径，别再照 0.6 算。
     //       预乘换算（**截断**口径，与 `rgba_pm` 一致）：160×38/255=23.8→23、177×38/255=26.4→26、199×38/255=29.7→29。
     grid_line: rgba_pm(23, 26, 29, 38),
 
-    // 官方: ThemeService.Avalonia.cs:50 `resources["Line"] = Brush("Theme303640")`。
+    // 官方: _upstream/CrystalStudio/ThemeService.Avalonia.cs:50 `resources["Line"] = Brush("Theme303640")`。
     separator: Color32::from_rgb(0x30, 0x36, 0x40),
-    // 官方: App.axaml:22 `Theme353E4C` = `#353E4C`（App.axaml:84 TextBox 的 BorderBrush）。
+    // 官方: _upstream/CrystalStudio/App.axaml:22 `Theme353E4C` = `#353E4C`（_upstream/CrystalStudio/App.axaml:84 TextBox 的 BorderBrush）。
     // ⚠ 映射是我选的：浅色里停靠区竖线 `#E7EBEF` 与全局分隔线 `#EAECEF` 是**两个不同的值**，
     //   深色也取两个相邻的官方值（Line / Theme353E4C），不合并成一个。
     dock_divider: Color32::from_rgb(0x35, 0x3E, 0x4C),
-    // 官方: App.axaml:13 `Theme252C38` = `#252C38`（App.axaml:85 ComboBox 的 Background）。
+    // 官方: _upstream/CrystalStudio/App.axaml:13 `Theme252C38` = `#252C38`（_upstream/CrystalStudio/App.axaml:85 ComboBox 的 Background）。
     input_bg: Color32::from_rgb(0x25, 0x2C, 0x38),
-    // 官方: App.axaml:3 `Theme14181F` = `#14181F`（App.axaml:84 TextBox 的 Background）。
+    // 官方: _upstream/CrystalStudio/App.axaml:3 `Theme14181F` = `#14181F`（_upstream/CrystalStudio/App.axaml:84 TextBox 的 Background）。
     input_search_bg: Color32::from_rgb(0x14, 0x18, 0x1F),
-    // 官方: App.axaml:84 TextBox `BorderBrush` = `Theme353E4C`。
+    // 官方: _upstream/CrystalStudio/App.axaml:84 TextBox `BorderBrush` = `Theme353E4C`。
     input_border: Color32::from_rgb(0x35, 0x3E, 0x4C),
-    // 官方: EditorControls.axaml:37 复选框 `Border#Box` 的 `BorderBrush` = `Theme586477`。
+    // 官方: _upstream/CrystalStudio/EditorControls.axaml:37 复选框 `Border#Box` 的 `BorderBrush` = `Theme586477`。
     checkbox_border: Color32::from_rgb(0x58, 0x64, 0x77),
-    // 官方: EditorControls.axaml:94 滑杆轨道 = `Theme394455`。
+    // 官方: _upstream/CrystalStudio/EditorControls.axaml:94 滑杆轨道 = `Theme394455`。
     scrollbar: Color32::from_rgb(0x39, 0x44, 0x55),
     // 官方: 同 `accent`（`#8498FF`）。
     color_swatch: Color32::from_rgb(0x84, 0x98, 0xFF),
-    // 官方: CollisionMarkers.cs:6 `Color.FromArgb(90, 240, 85, 105)` —— `static readonly`、**不经 ThemeService**
+    // 官方: _upstream/CrystalStudio/CollisionMarkers.cs:6 `Color.FromArgb(90, 240, 85, 105)` —— `static readonly`、**不经 ThemeService**
     //       ⇒ 主题无关常量，与 LIGHT 同值（旧值 `#D69D92` 是自造的"警示色映射"，报告 D4 已否）。
     //       预乘（截断）: 240×90/255=84.7→84、85×90/255=30.0→30、105×90/255=37.1→37。
     collision_low_mark: rgba_pm(84, 30, 37, 90),
-    // 官方: CollisionMarkers.cs:7 `Color.FromArgb(90, 65, 165, 245)` —— 同上，主题无关常量，与 LIGHT 同值。
+    // 官方: _upstream/CrystalStudio/CollisionMarkers.cs:7 `Color.FromArgb(90, 65, 165, 245)` —— 同上，主题无关常量，与 LIGHT 同值。
     //       预乘（截断）: 65×90/255=22.9→22、165×90/255=58.2→58、245×90/255=86.5→86。
     collision_high_mark: rgba_pm(22, 58, 86, 90),
-    // 官方: MainWindow.axaml:84 `<Ellipse x:Name="LibraryDot" … Fill="{DynamicResource ThemeD1AD77}"/>`
-    //       （键定义 App.axaml:65）⇒ 状态圆点是**金/琥珀档** `#D1AD77`。
+    // 官方: _upstream/CrystalStudio/MainWindow.axaml:84 `<Ellipse x:Name="LibraryDot" … Fill="{DynamicResource ThemeD1AD77}"/>`
+    //       （键定义 _upstream/CrystalStudio/App.axaml:65）⇒ 状态圆点是**金/琥珀档** `#D1AD77`。
     //       旧值 `#E5E9F0` 抄的是 Window Foreground 文字色 ⇒ 圆点与旁边的 `Muted` 文字同色、
     //       失去"状态指示"的视觉区分（浅色侧 `#434D5A` 正是 `ThemeD1AD77` 的官方浅色变换，闭环可验）。
     status_dot: Color32::from_rgb(0xD1, 0xAD, 0x77),
@@ -600,18 +602,18 @@ pub const DARK: Palette = Palette {
     // 官方: 同 `text_muted`（`Muted` `#929CAB`）。
     empty_text: Color32::from_rgb(0x92, 0x9C, 0xAB),
 
-    // 官方: App.axaml:9 `Theme202632`（深色里"比 Panel 亮一档"的底色）。
+    // 官方: _upstream/CrystalStudio/App.axaml:9 `Theme202632`（深色里"比 Panel 亮一档"的底色）。
     warn_banner_bg: Color32::from_rgb(0x20, 0x26, 0x32),
-    // 官方: App.axaml:65 `ThemeD1AD77` = `#D1AD77`（深色板的金/琥珀档；同键的另一处用途见 `status_dot`）。
+    // 官方: _upstream/CrystalStudio/App.axaml:65 `ThemeD1AD77` = `#D1AD77`（深色板的金/琥珀档；同键的另一处用途见 `status_dot`）。
     warn_banner_edge: Color32::from_rgb(0xD1, 0xAD, 0x77),
-    // 官方: App.axaml:83 Window Foreground（`#E5E9F0` 在 `#202632` 上对比度 ≈ 11.6:1）。
+    // 官方: _upstream/CrystalStudio/App.axaml:83 Window Foreground（`#E5E9F0` 在 `#202632` 上对比度 ≈ 11.6:1）。
     warn_banner_text: Color32::from_rgb(0xE5, 0xE9, 0xF0),
 
     // 官方: 同 `panel_header`（`#202632`）。
     stamp_missing_bg: Color32::from_rgb(0x20, 0x26, 0x32),
     // 官方: 同 `accent`。
     selection_stroke: Color32::from_rgb(0x84, 0x98, 0xFF),
-    // 官方: MapViewport.cs:295 `new ImmutableSolidColorBrush(Color.FromArgb(30, 110, 150, 255))`
+    // 官方: _upstream/CrystalStudio/MapViewport.cs:303 `new ImmutableSolidColorBrush(Color.FromArgb(30, 110, 150, 255))`
     //       —— 写死、**不经 `ThemeService`** ⇒ 主题无关常量，与 LIGHT 同值
     //       （旧值 `rgba_pm(20,23,40,40)` 是自造的"accent × α40"：既非官方色，也非官方 α30）。
     //       预乘（截断）: 110×30/255=12.9→12、150×30/255=17.6→17、255×30/255=30.0→30。
@@ -628,7 +630,7 @@ pub const DARK: Palette = Palette {
     menu_popup_bg: Color32::from_rgb(0x1C, 0x20, 0x28),
     // 官方: 同 `separator`（`Line` `#303640`）。
     menu_popup_border: Color32::from_rgb(0x30, 0x36, 0x40),
-    // 官方: 同 `accent_soft`（蓝键 `Theme2B355A` 经 `ThemeService.Avalonia.cs:46` 重算 ⇒ `#363F60`）。
+    // 官方: 同 `accent_soft`（蓝键 `Theme2B355A` 经 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:46` 重算 ⇒ `#363F60`）。
     menu_popup_hover: Color32::from_rgb(0x36, 0x3F, 0x60),
 };
 thread_local! {
@@ -669,14 +671,15 @@ mod tests {
     /// 这条挡的是"深色板漏抄一个字段，于是那一处仍然浅色"——那正是本单要防的回归。
     ///
     /// ⚠ `same_ok` **不是放宽**：进这张表的每个字段都有官方依据证明它**本就与主题无关**
-    /// （遮罩压在**地图**上；`OnAccent` 算出来两套都是黑；`CollisionMarkers.cs:6-7`、
-    /// `MapViewport.cs:295` 与 `MapViewport.cs:144@a78affdf` 都是写死常量、不经 `ThemeService`）。
+    /// （遮罩压在**地图**上；`OnAccent` 算出来两套都是黑；`_upstream/CrystalStudio/CollisionMarkers.cs:6-7`、
+    /// `_upstream/CrystalStudio/MapViewport.cs:303` 与 `a78affdf` 引入的 `hoverCellOutline`
+    /// （本地快照无）都是写死常量、不经 `ThemeService`）。
     /// 反向纪律：凡是"官方有主题相关来源"的字段**一律不许**进这张表 —— 那才是真的把回归放过去。
     /// 这张表里的每一项另由 [`主题无关字段取官方常量`] 逐字节钉住官方值，
     /// 防止"两套都抄错但抄成一样"。
     ///
     /// 📌 **2026-11-08 变动**：`cell_hover_outline`（原 `cell_hover_gold`）由 `pairs` **移入**本表 ——
-    /// 上游 `MapViewport.cs:144@a78affdf` 是 `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`
+    /// 上游 `a78affdf` 引入的 `hoverCellOutline` 是 `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`
     /// 硬编码常量，不是 `ThemeXXXXXX` 主题刷 ⇒ 深浅必须同值。总数仍 49（一进一出，见断言）。
     #[test]
     fn 两套色板逐字段不同() {
@@ -691,7 +694,7 @@ mod tests {
             // A-011：落位诊断两色与主题无关（压在游戏画面上的硬编码诊断色）
             "stamp_blocked",
             "stamp_boundary",
-            // 2026-11-08：悬停格描边。上游 `MapViewport.cs:144@a78affdf` 写死
+            // 2026-11-08：悬停格描边。上游 `a78affdf` 引入的 `hoverCellOutline` 写死
             // `ImmutableSolidColorBrush(Colors.DarkBlue, .7)`（不经 `ThemeService`）
             // ⇒ 深浅同值；官方值由 [`主题无关字段取官方常量`] 逐通道钉住。
             "cell_hover_outline",
@@ -714,7 +717,7 @@ mod tests {
                 DARK.tab_selected_underline,
             ),
             // B2 新增字段：关闭符悬停底（`QuietButton` 继承的 `:pointerover` 底，
-            // `EditorControls.axaml:12` 的 `Theme394354`）。
+            // `_upstream/CrystalStudio/EditorControls.axaml:12` 的 `Theme394354`）。
             ("close_hover_bg", LIGHT.close_hover_bg, DARK.close_hover_bg),
             ("text", LIGHT.text, DARK.text),
             ("text_muted", LIGHT.text_muted, DARK.text_muted),
@@ -763,9 +766,9 @@ mod tests {
     /// **主题无关字段取官方常量**（与 `same_ok` 配对，防止"两套都抄错但抄成一样"）。
     ///
     /// 这几项官方都是**写死常量、不经 `ThemeService`** ⇒ 深浅两套必须**逐字节等于官方预乘值**：
-    /// - 低/高位阻挡：`CollisionMarkers.cs:6-7` `Color.FromArgb(90, 240, 85, 105)` / `(90, 65, 165, 245)`
-    /// - 选区填充：`MapViewport.cs:295` `Color.FromArgb(30, 110, 150, 255)`
-    /// - 悬停格描边：`MapViewport.cs:144@a78affdf`
+    /// - 低/高位阻挡：`_upstream/CrystalStudio/CollisionMarkers.cs:6-7` `Color.FromArgb(90, 240, 85, 105)` / `(90, 65, 165, 245)`
+    /// - 选区填充：`_upstream/CrystalStudio/MapViewport.cs:303` `Color.FromArgb(30, 110, 150, 255)`
+    /// - 悬停格描边：`a78affdf` 引入的 `hoverCellOutline`（本地 `_upstream` 快照无此符号）
     ///   `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)` ⇒ `#00008B` @ α0.7
     ///
     /// ⚠ 为什么必须有这条：`same_ok` 让它们退出"两套必须不同"的检查，**只退出不补就真是放宽了**。
@@ -813,14 +816,14 @@ mod tests {
                 DARK.selection_fill,
             ),
             (
-                // 官方 `MainWindow.CellHover.cs:61` 的 `Brushes.Red` = `#FFFF0000`（不透明）
+                // 官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:61` 的 `Brushes.Red` = `#FFFF0000`（不透明）
                 "hover_blocked_text",
                 (255, 255, 0, 0),
                 LIGHT.hover_blocked_text,
                 DARK.hover_blocked_text,
             ),
             (
-                // 官方 `MapViewport.cs:144@a78affdf`
+                // 官方 `a78affdf` 引入的 `hoverCellOutline`
                 // `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`
                 // ⇒ `Colors.DarkBlue` = `#00008B`（RGB 0,0,139）、α = 0.7×255 = 178.5 → 179。
                 // 期望预乘：R=0、G=0、B=139×179/255=97.57→**97**（截断）、α=179。
@@ -848,13 +851,13 @@ mod tests {
 
     /// **官方浅色变换可复算**（交叉验证"XAML 资源就是深色值"这条结论）。
     ///
-    /// 照 `ThemeService.Avalonia.cs:47` 的公式手算下面每个键，必须逐字节等于本文件浅色板的值：
+    /// 照 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:47` 的公式手算下面每个键，必须逐字节等于本文件浅色板的值：
     /// `Blend(White, #A3ADB9, clamp(L*1.4-0.07, 0, 0.65))`。
     ///
     /// 2026-11-05 增补两个键（都是本轮订正过的角色，用**公式**而不是注释钉住）：
-    /// - `Theme171B22` → `LIGHT.status_bar`：证明状态栏源键是 `MainWindow.axaml:84` 那一行；
+    /// - `Theme171B22` → `LIGHT.status_bar`：证明状态栏源键是 `_upstream/CrystalStudio/MainWindow.axaml:84` 那一行；
     /// - `Theme14171D` → `LIGHT.view_surround`：证明 `DARK.title_bar` 取的窗口外框键真实存在
-    ///   （`App.axaml:83` `Selector="Window"` 的 `Background`）。
+    ///   （`_upstream/CrystalStudio/App.axaml:83` `Selector="Window"` 的 `Background`）。
     #[test]
     fn 官方浅色变换可复算() {
         let blend = |a: [u8; 3], b: [u8; 3], amount: f64| -> [u8; 3] {
@@ -879,13 +882,13 @@ mod tests {
             ([0x30, 0x36, 0x40], LIGHT.separator, "separator"),
             ([0x25, 0x2C, 0x38], LIGHT.input_bg, "input_bg"),
             ([0x14, 0x18, 0x1F], LIGHT.input_search_bg, "input_search_bg"),
-            // 状态栏：`MainWindow.axaml:84` 的 `Theme171B22`（浅色由公式算出，与截图直方图逐字节相同）。
+            // 状态栏：`_upstream/CrystalStudio/MainWindow.axaml:84` 的 `Theme171B22`（浅色由公式算出，与截图直方图逐字节相同）。
             ([0x17, 0x1B, 0x22], LIGHT.status_bar, "status_bar"),
-            // 窗口外框：`App.axaml:83` `Selector="Window"` 的 `Theme14171D`（= `DARK.title_bar` 的源键）。
+            // 窗口外框：`_upstream/CrystalStudio/App.axaml:83` `Selector="Window"` 的 `Theme14171D`（= `DARK.title_bar` 的源键）。
             ([0x14, 0x17, 0x1D], LIGHT.view_surround, "view_surround"),
-            // 标签条容器底：`MainWindow.MapTabs.cs:36` 的 `Theme1C2028`（B1-FIX 新增字段）。
+            // 标签条容器底：`_upstream/CrystalStudio/MainWindow.MapTabs.cs:36` 的 `Theme1C2028`（B1-FIX 新增字段）。
             ([0x1C, 0x20, 0x28], LIGHT.tab_strip_bg, "tab_strip_bg"),
-            // 标签悬停底：`EditorControls.axaml:63` 的 `Theme29313E`（B1-FIX 新增字段）。
+            // 标签悬停底：`_upstream/CrystalStudio/EditorControls.axaml:63` 的 `Theme29313E`（B1-FIX 新增字段）。
             ([0x29, 0x31, 0x3E], LIGHT.tab_hover_bg, "tab_hover_bg"),
         ] {
             assert_eq!(light_of(dark), c(light), "{name} 与官方公式算出的浅色不一致");
@@ -893,7 +896,7 @@ mod tests {
     }
 
     /// **状态栏正文色回源**（审计项 H A-004）：深色 = 官方键 `#ADB8C9`，
-    /// 浅色 = `ThemeService.Avalonia.cs:47` 常量支 `#434D5A`。
+    /// 浅色 = `_upstream/CrystalStudio/ThemeService.Avalonia.cs:47` 常量支 `#434D5A`。
     ///
     /// 钉的是「状态栏正文是**独立角色**」这条结论：若有人把它改回 `text`
     /// （深色 `#E5E9F0`）或 `text_muted`（`#929CAB`），深色侧立刻不等 ⇒ 本用例变红。
@@ -902,8 +905,8 @@ mod tests {
     /// —— 否则"色板和断言一起抄错"仍然全绿，那等于只证了自洽。
     #[test]
     fn 状态栏正文取官方键与其浅色变换() {
-        // 官方源键：`App.axaml:55` `ThemeADB8C9` = `#ADB8C9`
-        // （消费点 `MainWindow.axaml:84` 的 `Status` TextBlock）。
+        // 官方源键：`_upstream/CrystalStudio/App.axaml:55` `ThemeADB8C9` = `#ADB8C9`
+        // （消费点 `_upstream/CrystalStudio/MainWindow.axaml:84` 的 `Status` TextBlock）。
         let src = [0xAD_u8, 0xB8, 0xC9];
         let got_dark = (
             DARK.status_bar_text.r(),
@@ -916,7 +919,7 @@ mod tests {
             "深色状态栏正文必须是官方键 ThemeADB8C9 的 #ADB8C9（旧值借 text 的 #E5E9F0 ⇒ 亮一档）"
         );
 
-        // 浅色：复刻 `ThemeService.Avalonia.cs:43` 判蓝 + `:47` 非蓝键的两支。
+        // 浅色：复刻 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:43` 判蓝 + `:47` 非蓝键的两支。
         let lum = (f64::from(src[0]) * 0.2126
             + f64::from(src[1]) * 0.7152
             + f64::from(src[2]) * 0.0722)
@@ -949,15 +952,15 @@ mod tests {
     }
 
     /// **标签条三色 = 上游三个键**（B1-FIX，2026-11-08）：深色逐字节等于 XAML 声明值，
-    /// 浅色逐字节等于 `ThemeService.Avalonia.cs:43-47` 现算值。
+    /// 浅色逐字节等于 `_upstream/CrystalStudio/ThemeService.Avalonia.cs:43-47` 现算值。
     ///
     /// 上游出处（逐条，照抄不推导）：
-    /// - 容器底 `MainWindow.MapTabs.cs:36` `SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028")`
-    ///   ⇒ `App.axaml:8` `#1C2028`；
-    /// - 悬停底 `EditorControls.axaml:63` `^:pointerover /template/ Border#Chrome` `Background`
-    ///   = `Theme29313E` ⇒ `App.axaml:14` `#29313E`；
-    /// - 选中下划线 `EditorControls.axaml:64` `^:selected /template/ Border#Chrome` `BorderBrush`
-    ///   = `Theme8CA1FF` ⇒ `App.axaml:47` `#8CA1FF`。
+    /// - 容器底 `_upstream/CrystalStudio/MainWindow.MapTabs.cs:36` `SetResource(TemplatedControl.BackgroundProperty, "Theme1C2028")`
+    ///   ⇒ `_upstream/CrystalStudio/App.axaml:8` `#1C2028`；
+    /// - 悬停底 `_upstream/CrystalStudio/EditorControls.axaml:63` `^:pointerover /template/ Border#Chrome` `Background`
+    ///   = `Theme29313E` ⇒ `_upstream/CrystalStudio/App.axaml:14` `#29313E`；
+    /// - 选中下划线 `_upstream/CrystalStudio/EditorControls.axaml:64` `^:selected /template/ Border#Chrome` `BorderBrush`
+    ///   = `Theme8CA1FF` ⇒ `_upstream/CrystalStudio/App.axaml:47` `#8CA1FF`。
     ///
     /// ⚠ 为什么这条不能只靠 `两套色板逐字段不同`：那条只证"深浅不同"，**证不了抄对**。
     /// 这里 `want` 一律**从官方键现算**（复刻 `:43` 判蓝 + `:46` 蓝键 / `:47` 非蓝键两支），
@@ -998,7 +1001,7 @@ mod tests {
                 "tab_hover_bg",
             ),
             // B2 新增：关闭符悬停底 = `QuietButton` 继承的基模板 `:pointerover` 底
-            // （`EditorControls.axaml:12` 的 `Theme394354`，`App.axaml:26`）。
+            // （`_upstream/CrystalStudio/EditorControls.axaml:12` 的 `Theme394354`，`_upstream/CrystalStudio/App.axaml:26`）。
             (
                 [0x39_u8, 0x43, 0x54],
                 DARK.close_hover_bg,

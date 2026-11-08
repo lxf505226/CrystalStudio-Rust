@@ -154,14 +154,14 @@ pub const SLIDER_TRACK_H: f32 = 3.0;
 /// `3×3` 胶囊标签的**左边位置**：截图 x=92（相对面板 84）。
 /// 来源：截图 y=280 行 `x92..136` 为 `#ECEEF0`。
 ///
-/// ⚠ **只是布局偏移，不参与上游算式**：上游 `MainWindow.axaml:6` 的胶囊宽度由内容撑出，
+/// ⚠ **只是布局偏移，不参与上游算式**：上游 `_upstream/CrystalStudio/MainWindow.axaml:6` 的胶囊宽度由内容撑出，
 /// 根本没有坐标常量。本单（A17）**不动它** —— 把它和尺寸混在一起，正是上一版
 /// 「45×22 当成常量」的同类错误。
 pub const PILL_X: f32 = 84.0;
 
 // ── 胶囊尺寸：**上游是算式，不是固定值**（A17，2026-11-08） ──
 //
-// 真值：`CrystalStudio/MainWindow.axaml:6`（逐字）
+// 真值：`_upstream/CrystalStudio/MainWindow.axaml:6`（逐字）
 // ```xml
 // <Border Background="{DynamicResource Theme293242}" CornerRadius="4" Padding="5,2"
 //         Margin="0,4,0,0" HorizontalAlignment="Center">
@@ -194,28 +194,28 @@ pub const PILL_RADIUS: f32 = 4.0;
 
 /// 笔刷尺寸的下限 / 上限 / 步进 —— **与官方滑块逐字一致**。
 ///
-/// 真值：`CrystalStudio/MainWindow.axaml:6`
+/// 真值：`_upstream/CrystalStudio/MainWindow.axaml:6`
 /// `<Slider x:Name="BrushSize" Minimum="3" Maximum="31" Value="3"
 ///   TickFrequency="2" IsSnapToTickEnabled="True" …/>`
 /// ⇒ 3 / 5 / … / 31 共 15 档，**只有奇数**（`TickFrequency=2` + 吸附）。
 ///
 /// 键盘 `[` / `]` 各走 **2**（保持奇数），并夹在 3..31：
-/// `MainWindow.axaml.cs:871`
+/// `_upstream/CrystalStudio/MainWindow.axaml.cs:999`
 /// `BrushSize.Value = Math.Clamp(BrushSize.Value + (e.Key == Key.OemOpenBrackets ? -2 : 2), 3, 31);`
 ///
-/// 视图层的同一口径：`MapViewport.cs:27`
+/// 视图层的同一口径：`_upstream/CrystalStudio/MapViewport.cs:28`
 /// `public int BrushSize { get => brushSize; set => brushSize = Math.Clamp(value | 1, 3, 31); }`
 /// —— `value | 1` 就是"偶数一律抬成奇数"，与本文件的 `clamp_brush_size` 同一判据。
 pub const BRUSH_MIN: usize = 3;
 pub const BRUSH_MAX: usize = 31;
 pub const BRUSH_STEP: usize = 2;
-/// 缺省尺寸 3（`MainWindow.axaml:6` 的 `Value="3"`，也是胶囊初始文案 `3×3` 的来历）。
+/// 缺省尺寸 3（`_upstream/CrystalStudio/MainWindow.axaml:6` 的 `Value="3"`，也是胶囊初始文案 `3×3` 的来历）。
 pub const BRUSH_DEFAULT: usize = 3;
 
 /// 把任意尺寸夹进「3..=31 的奇数」—— **唯一的规范化入口**。
 ///
 /// 先夹范围再抬奇数（`| 1`），于是 `0/1/2` → 3、`32/40` → 31、`4` → 5、`8` → 9。
-/// 与 `MapViewport.cs:27` 的 `Math.Clamp(value | 1, 3, 31)` 等价
+/// 与 `_upstream/CrystalStudio/MapViewport.cs:28` 的 `Math.Clamp(value | 1, 3, 31)` 等价
 /// （差别只在"先夹后抬"与"先抬后夹"在边界上的次序，两处都夹到 3..31 的奇数集合内）。
 pub const fn clamp_brush_size(n: usize) -> usize {
     let v = if n < BRUSH_MIN { BRUSH_MIN } else { n };
@@ -236,7 +236,7 @@ pub const fn clamp_brush_size(n: usize) -> usize {
 
 /// 单次填充的**格数上限 200,000**（防呆：不让一次误点把整张图吞进撤销栈）。
 ///
-/// 来源：任务书 §三.2 指定的硬上限（官方 C# 无此保护 —— `MapViewport.cs:485-539`
+/// 来源：任务书 §三.2 指定的硬上限（官方 C# 无此保护 —— `_upstream/CrystalStudio/MapViewport.cs:510-565`
 /// 的 `BucketFill` 直接 BFS 到底，`visited` 只防重复不防规模）。
 /// 超过即**报错且一格不写**（见 `edit::EditSession::fill`）。
 ///
@@ -354,7 +354,7 @@ pub const INSPECTOR_ROW_GAP: f32 = 4.0;
 
 /// 页签条高 38。来源：截图列 x=700，`y66..103` 为 `#F5F6F7`（页签条底），`y104` 起为 `#F9FAFB`（视口底）。
 ///
-/// ⚠ **上游为 `GridLength.Auto`**（`MainWindow.MapTabs.cs:28` 给画布 `Grid` 加的第一行
+/// ⚠ **上游为 `GridLength.Auto`**（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:28` 给画布 `Grid` 加的第一行
 /// `new RowDefinition { Height = GridLength.Auto }`，高度由标签项内容撑开，没有固定值）；
 /// 本仓固定 38 是**既有截图基线**（`crystalstudio-main-runtime-1500x950.png` 的
 /// `y66..103` = 38px），不改 —— 改了 `Layout::viewport` 上边界就会动，`--shot` 基线全废。
@@ -363,10 +363,10 @@ pub const TABSTRIP_H: f32 = 38.0;
 /// 页签高 30，宽 98。来源：截图页签 `Untitled 1 ×` 占 `x164..262`（98 宽）、`y66..102`。
 /// 下划线（选中指示）2px，取自截图 y=103..104 的 `#AD7F22`。
 ///
-/// 宽度口径（B1-FIX 订正）：上游标签项是**内容自适应**（`MainWindow.MapTabs.cs:32` 的
+/// 宽度口径（B1-FIX 订正）：上游标签项是**内容自适应**（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:32` 的
 /// `StackPanel Horizontal` 里每个 `TabItem` 宽度由 `Padding="8,7"`
-/// （`EditorControls.axaml:59`）+ 标题实测宽 + `Label.Margin="4,2,8,2"`
-/// （`MainWindow.MapTabs.cs:54`）+ 关闭钮 `Padding="4,0,4,0"`（`:57`）算出）。
+/// （`_upstream/CrystalStudio/EditorControls.axaml:59`）+ 标题实测宽 + `Label.Margin="4,2,8,2"`
+/// （`_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`）+ 关闭钮 `Padding="4,0,4,0"`（`:57`）算出）。
 /// `TAB_W = 98` 就是**参考标题 `Untitled 1 ×` 的那一份实测自然宽**（截图 x164..262）。
 /// 本仓不逐标题重量文本宽度：单标签态由 `canvas::draw` 按 `Layout::tab_rect()` 画，
 /// 那条几何是 `--shot` 基线与 `单标签矩形与旧版逐值相同` 用例共同钉死的（98×30），
@@ -374,23 +374,23 @@ pub const TABSTRIP_H: f32 = 38.0;
 pub const TAB_W: f32 = 98.0;
 pub const TAB_H: f32 = 30.0;
 /// 选中下划线厚 2 = 上游 `BorderThickness="0,0,0,2"` 的 bottom 边
-/// （`EditorControls.axaml:60` 模板 / `:64` 选中态把它的 `BorderBrush` 换成 `Theme8CA1FF`）。
+/// （`_upstream/CrystalStudio/EditorControls.axaml:60` 模板 / `:64` 选中态把它的 `BorderBrush` 换成 `Theme8CA1FF`）。
 pub const TAB_UNDERLINE_H: f32 = 2.0;
 
 // 已删除（B1-FIX，2026-11-08，**别再加回来**）：
 //
 // * `TAB_GAP = 2.0` —— 原注释自承「量不到、取 2」。上游**没有标签间距**：
 //   相邻 `Border#Chrome` 背景 `Transparent`、`BorderThickness="0,0,0,2"`
-//   （`EditorControls.axaml:60`）、`StackPanel Orientation="Horizontal"` 里没有 Margin
-//   （`MainWindow.MapTabs.cs:32`）⇒ 两个标签**边界相接**，视觉间隔全部由
-//   `Padding="8,7"`（`:59`）与 `Label.Margin="4,2,8,2"`（`MapTabs.cs:54`）在**标签内部**撑出来。
+//   （`_upstream/CrystalStudio/EditorControls.axaml:60`）、`StackPanel Orientation="Horizontal"` 里没有 Margin
+//   （`_upstream/CrystalStudio/MainWindow.MapTabs.cs:32`）⇒ 两个标签**边界相接**，视觉间隔全部由
+//   `Padding="8,7"`（`:59`）与 `Label.Margin="4,2,8,2"`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`）在**标签内部**撑出来。
 // * `TAB_MIN_W = 40.0` —— 原注释自承「推导…留 8px」。上游没有最小宽：标签宽度就是内容宽，
-//   放不下时由 `ScrollViewer HorizontalScrollBarVisibility="Auto"`（`MapTabs.cs:34`）横向滚动。
+//   放不下时由 `ScrollViewer HorizontalScrollBarVisibility="Auto"`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:34`）横向滚动。
 //   横向滚动不在本单范围（见回执），本仓溢出时退化为等分收窄且**不设下限**。
 
 /// 标签标题裁剪盒的**右边界内缩 = 上游 `Label.Margin` 的右边距 8**。
 ///
-/// 上游: `MainWindow.MapTabs.cs:54` `map.Label.Margin = new Thickness(4, 2, 8, 2);`
+/// 上游: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:54` `map.Label.Margin = new Thickness(4, 2, 8, 2);`
 /// ⇒ 左 4 / 上 2 / **右 8** / 下 2。这里取的就是那个 **8**（不是"量出来的"）。
 ///
 /// 旧名 `TAB_TITLE_CLIP_R`（语义是"自定的裁剪右边距"，值恰好也是 8）—— B1-FIX 归位为
@@ -417,13 +417,13 @@ pub const CELL_H: f32 = 32.0;
 
 // 网格**没有任何"多小就不画"的缩放门槛**：上游 `901dbe2f`（2026-11-05 07:17）删掉了
 // `if (GridVisible && Zoom >= .4)`，改成「永远画 + 缩小时按 `step` 抽稀」
-// （`MapViewport.Presentation.cs:51-61@901dbe2f`，判据 `while (step * 32 * Zoom < 8) step *= 2`）。
+// （`_upstream/CrystalStudio/MapViewport.Presentation.cs:51-61`，判据 `while (step * 32 * Zoom < 8) step *= 2`）。
 // ⇒ 抽稀步长的唯一出口是 `crate::grid::step_for`。本文件**不许**再加缩放阈值
 //   （原 `GRID_MIN_SCALE = 0.5` 与后来的 `grid::MIN_SCALE = 0.4` **都已删除**）。
 
 /// 网格线宽 **1 屏幕像素**（恒 1，**不随缩放变**）。
 ///
-/// 官方口径是**世界单位**笔宽 `1 / Zoom`（`MapViewport.Presentation.cs:57@901dbe2f`
+/// 官方口径是**世界单位**笔宽 `1 / Zoom`（`_upstream/CrystalStudio/MapViewport.Presentation.cs:57`
 /// `new ScenePen(ThemeService.Brush("CanvasGrid"), 1 / Zoom)`；旧版固定 0.6 那行已随
 /// `901dbe2f` 删除）—— 乘回 `Zoom` 后**屏幕恒 1px**，与本常量一致。
 ///
@@ -443,9 +443,9 @@ pub const GRID_LINE_W: f32 = 1.0;
 /// 画布最小缩放 0.25（= 25%）。来源：任务书 §三.4「滚轮以鼠标位置为中心缩放（0.25×–4×，1×=100%）」。
 ///
 /// ⚠ **与上游的偏离（上游无此口径 ⇒ 本仓自定，已登记待拍板：台账 §8.68 #1）**：
-/// 上游**没有** 0.25 这个下限 —— `MapViewport.cs:168` 的 `LimitZoom` 是
+/// 上游**没有** 0.25 这个下限 —— `_upstream/CrystalStudio/MapViewport.cs:168` 的 `LimitZoom` 是
 /// `Math.Clamp(double.IsFinite(zoom) && zoom > 0 ? zoom : Zoom, FitZoom, 1)`，
-/// 下限是**随图/窗口变的 `FitZoom`**（`MapViewport.cs:166`；700×700 图约 0.027，
+/// 下限是**随图/窗口变的 `FitZoom`**（`_upstream/CrystalStudio/MapViewport.cs:166`；700×700 图约 0.027，
 /// 见 [`FIT_MARGIN`] 那条注释的实测），上限是 **1×**。
 /// 本仓 `[0.25, 4.0]` 来自**任务书 §三.4**，不是从上游抄来的。
 pub const CANVAS_MIN_SCALE: f32 = 0.25;
@@ -453,7 +453,7 @@ pub const CANVAS_MIN_SCALE: f32 = 0.25;
 /// 画布最大缩放 4.0（= 400%）。来源：任务书 §三.4（同 [`CANVAS_MIN_SCALE`]）。
 ///
 /// ⚠ **与上游的偏离（上游无此口径 ⇒ 本仓自定，已登记待拍板：台账 §8.68 #1）**：
-/// 上游上限是 **1×** —— `MapViewport.cs:168` 的 `Math.Clamp(…, FitZoom, 1)` **封死了放大**，
+/// 上游上限是 **1×** —— `_upstream/CrystalStudio/MapViewport.cs:168` 的 `Math.Clamp(…, FitZoom, 1)` **封死了放大**，
 /// 上游根本没有 400% 这一档。本仓 4.0 来自**任务书 §三.4**。
 /// 严格对齐上游 1× 等于**删掉放大功能**（`+` 与滚轮放大都成空操作，`原始大小` 与 100% 重合）
 /// ⇒ 保留与否属**产品裁定**；**未拍板前不得**为了"对齐"把这里改成 1.0。
@@ -461,7 +461,7 @@ pub const CANVAS_MAX_SCALE: f32 = 4.0;
 
 /// **「适应地图」的边距**（每轴共 80 px，不是每边 80 px）。
 ///
-/// 来源：上游 `MapViewport.cs:166@901dbe2f` 的
+/// 来源：上游 `_upstream/CrystalStudio/MapViewport.cs:166` 的
 /// `Math.Min(1, Math.Min(Math.Max(1, ActualWidth - 80) / (W * 48.0), Math.Max(1, ActualHeight - 80) / (H * 32.0)))`
 /// —— 两条边**平分**这 80 px（每边约 40 px），所以 `usable = (画布边长 - 80).max(1)`。
 ///
@@ -471,10 +471,10 @@ pub const FIT_MARGIN: f32 = 80.0;
 
 /// 滚轮每一「格」的缩放倍率 1.15。
 ///
-/// **上游出处**：`MapViewport.cs:471`（`_upstream/CrystalStudio/`，逐字）——
+/// **上游出处**：`_upstream/CrystalStudio/MapViewport.cs:471`（`_upstream/CrystalStudio/`，逐字）——
 /// `Zoom = LimitZoom(Zoom * (e.Delta.Y > 0 ? 1.15 : 1 / 1.15));`
 /// 其中 `1.15` 是上游**硬编码字面量**（不是可配置参数、也不是从主题读的）；
-/// 同值另见 `MapMinimap.Avalonia.cs:91`、`ModuleConnectionCanvas.cs:229`，三处一致。
+/// 同值另见 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:91`、`_upstream/CrystalStudio/ModuleConnectionCanvas.cs:229`，三处一致。
 ///
 /// 以下推导是对该值的**独立复核**（推导不是错的，只是当年缺出处）：
 /// 25%→400% 共 16 档，`1.15^16 ≈ 9.36` 略大于 16 倍，实际约 20 档，
@@ -487,8 +487,7 @@ pub const SCROLL_PX_PER_NOTCH: f32 = 50.0;
 
 /// 鼠标所在格的高亮描边宽 **4**（屏幕像素，不随缩放变）。
 ///
-/// **上游出处（逐字）**：GitHub `fluttergo/CrystalStudio@a78affdf` 的
-/// `CrystalStudio/MapViewport.cs:144` ——
+/// **上游出处（逐字）**：`fluttergo/CrystalStudio@a78affdf` 的 `MapViewport.cs:144` ——
 /// `private static readonly ScenePen hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4);`
 /// 末位实参 `4` 即笔画宽。绘制点 `:305`
 /// `dc.DrawRectangle(null, hoverCellOutline, new(origin.X + cell.X * 48 * Zoom, …));`，
@@ -497,12 +496,18 @@ pub const SCROLL_PX_PER_NOTCH: f32 = 50.0;
 /// ⇒ 4 是**屏幕像素**、不随 `Zoom` 缩放，与本仓 `border_w` 直接吃 f32 宽（不乘 scale）一致。
 ///
 /// ⚠ **真值来源特殊：别指望在本地 `_upstream` 复核**。
-/// 本地 `_upstream/CrystalStudio` 是 `901dbe2f` 的**旧快照**（`MapViewport.cs` 604 行，
+/// 本符号是 `a78affdf` **引入**的（属"某提交引入"的历史事实，故此处保留 `@<sha>`；
+/// 引用体系统一口径下，**行号位置一律不声称对应某个提交**）。
+/// 本地 `_upstream/CrystalStudio` = `f84566bc` 快照（`MapViewport.cs` 604 行，
 /// SHA256 `097A244E…6520A`），`hoverCellOutline` / `DarkBlue` / `DrawHoverCell` 三符号
-/// **各 0 命中** —— 本符号是 `a78affdf`（617 行 / 40,168 B）才有的。
+/// **各 0 命中** —— 本符号是 `a78affdf` 才有的（该版 `MapViewport.cs` 616 行 / 40,168 B）。
 /// 真值取自 GitHub `a78affdf` 的 `MapViewport.cs:144`（Lead 2026-11-08 用 GitHub API 取证；
 /// 修复代理 2026-11-08 用 `api.github.com/…/contents/CrystalStudio/MapViewport.cs?ref=a78affdf`
-/// 独立复核，解码后 617 行、四处行号逐字一致）。
+/// 独立复核，解码后 616 行、四处行号逐字一致）。
+/// ⚠ 本段内**所有裸 `:NN`（`:144`/`:304`/`:305`/`:298`/`:350`）都是 `a78affdf` 版内行号**，
+/// 离线一律不可复核（`_upstream` 无 `.git`、raw/api 不通）；
+/// 本地 `f84566bc` 的 `MapViewport.cs:144` 是 `public MapViewport()` 构造函数，
+/// **不是**这个符号 —— 别照着本地 `:144` 去读。
 ///
 /// **历史引用（保留，勿据此回改）**：本值原为 **2.0**，出处是**截图实测**「金色选框描边 2px」
 /// （`x=607..608` 连续两列金色像素），当时只是把装饰框的宽度挪用到悬停格边框。
@@ -551,7 +556,7 @@ pub const CANVAS_DEFAULT_SCALE: f32 = 1.0;
 /// * **228×40** 是 `901dbe2f` 之前的截图量值：外框 (182,854)-(409,893)；
 ///   视口左 x=164 ⇒ 182-164 = 18；视口底 y=911 ⇒ 911-893 = 18；
 /// * **+64** 来自上游 `901dbe2f` 在浮层尾部新增的 `OriginalSizeButton`
-///   （`MainWindow.axaml:22`，`Click="ResetZoomClick"`）。按上游同一套
+///   （`_upstream/CrystalStudio/MainWindow.axaml:25`，`Click="ResetZoomClick"`）。按上游同一套
 ///   `Padding="10,4"` 反推：4 字中文 ≈ 48 + 左右内边距 20 ≈ 56~58 宽，
 ///   与前一个按钮之间留 8 ⇒ 228 + 8 + 56 = 292。**没有截图可量**（上游该版截图未随仓提供），
 ///   故这一段的依据是"上游控件顺序 + 同一条内边距规则"，已在模块文档 §五 记为推导值。
@@ -577,7 +582,7 @@ pub const ZOOM_FIT_R: f32 = 224.0;
 
 /// 「原始大小」按钮的起点（相对浮层左边）= `ZOOM_FIT_R` 224 + 按钮间距 8。
 ///
-/// 上游顺序：`−  100%  +  |  适应地图  原始大小`（`MainWindow.axaml:22` 的
+/// 上游顺序：`−  100%  +  |  适应地图  原始大小`（`_upstream/CrystalStudio/MainWindow.axaml:25` 的
 /// `FitMapButton` 之后紧跟 `OriginalSizeButton`）。
 pub const ZOOM_ORIGINAL_X: f32 = 232.0;
 
@@ -592,9 +597,9 @@ pub const ZOOM_SIGN_FONT: f32 = 13.0;
 ///
 /// # 上游推导
 ///
-/// * `EditorControls.axaml:59`（`PaletteTabItem`）：`<Setter Property="Padding" Value="8,7"/>`
+/// * `_upstream/CrystalStudio/EditorControls.axaml:59`（`PaletteTabItem`）：`<Setter Property="Padding" Value="8,7"/>`
 ///   ⇒ 左 **8**（`:60` 的 `Border#Chrome Padding="{TemplateBinding Padding}"` 把它透到内容盒）；
-/// * `MainWindow.MapTabs.cs:54`：`map.Label.Margin = new Thickness(4, 2, 8, 2);` ⇒ 左 **4**；
+/// * `_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`：`map.Label.Margin = new Thickness(4, 2, 8, 2);` ⇒ 左 **4**；
 ///   ⇒ 标题文字左边缘 = 标签左沿 + 8 + 4 = **+12**。
 ///
 /// ⚠ **只给标题用**。`×` 的右内缩是 **15**，见 [`TAB_CLOSE_INSET`] ——
@@ -606,7 +611,7 @@ pub const ZOOM_SIGN_FONT: f32 = 13.0;
 /// # 右侧那 16（`Label.Margin` 右 8 + `Padding` 右 8）为什么没有折进这个常量
 ///
 /// 上游标题的排版右界**不是**「标签右沿 −16」：`Label` 后面还跟着关闭钮，
-/// 标题右界 = 关闭钮左沿 − `Margin` 右 8（`MapTabs.cs:54`），
+/// 标题右界 = 关闭钮左沿 − `Margin` 右 8（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`），
 /// 而关闭钮左沿 = 标签右沿 − 8（`Padding` 右）− 3（按钮 `Margin`）− 4（按钮 `Padding` 右）
 /// − 字形 advance − 4（按钮 `Padding` 左）。
 ///
@@ -626,14 +631,14 @@ pub const TAB_TITLE_INSET: f32 = 12.0;
 ///
 /// # 上游推导（三段，漏掉中间那段就差 3px）
 ///
-/// 1. `EditorControls.axaml:59`：`Padding="8,7"`（`:60` `Border#Chrome Padding="{TemplateBinding Padding}"`）
+/// 1. `_upstream/CrystalStudio/EditorControls.axaml:59`：`Padding="8,7"`（`:60` `Border#Chrome Padding="{TemplateBinding Padding}"`）
 ///    ⇒ 标签内容盒右沿 = 标签右沿 − **8**；
-/// 2. `EditorControls.axaml:7`（`{x:Type Button}` 基主题）：`<Setter Property="Margin" Value="3"/>`
-///    —— `MainWindow.MapTabs.cs:57` 的关闭钮**只覆盖** `Padding` / `Background` / `BorderThickness`，
-///    **没有覆盖 `Margin`**；`:58` 换的 `QuietButton`（`EditorControls.axaml:17`）也是
+/// 2. `_upstream/CrystalStudio/EditorControls.axaml:7`（`{x:Type Button}` 基主题）：`<Setter Property="Margin" Value="3"/>`
+///    —— `_upstream/CrystalStudio/MainWindow.MapTabs.cs:57` 的关闭钮**只覆盖** `Padding` / `Background` / `BorderThickness`，
+///    **没有覆盖 `Margin`**；`:58` 换的 `QuietButton`（`_upstream/CrystalStudio/EditorControls.axaml:17`）也是
 ///    `BasedOn="{StaticResource {x:Type Button}}"` 且只覆盖 `Background`/`BorderBrush`
 ///    ⇒ `Margin = 3` **照样生效** ⇒ 按钮盒右沿 = 内容盒右沿 − **3**；
-/// 3. `MainWindow.MapTabs.cs:57`：`Padding = new Thickness(4, 0, 4, 0)`
+/// 3. `_upstream/CrystalStudio/MainWindow.MapTabs.cs:57`：`Padding = new Thickness(4, 0, 4, 0)`
 ///    ⇒ 字形右沿 = 按钮盒右沿 − **4**；
 ///
 /// ⇒ `×` 字形右边缘 = 标签右沿 − 8 − 3 − 4 = **−15**。
@@ -653,17 +658,17 @@ pub const TAB_TITLE_INSET: f32 = 12.0;
 /// `tab_strip::{close_rect, close_button_rect, draw}`。
 pub const TAB_CLOSE_INSET: f32 = 15.0;
 
-/// 关闭符命中盒的**左右内边距 4** —— 上游 `MainWindow.MapTabs.cs:57`
+/// 关闭符命中盒的**左右内边距 4** —— 上游 `_upstream/CrystalStudio/MainWindow.MapTabs.cs:57`
 /// `new Button { Content = "\u00d7", Padding = new Thickness(4, 0, 4, 0), … }`
 /// ⇒ 左 4 / 上 0 / **右 4** / 下 0（B2 单，2026-11-08）。
 ///
 /// 上下为 0 ⇒ 上游按钮的**高度 = 字形行高**（垂直方向靠默认模板的
-/// `VerticalContentAlignment=Center`，`EditorControls.axaml:8`，在 30px 标签内居中）。
+/// `VerticalContentAlignment=Center`，`_upstream/CrystalStudio/EditorControls.axaml:8`，在 30px 标签内居中）。
 pub const TAB_CLOSE_PAD: f32 = 4.0;
 
 /// 关闭符 `×` 在 [`TAB_FONT`]（11）下的**排版 advance = 7.34375**。
 ///
-/// ⚠ **上游不可得**：上游是 Avalonia + `Segoe UI`（`App.axaml:83` 的 `FontFamily`），
+/// ⚠ **上游不可得**：上游是 Avalonia + `Segoe UI`（`_upstream/CrystalStudio/App.axaml:83` 的 `FontFamily`），
 /// 字形宽由那套字体决定，仓里没有它的度量表 ⇒ 无法逐字抄。
 /// 本值取**本仓实际上屏字体**（`fonts::FONT_CANDIDATES[0]` = 等线 `Deng.ttf`）
 /// 在 11px 下的 `layout_no_wrap("×")` 实测值（2026-11-08 实测输出 `GLYPH_W=7.34375`；
@@ -677,11 +682,11 @@ pub const TAB_CLOSE_GLYPH_W: f32 = 7.343_75;
 ///
 /// 与 [`TAB_CLOSE_GLYPH_W`] 同一次实测（`layout_no_wrap("×")` 的 `size().y = 11.0`）。
 /// 上游 `Padding=(4,0,4,0)` 的上下是 0 ⇒ 上游那个 `Button` 的**高度就是它**（11），
-/// 再靠默认模板的 `VerticalContentAlignment=Center`（`EditorControls.axaml:8`）
+/// 再靠默认模板的 `VerticalContentAlignment=Center`（`_upstream/CrystalStudio/EditorControls.axaml:8`）
 /// 在 30px 标签内垂直居中 ⇒ 悬停底的绘制盒 = 15.34375 × 11。
 pub const TAB_CLOSE_GLYPH_H: f32 = 11.0;
 
-/// 关闭符悬停底的圆角 **5** —— 上游 `EditorControls.axaml:9` 的 `Border#Chrome`
+/// 关闭符悬停底的圆角 **5** —— 上游 `_upstream/CrystalStudio/EditorControls.axaml:9` 的 `Border#Chrome`
 /// `CornerRadius="5"`（`QuietButton` 经 `BasedOn` 继承同一个模板，见 `:17`）。
 pub const TAB_CLOSE_RADIUS: f32 = 5.0;
 
@@ -689,7 +694,7 @@ pub const TAB_CLOSE_RADIUS: f32 = 5.0;
 //
 // 为什么这一组不在截图里：`crystalstudio-main-runtime-1500x950.png` 是 `901dbe2f` **之前**
 // 的运行截图，那时上游还没有地图列表面板。上游把它加在**左停靠区第一个**
-// （`MainWindow.axaml.cs:343` 的 `docking.Add("Maps", …, Dock.Left, 2)`），
+// （`_upstream/CrystalStudio/MainWindow.axaml.cs:349` 的 `docking.Add("Maps", …, Dock.Left, 2)`），
 // 而本仓左停靠区是**固定几何、156 宽、四块面板已排满**（实测单元格检查器只剩 96px 余量，
 // 见 `layout` 的 `左停靠区余量` 测试）—— 硬塞第五块面板会把检查器最后两行挤出面板。
 // 所以本仓把这块面板做成**中列左侧的可开合列**：开时把画布往右推（不遮挡地图）、
@@ -701,9 +706,9 @@ pub const TAB_CLOSE_RADIUS: f32 = 5.0;
 //   (6+6) 与两列间距 8 ⇒ 122 是下限。取 268 是为了**长文件名**（如
 //   `n0104_副本_2026.map`）也能整行显示，且不超过中列的 1/3（987/3 = 329）。
 // * 行高 22 —— 与上游 `MapFileList.ItemContainerTheme` 的
-//   `HeightProperty = 22.0`（`MainWindow.MapBrowser.cs:32-34`）逐值相同。
-// * 字号 11 / 10 —— 上游列表项 `FontSize = 11`（`MapBrowser.cs:37`），
-//   状态行 `FontSize = 10`（`MapBrowser.cs:12`）。
+//   `HeightProperty = 22.0`（`_upstream/CrystalStudio/MainWindow.MapBrowser.cs:32-34`）逐值相同。
+// * 字号 11 / 10 —— 上游列表项 `FontSize = 11`（`_upstream/CrystalStudio/MainWindow.MapBrowser.cs:37`），
+//   状态行 `FontSize = 10`（`_upstream/CrystalStudio/MainWindow.MapBrowser.cs:12`）。
 
 /// 地图列表面板宽度 268。
 pub const MAPS_W: f32 = 268.0;
@@ -719,10 +724,10 @@ pub const MAPS_BTN_W: f32 = 58.0;
 pub const MAPS_BTN_H: f32 = 20.0;
 
 /// 列表行高 22。来源：上游 `MapFileList` 的 `ItemContainerTheme`
-/// `Layoutable.HeightProperty = 22.0` / `MinHeightProperty = 22.0`（`MapBrowser.cs:32-34`）。
+/// `Layoutable.HeightProperty = 22.0` / `MinHeightProperty = 22.0`（`_upstream/CrystalStudio/MainWindow.MapBrowser.cs:32-34`）。
 pub const MAPS_ROW_H: f32 = 22.0;
 
-/// 行内文件名字号 11（上游 `MapBrowser.cs:37` 的 `FontSize = 11`）。
+/// 行内文件名字号 11（上游 `_upstream/CrystalStudio/MainWindow.MapBrowser.cs:37` 的 `FontSize = 11`）。
 pub const MAPS_ROW_FONT: f32 = 11.0;
 
 /// 行内大小字号 10（比文件名小一档：它是辅助信息，不该抢文件名）。
@@ -737,7 +742,7 @@ pub const MAPS_COL_GAP: f32 = 8.0;
 /// 底部状态行高 18（上游 `mapFileStatus` 是最后一行 `Auto`，`FontSize = 10`）。
 pub const MAPS_STATUS_H: f32 = 18.0;
 
-/// 底部状态行字号 10（上游 `MapBrowser.cs:12`）。
+/// 底部状态行字号 10（上游 `_upstream/CrystalStudio/MainWindow.MapBrowser.cs:12`）。
 pub const MAPS_STATUS_FONT: f32 = 10.0;
 
 /// 当前地图行左侧的金条宽 3（与图层行的「当前编辑层」金条同一视觉语言）。
@@ -765,19 +770,19 @@ pub const RIGHT_PAD_X: f32 = 10.0;
 
 /// TextBox / ComboBox 高 **34**。
 ///
-/// 上游出处：`App.axaml:85` 的 `<Style Selector="ComboBox">` ⇒ `MinHeight = 34`
+/// 上游出处：`_upstream/CrystalStudio/App.axaml:85` 的 `<Style Selector="ComboBox">` ⇒ `MinHeight = 34`
 /// （同款 `Padding = 10,8,28,8`）。
 ///
 /// 历史（原以截图为准，A13 订正）：本值原为 **32**，依据是参考截图量出的组合框行高
 /// (1146,352)-(1482,383) = 32 行；当时注释记「与 `theme.metrics.combo_min_height` = 34
 /// 相差 2，**以截图 32 为准**」。按用户「对齐上游」令改为 34 —— 且那个 `theme.metrics`
 /// 字段在当前 `theme.rs` 里**已不存在**（全仓 grep `combo_min_height` 0 命中），
-/// 上游 `App.axaml:85` 是唯一可回源的真值。
+/// 上游 `_upstream/CrystalStudio/App.axaml:85` 是唯一可回源的真值。
 pub const COMBO_H: f32 = 34.0;
 
 /// 搜索框高 **32**。
 ///
-/// 上游出处：`EditorControls.axaml:49` 的 `ControlTheme x:Key="PaletteSearchBox"`
+/// 上游出处：`_upstream/CrystalStudio/EditorControls.axaml:49` 的 `ControlTheme x:Key="PaletteSearchBox"`
 /// ⇒ `Height = 32`（同款 `Padding = 8,4,28,4`）。
 ///
 /// 历史（原以截图为准，A14 订正）：本值原为 **29**，依据是参考截图
@@ -808,7 +813,7 @@ pub const MINIMAP_INNER_INSET: f32 = 10.0;
 
 /// Minimap 地图区在地图块内的**每边内缩** 6（块 200×138 ⇒ 图最多可用 188×126）。
 ///
-/// 来源：上游 `MapMinimap.Avalonia.cs:19-21`（`_upstream/CrystalStudio/`，
+/// 来源：上游 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:19-21`（`_upstream/CrystalStudio/`，
 /// 文件 sha256 前 8 位 `11f92126`）的 `MapBounds`：
 ///
 /// ```csharp
@@ -838,12 +843,12 @@ pub const MINIMAP_FIT_INSET: f32 = 6.0;
 /// 为什么需要：视口缩到极小（例如 4× 放大时可见区只有几格）时，按真实比例换算出的框
 /// 边长会 **< 1px**，`Rect` 退化后连边框都画不出来 —— 那等于"看不见"，
 /// 同样是失真。抬到 1px 只是承认"屏幕上最近的相邻像素就是 1px"，位置仍严格按真实值算。
-/// 视口框**外层**黑边宽度（上游 `MapMinimap.Avalonia.cs:66` 的 `Pen(Black, 4)`）。
+/// 视口框**外层**黑边宽度（上游 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:65` 的 `Pen(Black, 4)`）。
 ///
 /// ⚠ 与上游的差异：上游笔画**居中**在矩形线上，本仓 [`crate::paint::border_w`] **内贴** ⇒
 /// 环宽一致、位置差 1px（已如实登记在 `dock_right::draw_minimap`）。
 pub const MINIMAP_VIEWBOX_OUTER_W: f32 = 4.0;
-/// 视口框**内层**白边宽度（`MapMinimap.Avalonia.cs:66` 的 `Pen(White, 2)`）。
+/// 视口框**内层**白边宽度（`_upstream/CrystalStudio/MapMinimap.Avalonia.cs:66` 的 `Pen(White, 2)`）。
 pub const MINIMAP_VIEWBOX_INNER_W: f32 = 2.0;
 
 pub const MINIMAP_VIEWBOX_MIN_PX: f32 = 1.0;
@@ -873,7 +878,7 @@ pub const STATUS_SEG_GAP: f32 = 16.0;
 /// 关闭拦截模态的底板宽 **520**。
 ///
 /// 来源：**上游真值** —— 上游这个模态就是系统 `MessageBox`：
-/// `EditorDialogs.cs:79` `var dialog = new EditorWindow { Title = …, Width = 520,
+/// `_upstream/CrystalStudio/EditorDialogs.cs:79` `var dialog = new EditorWindow { Title = …, Width = 520,
 /// SizeToContent = SizeToContent.Height, CanResize = false, … }`。
 /// 本仓没有 `MessageBox`（自绘），所以取它的 `Width = 520` 作底板宽。
 ///
@@ -889,7 +894,7 @@ pub const MODAL_H: f32 = 92.0;
 
 /// 关闭拦截模态（= 上游 `MessageBox`）的内容内边距 **22**。
 ///
-/// 来源：**上游真值** `EditorDialogs.cs:81`
+/// 来源：**上游真值** `_upstream/CrystalStudio/EditorDialogs.cs:81`
 /// `var content = new StackPanel { Margin = new Thickness(22), Spacing = 18 };`。
 ///
 /// ⚠ **必须与 [`OPEN_DLG_PAD`]（24）分开写**：上游这四个自定义对话框是
@@ -1095,7 +1100,8 @@ pub const PALETTE_COMBO_ROWS: usize = 8;
 /// 素材面板里"选中格"的金色描边宽 **2**。
 ///
 /// ⚠ 这里原写作「与画布悬停格 `CELL_HOVER_STROKE` 同档」，**该说法 2026-11-08 已过期**：
-/// 悬停框按上游 `MapViewport.cs:144`（`a78affdf`）订正为 **4**，本值**不动**——
+/// 悬停框按上游 `a78affdf` 的 `hoverCellOutline` 订正为 **4**（本地快照无此符号，
+/// 取证见 [`CELL_HOVER_STROKE`]），本值**不动**——
 /// 它属素材面板选中态，上游没有对应真值，不该跟着悬停框变粗（4 会让 84×… 的缩略图格子发糊）。
 pub const PALETTE_SELECT_STROKE: f32 = 2.0;
 
@@ -1186,7 +1192,7 @@ pub const STAMP_AA_FONT: f32 = 10.5;
 /// 选区虚线的线宽 **1.5**。
 ///
 /// 推导：比悬停框**细一档** —— 悬停框是"当前格"（要显眼；其值 2026-11-08 已按上游
-/// `MapViewport.cs:144` 由 2.0 订正为 4.0，这里比较的是"粗细档位"而不是具体数值），
+/// 的 `hoverCellOutline` 由 2.0 订正为 4.0（见 [`CELL_HOVER_STROKE`]），这里比较的是"粗细档位"而不是具体数值），
 /// 选区框是"一块区域"（要能看清框内的地图），1.5 在 100% 缩放下正好落在 1~2 物理像素之间，
 /// 既不会像 1px 那样被抗锯齿吃掉，也不会像 2px 那样盖住格子边。
 pub const SEL_STROKE_W: f32 = 1.5;
@@ -1203,7 +1209,7 @@ pub const SEL_GAP_LEN: f32 = 4.0;
 
 // 选区半透明填充的颜色**不在本文件**：真值在 `theme::Palette::selection_fill`。
 //
-// 官方 `CrystalStudio/MapViewport.cs:295` 用的是**固定蓝**
+// 官方 `_upstream/CrystalStudio/MapViewport.cs:303` 用的是**固定蓝**
 // `Color.FromArgb(30, 110, 150, 255)`（α = 30），本仓按预乘落成 `rgba_pm(12, 17, 30, 30)`
 // —— 与主题（浅色 / 深色）**无关**。此处原 `SEL_FILL_ALPHA = 40` 及其
 // "颜色本体取强调金 `#CC9629`" 的注释都是误记（金 × α40 是自造值，`theme.rs` 已订正为官方蓝），
@@ -1212,7 +1218,7 @@ pub const SEL_GAP_LEN: f32 = 4.0;
 /// 印章轮廓框的线宽 **2.0**。
 ///
 /// ⚠ 这里原写作「= `CELL_HOVER_STROKE`」，**该等式 2026-11-08 已不成立**：
-/// 后者按上游 `MapViewport.cs:144` 订正为 4.0，本值**不变**——印章轮廓是"待放置预览框"，
+/// 后者按上游 `a78affdf` 的 `hoverCellOutline` 订正为 4.0（见 [`CELL_HOVER_STROKE`]），本值**不变**——印章轮廓是"待放置预览框"，
 /// 上游没有它的真值，不该跟着悬停框变粗。
 ///
 /// 推导：轮廓是**只有边框、不画任何像素**的预览（任务书 §三.5 明令"不许画假像素"），
@@ -1256,12 +1262,12 @@ pub const BANNER_MAX_VIEWPORT_RATIO: f32 = 0.45;
 
 // ───────────────────────── 悬停地砖信息浮层（视图 → 地砖信息悬浮） ─────────────────────────
 //
-// 这一组**几乎全是官方真值**（不是推导）：上游 `MainWindow.axaml:86-91` 把浮层写成
+// 这一组**几乎全是官方真值**（不是推导）：上游 `_upstream/CrystalStudio/MainWindow.axaml:86-91` 把浮层写成
 // `<Border x:Name="CellHoverInfo" Width="350" Padding="12" CornerRadius="6" …>`，
-// 位置算式在 `MainWindow.CellHover.cs:47-53`（+16 右 / +8 下、越界翻左、四边各夹 8），
+// 位置算式在 `_upstream/CrystalStudio/MainWindow.CellHover.cs:47-53`（+16 右 / +8 下、越界翻左、四边各夹 8），
 // 最大高在 `:45`（`Bounds.Height - 16`）。逐条注在下面。
 
-/// 浮层宽度 **350**（官方 `MainWindow.axaml:87` `Width="350"`）。
+/// 浮层宽度 **350**（官方 `_upstream/CrystalStudio/MainWindow.axaml:87` `Width="350"`）。
 ///
 /// 屏幕比它窄时由 [`crate::cell_hover`] 收到「屏宽 − 2×8」为止 —— 官方那侧有
 /// `ClipToBounds="True"` 的 Canvas 兜着，本仓没有裁剪盒，只能自己收窄。
@@ -1273,10 +1279,10 @@ pub const HOVER_PAD: f32 = 12.0;
 /// 浮层圆角 **6**（官方 `CornerRadius="6"`）。
 pub const HOVER_RADIUS: f32 = 6.0;
 
-/// 光标 → 浮层左边缘的水平偏移 **16**（官方 `CellHover.cs:49` `left = position.X + 16`）。
+/// 光标 → 浮层左边缘的水平偏移 **16**（官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:49` `left = position.X + 16`）。
 pub const HOVER_OFFSET_X: f32 = 16.0;
 
-/// 光标 → 浮层上边缘的垂直偏移 **8**（官方 `CellHover.cs:53` `position.Y + 8`）。
+/// 光标 → 浮层上边缘的垂直偏移 **8**（官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:53` `position.Y + 8`）。
 pub const HOVER_OFFSET_Y: f32 = 8.0;
 
 /// 浮层与窗口四边的最小距离 **8**（官方 `:51-53` 的 `Math.Clamp(…, 8, …)`）。
@@ -1288,13 +1294,13 @@ pub const HOVER_MAX_H_MARGIN: f32 = 16.0;
 /// 坐标 / 可行走两行（官方 `FontWeight="SemiBold"`、字号取正文档）的字号 **12**。
 pub const HOVER_HEAD_FONT: f32 = 12.0;
 
-/// 明细行字号 **11**（官方 `MainWindow.axaml:91` `FontSize="11"`）。
+/// 明细行字号 **11**（官方 `_upstream/CrystalStudio/MainWindow.axaml:91` `FontSize="11"`）。
 pub const HOVER_DETAIL_FONT: f32 = 11.0;
 
 /// 坐标 / 可行走两行的行高 **18**（12px 字 + 上下 3 呼吸，与 [`BANNER_LINE_H`] 同档）。
 pub const HOVER_HEAD_LINE_H: f32 = 18.0;
 
-/// 明细行行高 **16**（官方 `MainWindow.axaml:91` `LineHeight="16"`）。
+/// 明细行行高 **16**（官方 `_upstream/CrystalStudio/MainWindow.axaml:91` `LineHeight="16"`）。
 pub const HOVER_DETAIL_LINE_H: f32 = 16.0;
 
 // ───────────────────────── 菜单下拉弹层（2026-11-05 新增） ─────────────────────────
@@ -1344,7 +1350,7 @@ pub const MENU_POPUP_RADIUS: f32 = 4.0;
 
 /// 快捷键浮层宽 **460**。
 ///
-/// 上游 `MainWindow.axaml.cs:1235@a78affdf`
+/// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:1233`
 /// `new EditorWindow { Title = LocalText.T("InputState Shortcuts"), Width = 460, Height = 680, … }`。
 ///
 /// ⚠ 2026-11-05 本仓自定 560（无上游依据）；2026-11-08 回源订正为上游 **460**。
@@ -1353,18 +1359,26 @@ pub const MENU_POPUP_RADIUS: f32 = 4.0;
 /// - 说明列 = 460 − 2×28 − 170 = **234** ≥ 实测最宽说明 **190.00**
 ///   （`取消选区 / 退出待放置态 / 关闭弹层`）。
 ///
-/// ⚠ 行号口径 = `@a78affdf`（master）：该提交在 `:128` 插入 `InitializeCellHover();` 与
-/// `Viewport.AssetPicked += SelectPickedTile;` 两行 ⇒ 其后行号全部 **+2**。旧口径
-/// `@f84566bc`/`@6450da90` 下本节各行号为 1233 / 1238 / 1240 / 1242 / 1246 / 1248。
+/// ⚠ 行号口径 = 本地 `_upstream/CrystalStudio/MainWindow.axaml.cs`（`f84566bc` 快照，1256 行）。
+/// 与 master `a78affdf` 相比本节各行号 **+2**：该提交在 `:828-829` 加了 `AssetSearch`
+/// 空引用保护（新增注释行 + 改写 `if`）⇒ 其后行号整体后移 2。master 版本节为
+/// 1235 / 1240 / 1242 / 1244 / 1248 / 1250。
+///
+/// 📌 **就地订正（`4390562` 那笔的归因错，原文保留作历史引用）**：原文写「该提交在 `:128`
+/// 插入 `InitializeCellHover();` 与 `Viewport.AssetPicked += SelectPickedTile;` 两行 ⇒ 其后
+/// 行号全部 **+2**」——**该归因是错的**。这两行在两版**都在 `:131`/`:132`、逐字相同**
+/// （现盘可核：`_upstream/CrystalStudio/MainWindow.axaml.cs:131` 与 `:132`），
+/// 且位置在 `:828` 之前 ⇒ 不构成任何行号位移；**真插入点是 `:828-829`**。
 pub const SHORTCUTS_W: f32 = 460.0;
 
 /// 快捷键浮层高 **901**。
 ///
 /// # ⚠ 这是与上游的**显式偏离**（不是抄错，也不是"看着差不多"）
 ///
-/// 上游 `MainWindow.axaml.cs:1235@a78affdf` 是 `Height = 680`。本仓取 **901**，原因只有一个：
-/// **内容量不同** —— 上游那张表是 **19 行单列**（`MainWindow.axaml.cs:1244@a78affdf` 的
-/// `new[] { … }` 逐条数得 19 项；`:1248` `DockPanel` + `:1250`
+/// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:1233` 是 `Height = 680`。本仓取 **901**，原因只有一个：
+/// **内容量不同** —— 上游那张表是 **19 行单列**（`_upstream/CrystalStudio/MainWindow.axaml.cs:1242` 的
+/// `new[] { … }` 逐条数得 19 项；`_upstream/CrystalStudio/MainWindow.axaml.cs:1246` 的 `DockPanel`
+/// 加上 `_upstream/CrystalStudio/MainWindow.axaml.cs:1248` 的
 /// `DockPanel.SetDock(shortcut, Dock.Right)` ⇒ **无组名、无说明行、键靠右**）；
 /// 本仓是 **28 行 = 6 个组名 + 22 条绑定**，另有 1 行说明。
 ///
@@ -1374,12 +1388,12 @@ pub const SHORTCUTS_W: f32 = 460.0;
 /// # 算式（两侧都是实测值 / 上游字面量，可复算）
 ///
 /// ```text
-/// 标题行高   =  41 = 实测标题行高 23（本仓字体 @ 上游 FontSize 22）+ 上游 Margin bottom 18（:1242@a78affdf）
+/// 标题行高   =  41 = 实测标题行高 23（本仓字体 @ 上游 FontSize 22）+ 上游 Margin bottom 18（_upstream/CrystalStudio/MainWindow.axaml.cs:1240）
 /// 说明行高   =  18 = 本仓独有的一行（上游无对应物，见 SHORTCUTS_NOTE_H）
 /// 分隔呼吸   =   6 = 本仓独有（标题下 1px 分隔线 + 6px 呼吸，见 menu::shortcuts::SEP_GAP）
-/// 表体       = 756 = 28 行 × 行高 27（实测正文行高 13 + 上游 Margin bottom 14，:1248@a78affdf）
+/// 表体       = 756 = 28 行 × 行高 27（实测正文行高 13 + 上游 Margin bottom 14，_upstream/CrystalStudio/MainWindow.axaml.cs:1246）
 /// 组间       =  24 = 6 组 × 4（menu::shortcuts::GROUP_GAP）
-/// 上下内边距 =  56 = 2 × 28（上游 :1240@a78affdf `Margin = new(28)`）
+/// 上下内边距 =  56 = 2 × 28（上游 _upstream/CrystalStudio/MainWindow.axaml.cs:1238 `Margin = new(28)`）
 /// ─────────────────────────────────────────────
 /// 合计       = 41 + 18 + 6 + 756 + 24 + 56 = **901**
 /// ```
@@ -1400,7 +1414,7 @@ pub const SHORTCUTS_H: f32 = 901.0;
 
 /// 快捷键浮层的内边距 **28**（四边）。
 ///
-/// 上游 `MainWindow.axaml.cs:1240@a78affdf`：`var panel = new StackPanel { Margin = new(28) };`
+/// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:1238`：`var panel = new StackPanel { Margin = new(28) };`
 /// —— Avalonia `Thickness` 单参 = 四边各 28。
 ///
 /// ⚠ 2026-11-05 本仓自定 18（无上游依据）；2026-11-08 回源订正为 28。
@@ -1408,7 +1422,7 @@ pub const SHORTCUTS_PAD: f32 = 28.0;
 
 /// 快捷键浮层行高 **27** = 实测正文行高 **13** + 上游 `Margin bottom` **14**。
 ///
-/// 上游 `MainWindow.axaml.cs:1248@a78affdf`：`var row = new DockPanel { Margin = new(0, 0, 0, 14) };`
+/// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:1246`：`var row = new DockPanel { Margin = new(0, 0, 0, 14) };`
 ///
 /// 行高本身**不估算**：用本仓上屏字体 `layout_no_wrap` 实测（Deng.ttf @ `BODY_FONT` = 12
 /// ⇒ 行高 **13.0**；28 行逐条量过，去重集合只有 `{13.0}`），由
@@ -1419,7 +1433,7 @@ pub const SHORTCUTS_ROW_H: f32 = 27.0;
 
 /// 快捷键浮层的标题行高 **41** = 实测标题行高 **23** + 上游 `Margin bottom` **18**。
 ///
-/// 上游 `MainWindow.axaml.cs:1242@a78affdf`
+/// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:1240`
 /// `new TextBlock { Text = LocalText.T("Work Faster"), FontSize = 22, FontWeight = SemiBold, Margin = new(0, 0, 0, 18) }`
 /// ⇒ 行距 18；行高由 Avalonia 按字体度量现算，本仓拿不到那套度量
 /// ⇒ 用**上屏字体**在**上游字号 22** 下实测（Deng.ttf @ 22 ⇒ **23.0**）。
@@ -1439,17 +1453,17 @@ pub const SHORTCUTS_NOTE_H: f32 = 18.0;
 
 /// 快捷键浮层的「键」列宽 **170**（右侧留给说明文字）。
 ///
-/// ⚠ 上游是「说明在左、键 `Dock.Right` **靠右**」（`MainWindow.axaml.cs:1250@a78affdf`），
+/// ⚠ 上游是「说明在左、键 `Dock.Right` **靠右**」（`_upstream/CrystalStudio/MainWindow.axaml.cs:1248`），
 /// 本仓是「键左列固定 170 + 说明在右」—— **排布与上游不同**，属既有差异，
 /// 本单不动，已登记。170 的实测依据：最宽键 `Ctrl+Shift+Z / Ctrl+Y` 排版宽 **106.56**
 /// ⇒ 余 63px。
 pub const SHORTCUTS_KEY_COL_W: f32 = 170.0;
 
-/// `W/A/S/D` 每次平移的**屏幕像素**（上游 `MainWindow.axaml.cs:980-984` 的
+/// `W/A/S/D` 每次平移的**屏幕像素**（上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:980-984` 的
 /// `PanBy(new Vector(0, 48))` 等四条 —— 单位是屏幕像素，与缩放无关）。
 pub const PAN_STEP_PX: f32 = 48.0;
 
-/// **定位到格时的最小缩放**（上游 `MapViewport.Navigation.cs:9`：`Zoom = Math.Max(Zoom, .5)`）。
+/// **定位到格时的最小缩放**（上游 `_upstream/CrystalStudio/MapViewport.Navigation.cs:9`：`Zoom = Math.Max(Zoom, .5)`）。
 ///
 /// 含义：定位只在缩放**低于** 50% 时抬到 50%；本来就放大着的（100%/200%）**不缩回去**，
 /// 免得"定位一下把细节看丢了"。
@@ -1505,10 +1519,10 @@ pub const OPEN_DLG_W: f32 = 640.0;
 /// 打开地图模态的内边距 **24**（上游四个自定义对话框 `Margin = new(24)`）。
 ///
 /// 来源：**上游真值**（四处逐字一致）：
-/// - `MinimapExportWindow.cs:18` `var panel = new StackPanel { Margin = new(24), Spacing = 10 };`
-/// - `MapExpansionWindow.cs:22` `var panel = new StackPanel { Margin = new(24), Spacing = 10 };`
-/// - `MainWindow.axaml.cs:441`（新建地图）`var panel = new StackPanel { Margin = new(24) };`
-/// - `MainWindow.axaml.cs:747`（单元格属性）`var panel = new StackPanel { Margin = new(24) };`
+/// - `_upstream/CrystalStudio/MinimapExportWindow.cs:18` `var panel = new StackPanel { Margin = new(24), Spacing = 10 };`
+/// - `_upstream/CrystalStudio/MapExpansionWindow.cs:22` `var panel = new StackPanel { Margin = new(24), Spacing = 10 };`
+/// - `_upstream/CrystalStudio/MainWindow.axaml.cs:441`（新建地图）`var panel = new StackPanel { Margin = new(24) };`
+/// - `_upstream/CrystalStudio/MainWindow.axaml.cs:747`（单元格属性）`var panel = new StackPanel { Margin = new(24) };`
 ///
 /// ⚠ 与关闭拦截模态的 [`MSG_BOX_PAD`]（22）**不是**同一个数，见那里的说明。
 /// ⚠ 旧值 16 已作废（当时无上游真值，按手感取的）。
@@ -1558,7 +1572,7 @@ pub const CHECK_MAP_LIST_GAP: f32 = 10.0;
 
 /// 导出小地图模态的宽 **420**。
 ///
-/// 来源：**上游真值** `MinimapExportWindow.cs:15`
+/// 来源：**上游真值** `_upstream/CrystalStudio/MinimapExportWindow.cs:15`
 /// `Title = LocalText.T("Export Minimap"); Width = 420;`
 /// （同行 `:16` `SizeToContent = SizeToContent.Height; CanResize = false;`）。
 ///
@@ -1572,12 +1586,12 @@ pub const MINIMAP_DLG_W: f32 = 420.0;
 //
 // 由 `crate::menu::dialog::小地图模态内容高()` 现算 = **250**（2026-11-08 删提示行后；
 // 上一版是 270，那 20px 差额 = 已删提示带的 `12 + 18` 换成了一行 `MINIMAP_DLG_GAP`）。
-// 上游是 `SizeToContent = SizeToContent.Height`（`MinimapExportWindow.cs:16`，高随内容），
+// 上游是 `SizeToContent = SizeToContent.Height`（`_upstream/CrystalStudio/MinimapExportWindow.cs:16`，高随内容），
 // 本仓 egui 无自动测高 ⇒ 内容算式是它的等价物；改 `OPEN_DLG_PAD` 时高度**自动跟随**。
 //
 // ## 订正记录（2026-11-08，删提示行）：270 → 250
 //
-// 上游 `MinimapExportWindow.cs:20-30` 的子项里**没有**提示/说明行（实读顺序：`尺寸预设`标签
+// 上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30` 的子项里**没有**提示/说明行（实读顺序：`尺寸预设`标签
 // → ComboBox → `宽度(像素)`标签 → WidthInput → `高度(像素)`标签 → HeightInput → error → 按钮行）
 // ⇒ 本仓自加的那行说明（`EXPORT_MINI_DLG_HINT`）已删除，算式里 `12 + 18` 那一项换成一行
 // `MINIMAP_DLG_GAP`。⚠ **不是 240**：240 只在预设行紧贴路径框底（0 间距）时成立。
@@ -1611,10 +1625,10 @@ pub const MINIMAP_DLG_FIELD_W: f32 = 132.0;
 // 导出小地图模态里「单个预设按钮的宽」**已不再是常量**（2026-11-08 A10 订正）。
 //
 // 旧值 `MINIMAP_DLG_PRESET_W = 150` 已删除：3×150 + 标签列 56 + 间距 16 = 530，
-// 而上游 `Width = 420`（`MinimapExportWindow.cs:15`）时面板内宽只有 420 − 2×24 = **372**
+// 而上游 `Width = 420`（`_upstream/CrystalStudio/MinimapExportWindow.cs:15`）时面板内宽只有 420 − 2×24 = **372**
 // ⇒ 第三个按钮必然越出面板（A10 实测断言红：`第 2 个预设按钮越出面板`）。
 // 上游该控件是 `ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch }`
-// （`MinimapExportWindow.cs:5`）⇒ 这一行本来就该**填满内宽**；
+// （`_upstream/CrystalStudio/MinimapExportWindow.cs:5`）⇒ 这一行本来就该**填满内宽**；
 // 按钮宽改由 `dialog::minimap_rects` 按剩余宽度均分（不写定值，改宽时自动跟随）。
 
 /// 导出小地图模态里预设行左侧标签列宽 **56**（`尺寸预设` 四个字 48 + 8 呼吸）。
