@@ -6518,13 +6518,32 @@ mod tests {
         };
         let mut app = 有图应用n(8);
         app.stamps = crate::stamp_panel::StampPanel::with_path(pal);
+        // ── 等后台装载：**按事件等**（`is_loading()` 为假 = channel 已给出 Ready / Failed），
+        //    不把墙钟当判据 ──
+        //
+        // 旧写法是 `while !is_ready() && t0.elapsed() < 5s`：判据是墙钟，`cargo test --workspace`
+        // 跑批时 CPU 被抢、5 s 不够 ⇒ 假红（同一份代码单 crate 全量全绿、单测连跑 5 次全绿，
+        // 只在跑批偶发）。现在循环条件只看状态机；上限取**迭代次数**（每次 sleep 5 ms
+        // ⇒ 墙钟约 100 s）**只用于防止真挂死卡住 CI 并给诊断**，不是判据 —— 正常装载是
+        // 毫秒级，这个余量在百倍以上，且不像墙钟那样被 CPU 争抢线性吃掉。
+        const 轮询上限: u32 = 20_000;
         let t0 = std::time::Instant::now();
-        while !app.stamps.is_ready() && t0.elapsed() < std::time::Duration::from_secs(5) {
-            // 后台线程把结果送进 channel，`poll()` 才把它换成 `Load::Ready`（宿主每帧做同一件事）
+        let mut 轮询 = 0u32;
+        while app.stamps.is_loading() && 轮询 < 轮询上限 {
+            // 后台线程把结果送进 channel，`poll()` 才把它换成 `Load::Ready/Failed`
+            // （宿主每帧做同一件事）
             app.stamps.poll();
-            std::thread::sleep(std::time::Duration::from_millis(10));
+            轮询 += 1;
+            if app.stamps.is_loading() {
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
         }
-        assert!(app.stamps.is_ready(), "印章目录必须装载成功");
+        assert!(
+            app.stamps.is_ready(),
+            "印章目录必须装载成功（已轮询 {轮询} 次 / 等 {:.1} s；面板提示：{:?}）",
+            t0.elapsed().as_secs_f64(),
+            app.stamps.note(true)
+        );
         assert!(app.stamps.pick_slot(0), "第 1 格应能选中");
         assert!(app.arm_selected(), "应进入待放置态");
 

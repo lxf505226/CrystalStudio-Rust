@@ -458,26 +458,59 @@ mod tests {
         src
     }
 
-    /// 等后台落定（最多 5 s；超时即夹具失效，**不**静默放过）。
+    /// 等后台落定：**按事件等**（`pending()` 为假 = `poll()` 已把 channel 里的回执换成
+    /// `Ready/Failed/Idle`），**不**把墙钟当判据。
+    ///
+    /// 旧写法 `while job.pending() && t0.elapsed() < 5s` 的判据是墙钟：`cargo test --workspace`
+    /// 跑批时 CPU 被抢，会把「渲染慢」误判成「夹具失效」（假红）。上限改成**迭代次数**
+    /// （每次 sleep 1 ms ⇒ 墙钟约 120 s），只用于防真挂死 + 失败诊断。
     fn 等落定(job: &mut MinimapJob, ctx: &Context, gen: u64) {
+        const 轮询上限: u32 = 120_000;
         let t0 = std::time::Instant::now();
-        while job.pending() && t0.elapsed() < std::time::Duration::from_secs(5) {
+        let mut 轮询 = 0u32;
+        while job.pending() && 轮询 < 轮询上限 {
             job.poll(ctx, gen);
-            std::thread::sleep(std::time::Duration::from_millis(1));
+            轮询 += 1;
+            if job.pending() {
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
         }
-        assert!(!job.pending(), "后台渲染 5 s 内没落定（夹具失效）");
+        assert!(
+            !job.pending(),
+            "后台渲染没落定（已轮询 {轮询} 次 / 等 {:.1} s；renders={} uploads={} failures={} drops={}）",
+            t0.elapsed().as_secs_f64(),
+            job.renders,
+            job.uploads,
+            job.failures,
+            job.drops
+        );
     }
 
-    /// 用指定代号 `poll` 直到状态真的变了（最多 5 s）—— 代次丢弃用例要掐这一刻。
+    /// 用指定代号 `poll` 直到状态真的变了（`poll()` 返回 `true`）—— 代次丢弃用例要掐这一刻。
+    ///
+    /// **语义判定**：这里等的是**真实事件**（后台线程把回执送进 channel ⇒ `poll()` 取到它
+    /// 并改状态），**不是**在测「超时行为本身」，所以同样改成事件驱动。
+    /// 上限（迭代次数 × 1 ms ⇒ 墙钟约 120 s）只防真挂死 + 给诊断，不是判据。
     fn 等到状态变化(job: &mut MinimapJob, ctx: &Context, gen: u64) {
+        const 轮询上限: u32 = 120_000;
         let t0 = std::time::Instant::now();
-        while t0.elapsed() < std::time::Duration::from_secs(5) {
+        let mut 轮询 = 0u32;
+        while 轮询 < 轮询上限 {
+            轮询 += 1;
             if job.poll(ctx, gen) {
                 return;
             }
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
-        panic!("后台结果 5 s 内没到（夹具失效）");
+        panic!(
+            "后台结果没到（已轮询 {轮询} 次 / 等 {:.1} s；renders={} uploads={} failures={} drops={} pending={}）",
+            t0.elapsed().as_secs_f64(),
+            job.renders,
+            job.uploads,
+            job.failures,
+            job.drops,
+            job.pending()
+        );
     }
 
     /// **T1 缓存**：同一组输入（`map_gen` 不变，只有 pan/缩放这种"目标像素不变"的动作）
