@@ -9,7 +9,7 @@
     "entries": 893,
     "key_format": "key = 英文原文净化（去标点/空白）+ \"_\" + 8 位哈希；893 条英文互不重复，故 key 与英文一一对应",
     "format": "key → { \"English\": 英文原文, \"Chinese\": 简体中文 }，与上游字段名、顺序完全一致",
-    "runtime_lookup": "LocalText.T(英文) 按 English 反查中文（LocalText.cs:14-15,50）；LocalText.Source(key) 取英文（:51）；axaml 用 {local:Loc KEY}（:84-88）",
+    "runtime_lookup": "LocalText.T(英文) 按 English 反查中文（_upstream/CrystalStudio/LocalText.cs:14-15,50）；LocalText.Source(key) 取英文（:51）；axaml 用 {local:Loc KEY}（:84-88）",
     "verbatim": "原样转存：未筛减、未改写译文、未改 key，仅新增本 __meta 字段"
   },
   "00cells_F1D92C48": {
