@@ -28,8 +28,8 @@
 //! [`paint`] 是**纯函数**：吃一个 `Cell` 的副本、吐一个 `Cell` 的副本，被拒绝时返回
 //! [`PaintOutcome::LayerMismatch`] / [`PaintOutcome::PaletteBrushOnCollision`] 而不是 panic 或
 //! 静默返回原值。调用方（会话）据 `Write` 与 `before` 比较才决定"要不要记一步撤销"——
-//! 于是"拒绝"和"值没变"是两件可区分的事（`edit.rs:903-905`：值没变不记步，
-//! 否则"空刷一遍也算一步"）。
+//! 于是"拒绝"和"值没变"是两件可区分的事（`crates/miredit-gui/src/edit.rs:1937-1939`：值没变不记步，
+//! 否则"空刷一遍也算一步"；原写 `edit.rs:903-905`，本 crate 无该文件，且 `903-905` 是 `register_stamp` 形参）。
 
 use mir2_map::{Cell, CellFormat};
 
@@ -663,7 +663,7 @@ mod tests {
     }
 
     /// 值没变时 `paint` 仍然给 `Write`，由调用方判"等于 before ⇒ 不记步"。
-    /// 这样"拒绝"与"值没变"是两件可区分的事。来源：`edit.rs:903-905`。
+    /// 这样"拒绝"与"值没变"是两件可区分的事。来源：`crates/miredit-gui/src/edit.rs:1937-1939`（原写 `edit.rs:903-905`，本 crate 无该文件，且 `903-905` 是 `register_stamp` 形参）。
     #[test]
     fn 值没变也给write() {
         let c = Cell {
