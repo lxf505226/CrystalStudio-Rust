@@ -65,7 +65,7 @@
 //!      （`LegacyMapReader.cs:243-244` 读、`:257-258` 只在有前景时赋值），
 //!      `MiddleAnimationFrame` 恒 0（`Document.cs:19-20` 定义、`:63` 从 `s.MiddleAnimationFrame` 抄）
 //!      ⇒ **C# 在 14 B 图上没有可清的中层动画**；本 crate 的 `ani_frame`/`ani_tick` 就是那两个字节
-//!      （`mir2-map/src/cell.rs:32-33` 的 14 B 布局偏移 8/9、`:232-233` 的解析），照 C# 的实际行为**不清**。
+//!      （`mir2-map/src/cell.rs:309-311`（字段）／`:352-353`（解析）的 14 B 布局偏移 8/9；原写 `:32-33`／`:232-233`，订正见下方第 4 条），照 C# 的实际行为**不清**。
 //!    - `RegionCopy.cs:55` 清了地表的 `TileAnimation`/`TileOffset`/`TileFrames`，那是 **36 B 档**的扩展字节
 //!      （`LegacyMapReader.cs:300-303`），在本 crate 里落在**不透明的 22 字节尾区** `Cell::tail`
 //!      （`convert.rs` 的 `FIELD_MAP` 第 12 条）⇒ 按猜测清尾区会写坏未知字节，故**不清**。

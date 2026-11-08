@@ -11,12 +11,22 @@
 //! |---|---|---|
 //! | 阻挡 低 | `bk_img & 0x8000 != 0` | `mir2_map::Cell::is_walkable`（`mir2-map/src/cell.rs:181-188`）|
 //! | 阻挡 高 | `fr_img & 0x8000 != 0` | 同上 |
-//! | 地表 图号/库号 | `bk_img & 0x7FFF` / `btTiles`（`Cell::tiles`） | `miredit-render/src/compose.rs:98-102`（1-based 帧号，取图 `(img&0x7FFF)-1`）|
-//! | 中层 图号/库号 | `mid_img & 0x7FFF` / `btsmTiles`（`Cell::sm_tiles`） | 同上 `:123-127` |
-//! | 物体 图号/库号 | `fr_img & 0x7FFF` / `btArea`（`Cell::area`） | 同上 `:148-152` |
+//! | 地表 图号/库号 | `bk_img & 0x7FFF` / `btTiles`（`Cell::tiles`） | `miredit-render/src/compose.rs:13`（1-based 帧号，取图 `(img&0x7FFF)-1`）|
+//! | 中层 图号/库号 | `mid_img & 0x7FFF` / `btsmTiles`（`Cell::sm_tiles`） | 同上 `:13`（帧号表：1-based、取图 `(img & 0x7FFF) - 1`）|
+//! | 物体 图号/库号 | `fr_img & 0x7FFF` / `btArea`（`Cell::area`） | 同上 `:127`（`索引 = 帧号(cell.fr_img) // = (fr_img & 0x7FFF) - 1`）、`:229`（上游 `MapPreview.FrontImage` = `(front.Image & 0x7FFF) - 1`）|
 //! | 帧尺寸 | 向帧源要该帧的 `width×height` | `mir2_assets::SpriteSource::frame` |
 //! | 元数据 | `light` / `door_index` / `door_offset` | `mir2-map/src/cell.rs` 字段表 off 6/7/11 |
 //! | 图块动画 | `ani_frame` / `ani_tick` | 同上 off 8/9 |
+//!
+//! ⚠ **行号订正（2026-11-08，三处同一病「兄弟行未同步」）**：上一版三行分别引
+//! `compose.rs:98-102`（地表）、`:123-127`（中层）、`:148-152`（物体），三处**都不是它们声称的内容**——
+//! `:98-102` 是 §五「已知差异」（96×64 / C++ 只画 48×32 表层），`:123-127` 是 §七 里**物体**（`fr_img`）
+//! 帧号的「本库等价写法」（不是中层），`:148-152` 是 §八「地图光照」段。现按各条**实际声称的内容**改指：
+//! 帧号通用规则 → `:13`（帧号表第 7 条）；物体帧号的本库写法 → `:127`；上游同口径 → `:229`。
+//!
+//! ⚠ **中层（`mid_img`）没有专门一行**：`compose.rs` 只对 `fr_img` 写了逐字等价式，
+//! 中层与地表共用 `:13` 的通用规则（`(img & 0x7FFF) - 1`）；库号路由（`btsmTiles`→中层 /
+//! `btArea`→表层）记在 `:14`，本表未逐行引，需要时按 `:14` 查。
 //!
 //! ⚠ **`btArea`（off10）只叫「表层库号」，且只在「物体」行显示一次**（审计 E2，2026-11-04）。
 //! 上一版「图块动画」行还有第三列叫「区域」、取的是同一个 `Cell::area` —— 同一个字节在同一面板

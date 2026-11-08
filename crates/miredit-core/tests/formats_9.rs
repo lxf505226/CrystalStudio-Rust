@@ -672,7 +672,7 @@ fn 造_type5(w: i16, h: i16) -> Vec<u8> {
     let 块长 = 3 * ((wu as usize / 2) + (wu as usize % 2)) * (hu as usize / 2);
     let n = 28 + 块长 + 14 * (w as usize) * (h as usize);
     let mut b = vec![0u8; n];
-    b[0] = 0; // 无标题（C# `:67` 的判别谓词）
+    b[0] = 0; // 无标题（C# `:69` 的判别谓词 `if (Bytes[0] == 0)`；原写 `:67`，那行是空行）
     b[20..22].copy_from_slice(&1i16.to_le_bytes()); // Attribute
     b[22..24].copy_from_slice(&w.to_le_bytes());
     b[24..26].copy_from_slice(&h.to_le_bytes());

@@ -58,9 +58,13 @@ pub fn clamp_area(area: Area, w: u16, h: u16) -> Option<Area> {
 ///
 /// # 为什么 Mir3 两档没有
 ///
-/// `mir2-format/src/formats/mir3_wemade.rs:61` 记 C# `MapCodec:432` 的注释
-/// 「mir3 maps dont have doors」：那 3 字节被**当尾区原样保留**（落在 `Cell::tail`），
+/// `mir2-format/src/formats/mir3_wemade.rs:61` 记 C# `LegacyMapReader.cs:434`（原写 `MapCodec:432`，
+/// 实为 `LegacyMapReader.cs:434`；`MapCodec` 在上游全树 0 命中）的注释「mir3 maps dont have doors」：
+/// 那 3 字节被**当尾区原样保留**（落在 `Cell::tail`），
 /// 既不由 `door_index`/`door_offset` 建模，writer 也不写它 ⇒ 在这两档上改门字段是**静默丢**。
+///
+/// 逐字：`:434` = `offset += 3;//mir3 maps dont have doors so dont bother reading the info`；
+/// `:432` = `frindex = -1;` 是前景哨兵规则，与「无门」无关。
 ///
 /// 其余 7 档（`Old12` / `Shanda14` / `Shanda2012` / `AntiHack` / `Wemade2010` /
 /// `Heroes34` / `CrystalCs`）的 writer 都会逐字节写出这两个字段 ⇒ `None`。

@@ -1667,10 +1667,16 @@ pub const STATUS_CLIP_TMPL: &str = "剪贴板 {cw}×{ch}"; // EN: Clipboard {cw}
 
 /// 选区操作的**快捷键提示**（待选区态/状态栏 hint 用；三个有官方依据、一个没有）。
 ///
-/// ⚠ 第 4 条 `Ctrl+Shift+V` 是**本仓自定**：官方 `MapViewport.cs` 只绑了
-/// `Ctrl+C` / `Ctrl+X` / `Ctrl+V`（`:101`-`:121`）与 `Delete`，**没有**"填充选区"的快捷键
+/// ⚠ 第 4 条 `Ctrl+Shift+V` 是**本仓自定**：官方只绑了
+/// `Ctrl+C` / `Ctrl+X` / `Ctrl+V`（`_upstream/CrystalStudio/MainWindow.axaml.cs:976`，三键在**同一物理行**）
+/// 与 `Delete`（同文件 `:1001`），**没有**"填充选区"的快捷键
 /// （填充是工具 `F` + 点击，`_upstream/CrystalStudio/MainWindow.axaml.cs:989`）。本仓为选区填充补一个键，
 /// **无官方依据**，在此显式记档。
+///
+/// （原写 `MapViewport.cs:101`-`:121`，实为**基准文件错**：那 21 行是 `doorsOpen` 属性 setter 与
+/// `Deselect`/`CancelInteraction`，`MapViewport*.cs` 里 `Key\.(C|V|X)` **零命中**；真绑定在
+/// `MainWindow.axaml.cs` 的按键处理里。阴性证据命令：
+/// `Select-String -Path _upstream\CrystalStudio\MapViewport*.cs -Pattern 'Key\.(C|V|X)\b'` ⇒ 0 命中。）
 pub const SEL_KEYS_HINT: &str = "选区：Ctrl+C 复制 · Ctrl+X 剪切 · Ctrl+V 粘贴 · Delete 删除 · Ctrl+Shift+V 填充（本仓自定）"; // EN: Selection: Ctrl+C / Ctrl+X / Ctrl+V / Delete / Ctrl+Shift+V fills (no upstream binding)
 
 /// 选区操作回执：**已复制**（`{w}`×`{h}` = 格数）。

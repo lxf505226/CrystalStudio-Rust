@@ -1281,8 +1281,11 @@ mod tests {
 
     /// **Mir3 两档没有门字节**：门字段被忽略（0 格、0 撤销步、说清原因），光照照常可写。
     ///
-    /// 依据：`mir2-format/src/formats/mir3_wemade.rs:61` 记 C# `MapCodec:432` 的
-    /// 「mir3 maps dont have doors」——那 3 字节只是尾区原样保留，不由 `Cell` 建模。
+    /// 依据：`mir2-format/src/formats/mir3_wemade.rs:61` 记 C# `LegacyMapReader.cs:434`（原写 `MapCodec:432`，
+    /// 实为 `LegacyMapReader.cs:434`；`MapCodec` 在上游全树 0 命中）的「mir3 maps dont have doors」——
+    /// 那 3 字节只是尾区原样保留，不由 `Cell` 建模。
+    /// 逐字：`:434` = `offset += 3;//mir3 maps dont have doors so dont bother reading the info`；
+    /// `:432` = `frindex = -1;` 是前景哨兵规则，与「无门」无关。
     #[test]
     fn 改属性mir3门字段被忽略且说清原因() {
         let raw = 造mir3图(4, 2);
