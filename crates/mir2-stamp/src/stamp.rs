@@ -1,15 +1,15 @@
 //! 印章文件的整体读写：`Stamp::parse` / `Stamp::to_bytes` / `Stamp::bounds`。
 //!
-//! 真值：CrystalStudio `Document.cs`
-//! - `CellCodec.SaveStamp`：`:137-147`（写：`'C'`、`'#'`、`(byte)2`、`int32 count`，逐格 `X/Y + Write(map:false)`）
-//! - `CellCodec.LoadStamp(Stream, ...)`：`:104-125`（读：头探测 → 版本护栏 → 格数 → 预检 → 逐格）
+//! 真值：`_upstream/CrystalStudio/Document.cs`
+//! - `CellCodec.SaveStamp`：`:173-183`（写：`'C'`、`'#'`、`(byte)2`、`int32 count`，逐格 `X/Y + Write(map:false)`）
+//! - `CellCodec.LoadStamp(Stream, ...)`：`:138-161`（读：头探测 → 版本护栏 → 格数 → 预检 → 逐格）
 //!
 //! 与 C# 的**行为对齐点**（逐条都照抄，不「改进」）：
 //! 1. 头探测是「前 3 字节恰为 `'C' '#' v`」才算有头，否则**整份回退为 v0 裸流**
-//!    （`:107` `else r.BaseStream.Position = 0;`）；
-//! 2. 版本 `> 2` 直接报错（`:108`）；
-//! 3. 格数 `count < 0 || count > 1_000_000` 直接报错（`:111`）；
-//! 4. 预检 `count × 单格最小字节 > 剩余字节` 直接报错（`:111`）；
+//!    （`:141` `else r.BaseStream.Position = 0;`）；
+//! 2. 版本 `> 2` 直接报错（`:142`）；
+//! 3. 格数 `count < 0 || count > 1_000_000` 直接报错（`:145`）；
+//! 4. 预检 `count × 单格最小字节 > 剩余字节` 直接报错（`:145`）；
 //! 5. **文件尾部多余字节被忽略**（C# 读到 `count` 格就返回，不看尾巴）——
 //!    本库同样忽略，但**额外提供** [`trailing_bytes`] 让调用方能自己检查（真实 9,170 个文件实测全为 0）。
 
@@ -20,12 +20,12 @@ use crate::cell::{
 use crate::error::StampError;
 
 /// 一个印章格：绝对/相对坐标 + 格数据。对应 C# `public record StampCell(int X, int Y, Cell Cell)`
-/// （`Document.cs:81`）。
+/// （`_upstream/CrystalStudio/Document.cs:108`）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StampCell {
-    /// 横坐标（`int`，`Document.cs:81` 的 `X`）。印章里是**相对坐标**，可负。
+    /// 横坐标（`int`，`_upstream/CrystalStudio/Document.cs:108` 的 `X`）。印章里是**相对坐标**，可负。
     pub x: i32,
-    /// 纵坐标（`int`，`Document.cs:81` 的 `Y`）。印章里是**相对坐标**，可负。
+    /// 纵坐标（`int`，`_upstream/CrystalStudio/Document.cs:108` 的 `Y`）。印章里是**相对坐标**，可负。
     pub y: i32,
     /// 格数据。
     pub cell: StampCellData,
@@ -37,14 +37,14 @@ pub struct Stamp {
     /// **读到的**版本号（0/1/2）。无文件头时按 C# 语义记为 `0`。
     ///
     /// ⚠ 本字段只用于「这文件原来是第几版」的统计与诊断，
-    /// **不影响写出**：[`Stamp::to_bytes`] 恒写 v2（`Document.cs:144`）。
+    /// **不影响写出**：[`Stamp::to_bytes`] 恒写 v2（`_upstream/CrystalStudio/Document.cs:180`）。
     pub version: u8,
     /// 格列表，**保持文件里的原始顺序**（不排序、不去重、不合并）。
     pub cells: Vec<StampCell>,
 }
 
 impl Stamp {
-    /// 解析 `.X` 印章字节流，兼容 v0 / v1 / v2（`Document.cs:104-125`）。
+    /// 解析 `.X` 印章字节流，兼容 v0 / v1 / v2（`_upstream/CrystalStudio/Document.cs:138-161`）。
     ///
     /// # 错误
     ///
@@ -59,7 +59,7 @@ impl Stamp {
         Ok(stamp)
     }
 
-    /// 序列化为 **v2** 字节流（`Document.cs:137-147`）。
+    /// 序列化为 **v2** 字节流（`_upstream/CrystalStudio/Document.cs:173-183`）。
     ///
     /// **不 panic**：唯一的失败路径是「格数超过 1,000,000 或超出 `int32`」这种病态输入
     /// （只可能来自手工构造的 `Stamp`，`parse` 自己就会拦住），
@@ -72,7 +72,7 @@ impl Stamp {
 
     /// 序列化为 **v2** 字节流，失败返回 [`StampError::TooManyCells`]。
     ///
-    /// 这是 [`Stamp::to_bytes`] 的可报错版本，护栏值照抄 `Document.cs:140` 的 `1_000_000`。
+    /// 这是 [`Stamp::to_bytes`] 的可报错版本，护栏值照抄 `_upstream/CrystalStudio/Document.cs:176` 的 `1_000_000`。
     pub fn try_to_bytes(&self) -> Result<Vec<u8>, StampError> {
         if self.cells.len() > MAX_CELLS {
             return Err(StampError::TooManyCells {
@@ -91,11 +91,11 @@ impl Stamp {
         };
         let mut out =
             Vec::with_capacity(HEADER_LEN + self.cells.len() * crate::cell::CELL_BASE_LEN);
-        // :144 —— `w.Write((byte)'C'); w.Write((byte)'#'); w.Write((byte)2); w.Write(list.Count);`
+        // :180 —— `w.Write((byte)'C'); w.Write((byte)'#'); w.Write((byte)2); w.Write(list.Count);`
         out.extend_from_slice(&MAGIC);
         out.push(WRITE_VERSION);
         out.extend_from_slice(&count.to_le_bytes());
-        // :145 —— `foreach (var c in list) { w.Write(c.X); w.Write(c.Y); Write(w, c.Cell, false); }`
+        // :181 —— `foreach (var c in list) { w.Write(c.X); w.Write(c.Y); Write(w, c.Cell, false); }`
         for cell in &self.cells {
             out.extend_from_slice(&cell.x.to_le_bytes());
             out.extend_from_slice(&cell.y.to_le_bytes());
@@ -150,7 +150,7 @@ impl Stamp {
 /// 解析并返回「被忽略的尾部字节数」。
 ///
 /// C# 的 `LoadStamp` 读完 `count` 格就返回，尾部多余字节**不报错也不使用**
-/// （`Document.cs:113-124`）。本库照抄这一行为，同时把「忽略了多少」暴露出来，
+/// （`_upstream/CrystalStudio/Document.cs:147-160`）。本库照抄这一行为，同时把「忽略了多少」暴露出来，
 /// 便于门禁断言「真实资源里这个数必须是 0」。
 pub fn trailing_bytes(bytes: &[u8]) -> Result<usize, StampError> {
     let (_, consumed) = parse_inner(bytes)?;
@@ -161,21 +161,21 @@ pub fn trailing_bytes(bytes: &[u8]) -> Result<usize, StampError> {
 fn parse_inner(bytes: &[u8]) -> Result<(Stamp, usize), StampError> {
     let mut pos = 0usize;
     let mut version = 0u8;
-    // :107 —— `if (r.BaseStream.Length >= 3 && r.ReadByte() == 'C' && r.ReadByte() == '#')
+    // :141 —— `if (r.BaseStream.Length >= 3 && r.ReadByte() == 'C' && r.ReadByte() == '#')
     //             version = r.ReadByte(); else r.BaseStream.Position = 0;`
     if bytes.len() >= 3 && bytes[0] == MAGIC[0] && bytes[1] == MAGIC[1] {
         version = bytes[2];
         pos = 3;
     }
-    // :108 —— `if (version > 2) throw new InvalidDataException("Unsupported object version.");`
+    // :142 —— `if (version > 2) throw new InvalidDataException("Unsupported object version.");`
     if version > 2 {
         return Err(StampError::UnsupportedVersion { version });
     }
 
-    // :109 —— `int count = r.ReadInt32();`
+    // :143 —— `int count = r.ReadInt32();`
     let head = take(bytes, &mut pos, 4, 0)?;
     let count = i32_at(head);
-    // :111 —— `if (count < 0 || count > 1_000_000 || ...)`
+    // :145 —— `if (count < 0 || count > 1_000_000 || ...)`
     if count < 0 || count as usize > MAX_CELLS {
         return Err(StampError::InvalidCellCount {
             count,
@@ -183,7 +183,7 @@ fn parse_inner(bytes: &[u8]) -> Result<(Stamp, usize), StampError> {
         });
     }
 
-    // :110-112 —— 预检：`(long)count * minimumCellBytes > r.BaseStream.Length - r.BaseStream.Position`
+    // :144-146 —— 预检：`(long)count * minimumCellBytes > r.BaseStream.Length - r.BaseStream.Position`
     let minimum = minimum_cell_bytes(version);
     let available = (bytes.len() - pos) as u64;
     let required = count as u64 * minimum as u64;
@@ -196,11 +196,11 @@ fn parse_inner(bytes: &[u8]) -> Result<(Stamp, usize), StampError> {
         });
     }
 
-    // :113-124 —— 逐格读
+    // :147-160 —— 逐格读
     let total = count as usize;
     let mut cells = Vec::with_capacity(total);
     for index in 0..total {
-        // :117 —— `int x = r.ReadInt32(), y = r.ReadInt32();`
+        // :151 —— `int x = r.ReadInt32(), y = r.ReadInt32();`
         let xy = take(bytes, &mut pos, 8, index)?;
         let x = i32_at(&xy[0..4]);
         let y = i32_at(&xy[4..8]);

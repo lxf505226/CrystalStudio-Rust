@@ -527,7 +527,7 @@ fn mir3_可走按flag四态() {
 /// **CrystalCs 的阻挡位是 `bit29/bit30`，不是 `bit15`**（R34 复核项 1）。
 ///
 /// 依据（上游三处互相印证）：
-/// - 写盘：`CellCodec.Write` 把 `BackImage` **整字**写进文件（`Document.cs:92`）⇒ 29/30 位持久化；
+/// - 写盘：`CellCodec.Write` 把 `BackImage` **整字**写进文件（`_upstream/CrystalStudio/Document.cs:116`）⇒ 29/30 位持久化；
 /// - 涂地板：`c.BackImage = (c.BackImage & 0x60000000) | image`（`MapViewport.cs:505/546`）
 ///   ⇒ 碰撞位与图号位**各占一段**，涂图号不动碰撞位；
 /// - 判可走：`(BackImage & 0x60000000) == 0`（`MapCheck.cs:100`）。

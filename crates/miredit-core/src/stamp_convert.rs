@@ -113,7 +113,7 @@ impl StampLibLayer {
 ///
 /// # 为什么必须有它（A-024）
 ///
-/// `.X` 里的三个库号是 **C# 全局 id**（`Document.cs:86,94-96` 存的是
+/// `.X` 里的三个库号是 **C# 全局 id**（`_upstream/CrystalStudio/Document.cs:116,124-126` 存的是
 /// `BackLibrary` / `MiddleLibrary` / `Foreground.Library`，C# 全程拿它们直接喂
 /// `Assets.Get(library, …)`，见 `StampPreview.cs:40`），而地图侧的 `btTiles` /
 /// `btsmTiles` / `btArea` 是**族内页号**。两者差一个**每族固定基址**：
@@ -416,7 +416,7 @@ mod tests {
             let c = &bytes[pos..];
             let fronts = c[18];
             assert!(fronts <= 1, "一格最多 1 个前景，实测 {fronts}");
-            // 前景块之后才是 Door（`Document.cs:96` 的顺序）
+            // 前景块之后才是 Door（`_upstream/CrystalStudio/Document.cs:126` 的顺序）
             let tail = if fronts == 1 { 25 } else { 19 };
             out.push(原始格 {
                 x: i32_at(c, 0),

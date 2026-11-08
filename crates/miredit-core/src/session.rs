@@ -765,7 +765,7 @@ impl EditSession {
     /// # 三道护栏（都是**明确拒绝**，绝不静默截断）
     ///
     /// 1. **空格表** ⇒ `Err`（空印章没有任何可放置的内容，注册它只会让后面"放了 0 格"难以解释）；
-    /// 2. **单枚超过 [`STAMP_MAX_CELLS`]**（1,000,000 格）⇒ `Err`（同 C# `Document.cs:140`
+    /// 2. **单枚超过 [`STAMP_MAX_CELLS`]**（1,000,000 格）⇒ `Err`（同 C# `_upstream/CrystalStudio/Document.cs:176`
     ///    的 `if (list.Count > 1_000_000) throw`）；
     /// 3. **注册表满**（[`STAMP_REGISTRY_MAX`] 个 id）⇒ `Err`，原因里给出"先 [`Self::remove_stamp`] 腾位"。
     ///    为什么要有上限：注册表按 id 存整份格表，一个 1e6 格的印章 ≈ 20 MB，

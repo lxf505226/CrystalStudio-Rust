@@ -9,19 +9,19 @@
 //!    并能把 id 解析成「真实路径 + 包围盒 + 格数」的索引，供 GUI「印章」页签使用。
 //!    索引口径与「缺失 / 损坏怎么算」写在该模块文档里（**逐条可复算**）。
 //!
-//! 真值来源：上游 CrystalStudio 的 `CrystalStudio/CrystalStudio/Document.cs`（**只读参照，未改动**；
+//! 真值来源：上游 CrystalStudio 的 `_upstream/CrystalStudio/Document.cs`（**只读参照，未改动**；
 //! 对齐基线提交见根 `README.md`，本仓不内置它的本地路径）。
 //! 全部行号均指该文件；`ForegroundImages.cs` 的行号单独标注。
 //!
-//! # 一、文件级字节布局（`CellCodec.SaveStamp`，`Document.cs:137-147`）
+//! # 一、文件级字节布局（`CellCodec.SaveStamp`，`_upstream/CrystalStudio/Document.cs:173-183`）
 //!
 //! ```text
 //! 偏移  长度  内容                                    真值
-//! 0     1     'C' (0x43)                              Document.cs:144
-//! 1     1     '#' (0x23)                              Document.cs:144
-//! 2     1     版本号 = 2                              Document.cs:144
-//! 3     4     格数 count（int32 小端）                 Document.cs:144
-//! 7     …     count 个格，首尾相接                     Document.cs:145
+//! 0     1     'C' (0x43)                              _upstream/CrystalStudio/Document.cs:180
+//! 1     1     '#' (0x23)                              _upstream/CrystalStudio/Document.cs:180
+//! 2     1     版本号 = 2                              _upstream/CrystalStudio/Document.cs:180
+//! 3     4     格数 count（int32 小端）                 _upstream/CrystalStudio/Document.cs:180
+//! 7     …     count 个格，首尾相接                     _upstream/CrystalStudio/Document.cs:181
 //! ```
 //!
 //! 头固定 **7 字节**（[`HEADER_LEN`]）；文件里**没有**宽高、没有调色板、没有尾注。
@@ -30,34 +30,34 @@
 //!
 //! # 二、逐格字节布局（**v2，`map: false` = 印章分支**）
 //!
-//! `SaveStamp` 先写 `X`/`Y`（`Document.cs:145`），再调 `Write(w, c, map: false)`
-//! （`Document.cs:84-98`，其中 `:86` 是四字段共用段、`:94-96` 是印章分支）。
+//! `SaveStamp` 先写 `X`/`Y`（`_upstream/CrystalStudio/Document.cs:181`），再调 `Write(w, c, map: false)`
+//! （`_upstream/CrystalStudio/Document.cs:114-128`，其中 `:116` 是四字段共用段、`:124-126` 是印章分支）。
 //! 偏移相对**格起点**，整数一律**小端**：
 //!
 //! | 格内偏移 | 长度 | 字段 | C# 类型 | 真值 |
 //! |---------:|-----:|------|---------|------|
-//! | 0  | 4 | `X`             | `int`    | `:145` |
-//! | 4  | 4 | `Y`             | `int`    | `:145` |
-//! | 8  | 2 | `BackLibrary`   | `short`  | `:86` |
-//! | 10 | 4 | `BackImage`     | `int`    | `:86` |
-//! | 14 | 2 | `MiddleLibrary` | `short`  | `:86` |
-//! | 16 | 2 | `MiddleImage`   | `ushort` | `:86` |
-//! | 18 | 1 | 前景个数（0/1） | `byte`   | `:94` |
-//! | 19 | 2 | 前景 `Library`  | `short`  | `:95` |
-//! | 21 | 2 | 前景 `Image`    | `short`  | `:95` |
-//! | 23 | 1 | 前景 `Frames`   | `byte`   | `:95` |
-//! | 24 | 1 | 前景 `Tick`     | `byte`   | `:95` |
-//! | 25 | 1 | `Door`          | `byte`   | `:96` |
-//! | 26 | 1 | `DoorOffset`    | `byte`   | `:96` |
-//! | 27 | 1 | `MiddleFrames`  | `byte`   | `:96` |
-//! | 28 | 1 | `MiddleTick`    | `byte`   | `:96` |
-//! | 29 | 2 | `TileAnimation` | `short`  | `:96` |
-//! | 31 | 2 | `TileOffset`    | `short`  | `:96` |
-//! | 33 | 1 | `TileFrames`    | `byte`   | `:96` |
-//! | 34 | 1 | `Light`         | `byte`   | `:96` |
+//! | 0  | 4 | `X`             | `int`    | `:181` |
+//! | 4  | 4 | `Y`             | `int`    | `:181` |
+//! | 8  | 2 | `BackLibrary`   | `short`  | `:116` |
+//! | 10 | 4 | `BackImage`     | `int`    | `:116` |
+//! | 14 | 2 | `MiddleLibrary` | `short`  | `:116` |
+//! | 16 | 2 | `MiddleImage`   | `ushort` | `:116` |
+//! | 18 | 1 | 前景个数（0/1） | `byte`   | `:124` |
+//! | 19 | 2 | 前景 `Library`  | `short`  | `:125` |
+//! | 21 | 2 | 前景 `Image`    | `short`  | `:125` |
+//! | 23 | 1 | 前景 `Frames`   | `byte`   | `:125` |
+//! | 24 | 1 | 前景 `Tick`     | `byte`   | `:125` |
+//! | 25 | 1 | `Door`          | `byte`   | `:126` |
+//! | 26 | 1 | `DoorOffset`    | `byte`   | `:126` |
+//! | 27 | 1 | `MiddleFrames`  | `byte`   | `:126` |
+//! | 28 | 1 | `MiddleTick`    | `byte`   | `:126` |
+//! | 29 | 2 | `TileAnimation` | `short`  | `:126` |
+//! | 31 | 2 | `TileOffset`    | `short`  | `:126` |
+//! | 33 | 1 | `TileFrames`    | `byte`   | `:126` |
+//! | 34 | 1 | `Light`         | `byte`   | `:126` |
 //!
 //! ⇒ **无前景 = 29 字节/格**（[`CELL_BASE_LEN`]）；**有前景 = 35 字节/格**（+[`FRONT_LEN`] 6）。
-//! 与 `Document.cs:110` 的 `minimumCellBytes = version == 2 ? 29` 自洽。
+//! 与 `_upstream/CrystalStudio/Document.cs:144` 的 `minimumCellBytes = version == 2 ? 29` 自洽。
 //!
 //! ## 与 README「29 / 35 字节」口径的关系
 //!
@@ -73,14 +73,14 @@
 //!
 //! # 三、`map: true`（地图）分支与印章分支**字节顺序不同**，不可混用
 //!
-//! `Document.cs:87-93` 的地图分支把前景写成**固定 8 字节槽**（`Library`、`Image`、`Door`、
+//! `_upstream/CrystalStudio/Document.cs:117-123` 的地图分支把前景写成**固定 8 字节槽**（`Library`、`Image`、`Door`、
 //! `DoorOffset`、`Frames`、`Tick` 交错），且**没有前景个数字节**；
-//! 印章分支（`:94-96`）是「**先写个数，再写 6 字节前景块，`Door/DoorOffset` 排在后面**」。
+//! 印章分支（`:124-126`）是「**先写个数，再写 6 字节前景块，`Door/DoorOffset` 排在后面**」。
 //! 因此单格地图体是 26 字节、印章体是 21+6n 字节 —— **两套布局互不兼容**。
 //!
 //! # 四、v0 / v1 只读兼容，且**必然不能字节往返**
 //!
-//! 读取器兼容 v0/v1/v2（`:108`），但 `SaveStamp`（`:137-147`）**只写 v2**。
+//! 读取器兼容 v0/v1/v2（`:141-142`），但 `SaveStamp`（`:173-183`）**只写 v2**。
 //! 重新保存会把格体重新排版 ⇒ v0/v1 文件**只能语义往返，不能字节往返**。
 //! 这是 C# 的既定归一化行为，本库照抄，并在 `roundtrip_tests` 里给出实测证据
 //! （真实 9,170 个文件**全是 v2**，所以字节往返门 100% 成立）。

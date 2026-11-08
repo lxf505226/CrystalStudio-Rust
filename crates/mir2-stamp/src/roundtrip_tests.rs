@@ -259,7 +259,7 @@ fn 全量往返_全部印章逐字节相等() {
     stats.断言全绿();
 }
 
-/// 门禁 2：**版本分布**。只读文件头 3 字节（按 C# `:107` 的探测规则分类）。
+/// 门禁 2：**版本分布**。只读文件头 3 字节（按 C# `:141` 的探测规则分类）。
 #[test]
 fn 版本分布统计() {
     let Some(root) = 印章根目录() else {
@@ -348,7 +348,7 @@ fn 尾随字节必须为0() {
 /// 负向 1：**截断文件必须 `Err`**（两条：预检拦下 / 预检通过但逐格越界）。
 #[test]
 fn 负向_截断文件必须报错() {
-    // 用例 A：格数 1，但格体只给 20 字节（< 29）⇒ `Document.cs:111` 预检拦下
+    // 用例 A：格数 1，但格体只给 20 字节（< 29）⇒ `_upstream/CrystalStudio/Document.cs:145` 预检拦下
     let mut a = vec![b'C', b'#', 2];
     a.extend_from_slice(&1i32.to_le_bytes());
     a.extend_from_slice(&[0u8; 20]);
@@ -586,7 +586,7 @@ fn 历史版本_v0_v1可读且只能语义往返() {
         v1_as_v2.len()
     );
 
-    // ---- v1 无前景：Door 之后那 2 字节（frames/tick）C# 读完就丢（:121），本库同样丢弃 ----
+    // ---- v1 无前景：Door 之后那 2 字节（frames/tick）C# 读完就丢（:155），本库同样丢弃 ----
     let mut v1_no_front = vec![b'C', b'#', 1];
     v1_no_front.extend_from_slice(&1i32.to_le_bytes());
     v1_no_front.extend_from_slice(&0i32.to_le_bytes());

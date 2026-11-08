@@ -13,26 +13,26 @@ use std::fmt;
 pub enum StampError {
     /// 文件长度连「头 + 4 字节格数」都不够。
     ///
-    /// C# 侧对应 `r.ReadInt32()`（`Document.cs:109`）抛 `EndOfStreamException`。
+    /// C# 侧对应 `r.ReadInt32()`（`_upstream/CrystalStudio/Document.cs:143`）抛 `EndOfStreamException`。
     HeaderTruncated {
         /// 实际文件长度（字节）。
         len: usize,
         /// 至少要这么长才能读到格数。
         need: usize,
     },
-    /// 版本号大于 2（`Document.cs:108`：`if (version > 2) throw new InvalidDataException(...)`）。
+    /// 版本号大于 2（`_upstream/CrystalStudio/Document.cs:141-142`：`if (version > 2) throw new InvalidDataException(...)`）。
     UnsupportedVersion {
         /// 文件头第 3 字节读出的版本号（原值，便于定位坏文件）。
         version: u8,
     },
-    /// 格数为负或超过 [`crate::MAX_CELLS`]（`Document.cs:111` 的 `count < 0 || count > 1_000_000`）。
+    /// 格数为负或超过 [`crate::MAX_CELLS`]（`_upstream/CrystalStudio/Document.cs:145` 的 `count < 0 || count > 1_000_000`）。
     InvalidCellCount {
         /// 文件里读出的格数（原值）。
         count: i32,
         /// 护栏上限（[`crate::MAX_CELLS`]）。
         limit: usize,
     },
-    /// 格数 × 单格最小字节 > 剩余字节（`Document.cs:110-112` 的预检）。
+    /// 格数 × 单格最小字节 > 剩余字节（`_upstream/CrystalStudio/Document.cs:144-146` 的预检）。
     ///
     /// 这是 C# 的**廉价预检**：它只用「无前景格」的最小长度算下界，
     /// 因此预检通过并不代表文件完整 —— 后续逐格读取仍可能越界
@@ -58,7 +58,7 @@ pub enum StampError {
         /// 文件总长度。
         len: usize,
     },
-    /// 单格前景个数 > 1（`Document.cs:119`：
+    /// 单格前景个数 > 1（`_upstream/CrystalStudio/Document.cs:153`：
     /// `if (fronts > 1) throw new InvalidDataException("An object cell supports one foreground image.")`）。
     MultipleForegrounds {
         /// 第几格（0 起）。
@@ -66,7 +66,7 @@ pub enum StampError {
         /// 文件里读出的前景个数（原值）。
         fronts: u8,
     },
-    /// 序列化时格数超过护栏（`Document.cs:140`：`if (list.Count > 1_000_000) throw ...`）。
+    /// 序列化时格数超过护栏（`_upstream/CrystalStudio/Document.cs:176`：`if (list.Count > 1_000_000) throw ...`）。
     ///
     /// 只可能出现在**手工构造**的 [`crate::Stamp`] 上：`parse` 自己就会拦住 > 1,000,000 的文件。
     TooManyCells {

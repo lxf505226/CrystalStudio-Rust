@@ -521,7 +521,7 @@ fn 装载失败如实报错() {
 /// **印章注册表**：覆盖语义 + 三道护栏（空格表 / 单枚超上限 / 表满）逐条钉住。
 ///
 /// 判据来源：`mir2-core/src/session.rs` 的 [`EditSession::register_stamp`] 文档
-/// （单枚上限同 C# `Document.cs:140` 的 1,000,000；表上限是本仓护栏）。
+/// （单枚上限同 C# `_upstream/CrystalStudio/Document.cs:176` 的 1,000,000；表上限是本仓护栏）。
 #[test]
 fn 印章注册表护栏() {
     let mut ed = 会话(4, 4, CellFormat::New14);

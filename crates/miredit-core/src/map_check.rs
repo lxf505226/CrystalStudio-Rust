@@ -717,7 +717,7 @@ fn walkable(format: FormatId, cell: &RawCell, k: 头部) -> bool {
             back && front
         }
         // CrystalCs 的阻挡位是**持久化的** `bit29/bit30`，不是 `bit15`：
-        // `CellCodec.Write` 把 `BackImage` 整字写盘（`Document.cs:92`），
+        // `CellCodec.Write` 把 `BackImage` 整字写盘（`_upstream/CrystalStudio/Document.cs:116`），
         // 涂地板时也只替换低 29 位、原样保留 `& 0x60000000`（`MapViewport.cs:505/546`），
         // 而 `bit15` 只是图号高位 ⇒ 判据必须是 `BackImage & 0x60000000`（`MapCheck.cs:100`）。
         // 装载期还会按 `ver > 1` 把**前景** `bit15` 折成 `0x40000000`（`:598`/`:625`），

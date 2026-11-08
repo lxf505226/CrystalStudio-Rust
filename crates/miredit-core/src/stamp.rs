@@ -53,7 +53,7 @@
 //!
 //! 任务书写的是「与 `mir2_format` 的 `CropStamp` 口径一致」，但**`mir2-format` 里没有
 //! `CropStamp`**（全 crate grep 命中 0 次）。真正的 `CropStamp` 在 C# 侧：
-//! `CrystalStudio/CrystalStudio/Document.cs:126-136`。它做的是**造印章时**的居中裁剪
+//! `_upstream/CrystalStudio/Document.cs:162-171`。它做的是**造印章时**的居中裁剪
 //! （`occupied = cells.Where(s => !s.Cell.Empty)` → 取包围盒中心 → 整体平移），
 //! **不是**"放置时按地图边界裁剪"。⇒ 本模块只在两处借它的口径：
 //! ① 「**空格不算内容**」（`!s.Cell.Empty`，对应本模块的「图号 0 ⇒ 该族不写」）；
@@ -165,7 +165,7 @@ pub struct StampCellInput {
 
 /// 单枚印章的**格数上限 1,000,000**。
 ///
-/// 来源：`CrystalStudio/CrystalStudio/Document.cs:140`
+/// 来源：`_upstream/CrystalStudio/Document.cs:176`
 /// （`if (list.Count > 1_000_000) throw new InvalidDataException("Invalid object cell count.");`），
 /// 与 `mir2-stamp` 的 `MAX_CELLS` 同口径（那边是同一个数：`mir2-stamp/src/cell.rs:169`）。
 ///
