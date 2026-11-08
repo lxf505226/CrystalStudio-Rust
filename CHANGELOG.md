@@ -15,6 +15,39 @@
 
 ## [2026.11.8+a] - 2026-11-08
 
+### 修复
+
+- **Type5（`Mir3Wemade`）13 字节/格变体给出定向诊断**（`crates/mir2-format/src/formats/mir3_wemade.rs:233-281` + `registry.rs:311`）：
+  用户提供的 `G:\WeMade Entertainment\Map` **992 个真实文件**里 937 个 14 B/格**完美往返**（`out == raw`，0 字节差异），
+  另 55 个是 **13 B/格变体**，此前只报泛化的 `UnknownFormat`。现在按「形似 Type5 + W/H 为正 + 长度短于 14 B/格公式」三条合取给出五要素诊断
+  （形似哪个格式 / W×H / 实际长度 vs 公式长度 / 差值**恰为 W×H×1** / **上游 `LoadMapType5` 亦拒绝**，`LegacyMapReader.cs:49-56` + `:396` 的 `minimumCellBytes=14`）。
+  **不实现 13 B/格**：格内布局零证据（上游全族只有 14 B/格；格式规格、`T_MapInfo` 均无 13 B 形态），照猜就是编造。
+- **测试稳定性：4 处「墙钟等待」改成事件驱动**（`crates/miredit-gui/src/app.rs`、`minimap_job.rs`、`stamp_panel_tests.rs`）：
+  原来 `while … && t0.elapsed() < Duration::from_secs(5|30)` 用**墙钟**当判据，`cargo test --workspace` 多 binary 并行、CPU 争抢时会假红；
+  其中 `stamp_panel_tests.rs` 的那处**失败模式不是红而是 `[跳过]`**（静默丢覆盖，更隐蔽）。
+  现在判据换成状态机（`is_loading()` / `pending()` / `poll()` 返回 `true`），上限取**迭代次数**（只兜真挂死 + 给诊断，不是判据）。
+  **反假绿已证**：8 路并发下旧代码目标用例 **8/8 必红**、新代码 **8/8 全绿**；`stamp_panel_tests` 把上限置 0 时 6 个真实数据用例**全部 panic 而不是跳过**。
+  机理：`StampCatalog::load` 空闲中位 302 ms（5 s = 16.6× 余量），8 路并发下中位 1784 ms（**5.9× 膨胀**）⇒ 墙钟被吃穿。
+
+### 变更
+
+- **版本号方案切换**：`<YYYYMMDD>.<轮次>.<修正>` → **`<年>.<月>.<日>` + 同日字母**（用户 2026-11-08 拍板）。
+  `Cargo.toml` / `Cargo.lock` / `CHANGELOG.md` 用 **`2026.11.8+a`**（`+a` 是 build metadata，`a` = 当天第 1 个版本、`b` = 第 2 个…）；
+  **git tag 用 `v2026.11.08a`**（tag 不受 SemVer 约束）。**`2026.11.08a` 不能直接写进 `Cargo.toml`** ——
+  cargo 报 `invalid leading zero in patch version number`（`08` 的前导零先被拦，**不是字母错**）。
+  `crates/miredit-gui/build.rs` 的 `version_quad` 新增 `letter_ordinal`：`+a` ⇒ 第四段 `1`、`+b` ⇒ `2`、…、`+z` ⇒ `26`（旧 8 位日期与 `0.x.y` 行为 100% 保留）。
+  `scripts/bump-version.ps1` 新增 `-Part same-day|next-day`（旧名 `patch`/`minor`/`major` 保留为**会打印映射的别名**），
+  `-Check` 判据改为「日期段不得倒退 + 同日字母不得重复/倒退」（build metadata 不参与 SemVer 比较，旧「三段严格递增」失效）。
+  规则全文见 `VERSIONING.md` §二（2.0–2.6，历史方案整表保留）。
+
+### 新增
+
+- **发布方案 `RELEASE.md`**（8 章）：`VERSIONING.md` 管版本号规则，本文件管**怎么把一次发布做完** ——
+  G1–G5 门禁（命令 + 判据）、**10 步**发布流程（每步命令 + 判据 + 失败处置）、产物清单、回滚四类、凭据纪律、Release Ledger、7 条不接受例外的纪律。
+- **部署指南 `DEPLOY.md`**（225 行）：四条路径（源码构建 / Release 预编译 / Docker 编排 / NAS 飞牛 fnOS），每节「前提 / 步骤 / 验证 / 已知限制」；
+  末尾 8 行状态表（4 已解决 + **4 未验证**，逐字照抄 `docker/README.md:158-161`）。
+- **README 顶部在线预览**：`http://dayz.dpdns.org/`（网页版部署在飞牛 NAS 上，经 Cloudflare 反代；**该实例未挂素材卷**，所以地图能开但画布不出精灵，`/api/tiles` 如实 503 不伪造像素）。
+
 ### 内部
 
 - **引用体系重构（16 笔，152 文件次，+2609/−2591）**：R1 补全 2 处文件名并登记 15 处消息串残留；R2/R5/R6-a 处理 `layout` 裸引用（219 条实测 98 条坏、改 97 条；151 处变步长重锚，起点坏 14→0）；R3 对 `docs/地图格式规格.md` 537 处按符号锚重锚（改 472 / 保持 65），并揭穿「两个批次混装」；R4 与收尾批去 `@acfbbf8a`（gui 14→0、core+render 66→7）、去 `@901dbe2f`（3→0）、单前缀按真实根归一；其余按 crate 逐批（`metrics.rs`/`theme.rs`、gui 39 文件、render 13 文件、core 15 文件、format/map、assets、stamp、`Document.cs` 印章段）去 `@sha` + 补全文件名 + 修坐标。
