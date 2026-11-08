@@ -1344,7 +1344,7 @@ pub const MENU_POPUP_RADIUS: f32 = 4.0;
 
 /// 快捷键浮层宽 **460**。
 ///
-/// 上游 `MainWindow.axaml.cs:1233`
+/// 上游 `MainWindow.axaml.cs:1235@a78affdf`
 /// `new EditorWindow { Title = LocalText.T("InputState Shortcuts"), Width = 460, Height = 680, … }`。
 ///
 /// ⚠ 2026-11-05 本仓自定 560（无上游依据）；2026-11-08 回源订正为上游 **460**。
@@ -1352,15 +1352,19 @@ pub const MENU_POPUP_RADIUS: f32 = 4.0;
 /// - 键列 170 ≥ 实测最宽键 **106.56**（`Ctrl+Shift+Z / Ctrl+Y`）；
 /// - 说明列 = 460 − 2×28 − 170 = **234** ≥ 实测最宽说明 **190.00**
 ///   （`取消选区 / 退出待放置态 / 关闭弹层`）。
+///
+/// ⚠ 行号口径 = `@a78affdf`（master）：该提交在 `:128` 插入 `InitializeCellHover();` 与
+/// `Viewport.AssetPicked += SelectPickedTile;` 两行 ⇒ 其后行号全部 **+2**。旧口径
+/// `@f84566bc`/`@6450da90` 下本节各行号为 1233 / 1238 / 1240 / 1242 / 1246 / 1248。
 pub const SHORTCUTS_W: f32 = 460.0;
 
 /// 快捷键浮层高 **901**。
 ///
 /// # ⚠ 这是与上游的**显式偏离**（不是抄错，也不是"看着差不多"）
 ///
-/// 上游 `MainWindow.axaml.cs:1233` 是 `Height = 680`。本仓取 **901**，原因只有一个：
-/// **内容量不同** —— 上游那张表是 **19 行单列**（`MainWindow.axaml.cs:1242` 的
-/// `new[] { … }` 逐条数得 19 项；`:1246` `DockPanel` + `:1248`
+/// 上游 `MainWindow.axaml.cs:1235@a78affdf` 是 `Height = 680`。本仓取 **901**，原因只有一个：
+/// **内容量不同** —— 上游那张表是 **19 行单列**（`MainWindow.axaml.cs:1244@a78affdf` 的
+/// `new[] { … }` 逐条数得 19 项；`:1248` `DockPanel` + `:1250`
 /// `DockPanel.SetDock(shortcut, Dock.Right)` ⇒ **无组名、无说明行、键靠右**）；
 /// 本仓是 **28 行 = 6 个组名 + 22 条绑定**，另有 1 行说明。
 ///
@@ -1370,12 +1374,12 @@ pub const SHORTCUTS_W: f32 = 460.0;
 /// # 算式（两侧都是实测值 / 上游字面量，可复算）
 ///
 /// ```text
-/// 标题行高   =  41 = 实测标题行高 23（本仓字体 @ 上游 FontSize 22）+ 上游 Margin bottom 18（:1240）
+/// 标题行高   =  41 = 实测标题行高 23（本仓字体 @ 上游 FontSize 22）+ 上游 Margin bottom 18（:1242@a78affdf）
 /// 说明行高   =  18 = 本仓独有的一行（上游无对应物，见 SHORTCUTS_NOTE_H）
 /// 分隔呼吸   =   6 = 本仓独有（标题下 1px 分隔线 + 6px 呼吸，见 menu::shortcuts::SEP_GAP）
-/// 表体       = 756 = 28 行 × 行高 27（实测正文行高 13 + 上游 Margin bottom 14，:1246）
+/// 表体       = 756 = 28 行 × 行高 27（实测正文行高 13 + 上游 Margin bottom 14，:1248@a78affdf）
 /// 组间       =  24 = 6 组 × 4（menu::shortcuts::GROUP_GAP）
-/// 上下内边距 =  56 = 2 × 28（上游 :1238 `Margin = new(28)`）
+/// 上下内边距 =  56 = 2 × 28（上游 :1240@a78affdf `Margin = new(28)`）
 /// ─────────────────────────────────────────────
 /// 合计       = 41 + 18 + 6 + 756 + 24 + 56 = **901**
 /// ```
@@ -1396,7 +1400,7 @@ pub const SHORTCUTS_H: f32 = 901.0;
 
 /// 快捷键浮层的内边距 **28**（四边）。
 ///
-/// 上游 `MainWindow.axaml.cs:1238`：`var panel = new StackPanel { Margin = new(28) };`
+/// 上游 `MainWindow.axaml.cs:1240@a78affdf`：`var panel = new StackPanel { Margin = new(28) };`
 /// —— Avalonia `Thickness` 单参 = 四边各 28。
 ///
 /// ⚠ 2026-11-05 本仓自定 18（无上游依据）；2026-11-08 回源订正为 28。
@@ -1404,7 +1408,7 @@ pub const SHORTCUTS_PAD: f32 = 28.0;
 
 /// 快捷键浮层行高 **27** = 实测正文行高 **13** + 上游 `Margin bottom` **14**。
 ///
-/// 上游 `MainWindow.axaml.cs:1246`：`var row = new DockPanel { Margin = new(0, 0, 0, 14) };`
+/// 上游 `MainWindow.axaml.cs:1248@a78affdf`：`var row = new DockPanel { Margin = new(0, 0, 0, 14) };`
 ///
 /// 行高本身**不估算**：用本仓上屏字体 `layout_no_wrap` 实测（Deng.ttf @ `BODY_FONT` = 12
 /// ⇒ 行高 **13.0**；28 行逐条量过，去重集合只有 `{13.0}`），由
@@ -1415,7 +1419,7 @@ pub const SHORTCUTS_ROW_H: f32 = 27.0;
 
 /// 快捷键浮层的标题行高 **41** = 实测标题行高 **23** + 上游 `Margin bottom` **18**。
 ///
-/// 上游 `MainWindow.axaml.cs:1240`
+/// 上游 `MainWindow.axaml.cs:1242@a78affdf`
 /// `new TextBlock { Text = LocalText.T("Work Faster"), FontSize = 22, FontWeight = SemiBold, Margin = new(0, 0, 0, 18) }`
 /// ⇒ 行距 18；行高由 Avalonia 按字体度量现算，本仓拿不到那套度量
 /// ⇒ 用**上屏字体**在**上游字号 22** 下实测（Deng.ttf @ 22 ⇒ **23.0**）。
@@ -1435,7 +1439,7 @@ pub const SHORTCUTS_NOTE_H: f32 = 18.0;
 
 /// 快捷键浮层的「键」列宽 **170**（右侧留给说明文字）。
 ///
-/// ⚠ 上游是「说明在左、键 `Dock.Right` **靠右**」（`MainWindow.axaml.cs:1248`），
+/// ⚠ 上游是「说明在左、键 `Dock.Right` **靠右**」（`MainWindow.axaml.cs:1250@a78affdf`），
 /// 本仓是「键左列固定 170 + 说明在右」—— **排布与上游不同**，属既有差异，
 /// 本单不动，已登记。170 的实测依据：最宽键 `Ctrl+Shift+Z / Ctrl+Y` 排版宽 **106.56**
 /// ⇒ 余 63px。

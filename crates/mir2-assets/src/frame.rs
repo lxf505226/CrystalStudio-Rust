@@ -45,8 +45,13 @@ use crate::lib_paths::LibRef;
 /// | 消费点 | 用不用 | 上游依据 |
 /// |---|---|---|
 /// | 光罩（地图光照） | **无条件用** | `MapViewport.Presentation.cs:84-86@901dbe2f(未入库)`：`offset = new(sprite.X, sprite.Y)`，不看库号/图号/尺寸 ⇒ `miredit-render` 的 `lighting::light_bounds` 直接用本字段 |
-/// | 前景**加性混合**帧（`Front.Frames & 0x80 != 0`） | **用**（按分支条件） | `MapSpriteDrawing.cs:43-52@901dbe2f(未入库)` 的 `front && blend` 是**一条独立分支**：库 `14/27/100..198` ⇒ `px += X; py += 32-96 + Y`；否则先底边锚点，再按 **0-based 帧号** `2723..2732`（等价图号 2724..2733）⇒ `px += X; py += Y`。落地实现见 `miredit-render` 的 `compose.rs` §十（`混合锚点`） |
+/// | 前景**加性混合**帧（`Front.Frames & 0x80 != 0`） | **用**（按分支条件） | `MapSpriteDrawing.cs:43-52@6450da90(未入库)` 的 `front && blend` 是**一条独立分支**：库 `14/27/100..198` ⇒ `px += X; py += 32-96 + Y`；否则先底边锚点，再按 **0-based 帧号** `2723..2732`（等价图号 2724..2733）⇒ `px += X; py += Y`。落地实现见 `miredit-render` 的 `compose.rs` §十（`混合锚点`） |
 /// | **非混合**帧（表层普通帧 / 中层 / 地表） | **不许用** | 上游这类帧走格栅锚点（`MapSpriteDrawing.cs:53-55` 的 `tile` 判定与 `library == 28` 非混合特例另属台账 A-001，**未采纳**），本仓口径见 `compose.rs` §一的规则表 |
+///
+/// > **行号口径（2026-11-08 订正）**：本节 `MapSpriteDrawing.cs` 的行号一律按 `@6450da90` 及以后
+/// > （`@a78affdf` 与 `@6450da90` 的该文件逐字节相同，blob `5ffc7fd7`）。**`@901dbe2f` 时代
+/// > `front && blend` 分支在 `:19-28`**，`43-52` 在那版落在 `Composite` 方法体内 ——
+/// > 旧注释把 `@6450da90` 的行号挂在了 `@901dbe2f` 标签上；本次只订正标签与行号归属，不改任何数值。
 ///
 /// 两条边界（改这条口径前先回核上游）：
 ///
