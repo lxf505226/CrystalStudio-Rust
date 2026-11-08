@@ -93,15 +93,41 @@
 //! offset = 28 + 块长 + (x * h + y) * 14      // x 外层、y 内层（C# `:413-414`）
 //! ```
 //!
-//! # 五、真实样本
+//! # 五、真实样本：**有**（937 个 14 B/格文件完美往返）
 //!
-//! **无**（本机 1158 个真实 `.map` 里 0 个命中本支）⇒ 只有合成样本验证。
+//! **有**：`G:\WeMade Entertainment\Map`（WeMade MirX 官方图集）的 992 个 Type5 文件里，
+//! **937 个 14 B/格文件完美往返**（`read → write` **0 字节差异**），另 55 个是 13 B/格变体（见第五节·二）。
+//!
+//! ⚠ **显式订正（2026-11-08）**：本节旧文是
+//! 「**无**（本机 1158 个真实 `.map` 里 0 个命中本支）⇒ 只有合成样本验证」。
+//! 那半句**对**（`E:\GodM2` 那 1,158 个文件里确实 0 个 Type5），但结论
+//! 「只有合成样本验证」**错**，错在**语料只扫了两个目录**（`GodotClient/maps` 61 + 23 周年客户端 1097），
+//! 漏了 Type5 的真实语料 `G:\WeMade Entertainment\Map`（992 个文件，2026-11-08 实测）。
+//!
+//! # 五·二、那 55 个 13 B/格变体：**不实现**，但给**可诊断**的错误
+//!
+//! 这 55 个文件的长度精确等于 `28 + 块长 + 13·w·h`（比 14 B/格公式少 `w·h` 字节）。
+//! 13 B/格在格内的布局**零证据** —— 上游源码（`LegacyMapReader.cs` 全族）、格式规格、
+//! `T_MapInfo` 都没有 13 B 形态；照猜写出来就是**编造**，所以本仓**不实现**它。
+//!
+//! 上游 `LoadMapType5` 同样拒绝这类文件：`_upstream/CrystalStudio/LegacyMapReader.cs:396`
+//! 的 `ValidateDimensions(28 + 3*((Width/2)+(Width%2))*(Height/2), 14)` 把
+//! `minimumCellBytes` 定成 **14**，于是 `:54-55` 的
+//! `headerBytes + count * minimumCellBytes > Bytes.LongLength` 在 13 B/格时**恒成立**
+//! ⇒ 抛 `InvalidDataException("Map cell data is truncated.")`。
+//!
+//! ⇒ 本仓的处置是「**拒绝 + 可诊断**」：[`Mir3Wemade::diagnose_cell_len`] 在
+//! [`crate::read_any_tolerant`] 的失败路径上给出「形似哪个格式 / W×H / 实际长度 vs 14 B 公式 /
+//! 差值 / 上游亦拒绝 + 上游行号」，而不是一句含糊的「无法判别格式」。
 //!
 //! # 六、判别
 //!
 //! C# `:69`：`Bytes[0] == 0`。这条谓词极宽（任何首字节为 0 的文件都命中），
 //! 因此 [`Mir3Wemade::detect`] 额外要求长度精确等于
 //! `28 + 块长 + 14*w*h`。
+//!
+//! 长度**对不上**时（典型：13 B/格变体）由 [`Mir3Wemade::diagnose_cell_len`] 给具体诊断，
+//! 见第五节·二。
 
 use crate::error::FormatError;
 use crate::model::{
@@ -177,6 +203,81 @@ impl Mir3Wemade {
             i32::from(i16_at(bytes, 22)),
             i32::from(i16_at(bytes, 24)),
         ))
+    }
+
+    /// **诊断**「形似 Type5（`Mir3Wemade`）但长度对不上 14 B/格公式」的文件。
+    ///
+    /// # 为什么需要它
+    ///
+    /// 真实语料 `G:\WeMade Entertainment\Map` 的 992 个 Type5 文件里有 **55 个 13 B/格变体**
+    /// （长度 = `28 + 块长 + 13·w·h`，比 14 B/格公式少 `w·h` 字节，见模块文档第五节·二）。
+    /// 它们走 [`crate::read_any_tolerant`] 时原先只得到一句
+    /// 「无法判别格式：N 字节，九种格式的判别式全部不成立」——
+    /// 用户看不出「这是 Type5 每格少 1 字节」。本函数把那句话换成**可定位**的具体原因。
+    ///
+    /// # 判据（三条合取，全部来自本格式自己的头部读法）
+    ///
+    /// 1. [`MapFormat::header_signature`]：`B[0] == 0`（无标题）且长度 ≥ [`HEADER_LEN`]；
+    /// 2. `off22-23` / `off24-25` 读出的宽、高**都是正数**（`i16` 有符号，见 `header_triplet`）；
+    /// 3. 长度**短于** 14 B/格公式 `28 + 块长 + 14·w·h` —— 长于它的文件不该在这里报错：
+    ///    它们走 [`crate::read_any_tolerant`] 的正常路径，多出的字节进
+    ///    [`RawMap::trailer`](crate::RawMap::trailer)（仍是字节精确的）。
+    ///
+    /// ⚠ **不要求**差值恰为 `w·h`：差值恰好是 `w·h` 时文案多一句「疑为 13 字节/格变体」，
+    /// 否则只报「短了多少字节」—— 真截断与 13 B 变体是两件事，不混说。
+    ///
+    /// # 为什么用 [`FormatError::UnsupportedVariant`]
+    ///
+    /// 它本来就是「**已知格式的未实现变体**（不猜、不硬读）」这一档；13 B/格正是这种情形
+    /// （有 55 个真实文件、但格内布局零证据）。**不新增错误变体**，也不改任何既有变体的语义。
+    pub fn diagnose_cell_len(bytes: &[u8]) -> Option<FormatError> {
+        if !Mir3Wemade.header_signature(bytes) {
+            return None;
+        }
+        let (_, w, h) = Self::header_triplet(bytes)?;
+        if w <= 0 || h <= 0 {
+            return None;
+        }
+        // 头部宽高是 16 位**有符号**字段（C# `:391-392` 的 `BitConverter.ToInt16`）
+        // ⇒ 上面已排除非正数，这里的 `as u16` 落在 `1..=32767`，不会窄化丢信息。
+        let width = w as u16;
+        let height = h as u16;
+        let len = bytes.len() as u64;
+        let need = Self::cells_offset(width, height) as u64
+            + u64::from(width) * u64::from(height) * CELL_LEN as u64;
+        if len >= need {
+            return None;
+        }
+        let cells = u64::from(width) * u64::from(height);
+        let diff = need - len;
+        let 共同 = format!(
+            "形似 Type5（`Mir3Wemade`：首字节 0、无标题，头部 W={width} H={height}），\
+             但文件长 {len} 字节 < 14 B/格公式 {need} 字节\
+             （28 + 3·ceil(W/2)·floor(H/2) + 14·W·H），少 {diff} 字节"
+        );
+        let 上游 = "上游 `LoadMapType5` **亦拒绝**这类文件 —— \
+                    `_upstream/CrystalStudio/LegacyMapReader.cs:49-56` 的 \
+                    `headerBytes + count*minimumCellBytes > Bytes.LongLength` 恒成立 ⇒ \
+                    抛 `InvalidDataException(\"Map cell data is truncated.\")`，\
+                    而 `:396` 的 `minimumCellBytes` 就是 14";
+        // 两支**分开陈述**：差值恰为 `w·h` 才是 13 B/格形态（真实语料 55 个全是这种）；
+        // 其余差值是真截断，不许套 13 B/格的帽子（否则用户会以为自己的坏文件是「新变体」）。
+        let detail = if diff == cells {
+            format!(
+                "{共同}（恰为 W×H×1 = {cells}，即每格少 1 字节 ⇒ 疑为 13 字节/格变体）；\
+                 本仓**不实现** 13 字节/格变体（格内布局零证据：上游源码 / 格式规格 / \
+                 `T_MapInfo` 都没有 13 B 形态，照猜写出来就是编造）；{上游}"
+            )
+        } else {
+            format!(
+                "{共同}（既非 W×H×1 = {cells} 的 13 B/格形态，也非 0 ⇒ \
+                 更像**被截断**的 14 B/格文件）；{上游}"
+            )
+        };
+        Some(FormatError::UnsupportedVariant {
+            format: FormatId::Mir3Wemade,
+            detail,
+        })
     }
 }
 
@@ -335,17 +436,18 @@ impl MapFormat for Mir3Wemade {
     fn caps(&self) -> FormatCaps {
         FormatCaps {
             can_write: true,
-            // 2026-11-05（P1-9）复核后**保持 `false`**：两条判据都不满足。
+            // 2026-11-05（P1-9）复核后**保持 `false`**；2026-11-08 订正：**判据 2 现已满足**
+            //   （`G:\WeMade Entertainment\Map` 的 937 个 14 B/格真实文件完美往返，见模块文档第五节），
+            //   仍为 `false` 只因**判据 1**：
             //   判据 1：格内 4 字节未建模（`TAIL_LEN = 4`：rel 9/10/11 是门信息、rel 13 无注释），
             //           更关键的是 `flag`（rel 0，C# `:438-439` 由 bit0/bit1 派生「可走/阻挡」）
             //           与 `mid_idx` / `mid_ani_frame` **不在编辑视图里**
             //           （`convert.rs` 的 `unmodeled_fields(Mir3Wemade)` 列了这四项）
             //           ⇒ 改了图号之后，碰撞/可走标志与中层库号不会跟着变；
-            //   判据 2：本机 0 张真实样本（本模块文档第五节）。
             //   ⚠ 背图在**块级**（一个 3 B 组喂 2×2 格）已由 `ground_paint_supported = false`
             //     这条**独立轴**表达，不重复算进本位的理由（P1-9 要求两件事分开陈述）。
             editable: false,
-            editable_caveat: "每格 4 字节未建模（格内 rel 9/10/11 = 门信息、C# 注释 `mir3 maps dont have doors`；rel 13 无注释、语义未知）；更关键的是 flag 字节（rel 0，C# 由 bit0/bit1 派生「可走/阻挡」）与中层库号、中层动画帧不在编辑视图里 ⇒ 改图号后碰撞/可走标志不会跟着变；另本机 0 张真实样本",
+            editable_caveat: "每格 4 字节未建模（格内 rel 9/10/11 = 门信息、C# 注释 `mir3 maps dont have doors`；rel 13 无注释、语义未知）；更关键的是 flag 字节（rel 0，C# 由 bit0/bit1 派生「可走/阻挡」）与中层库号、中层动画帧不在编辑视图里 ⇒ 改图号后碰撞/可走标志不会跟着变；真实样本已有（WeMade 官方图集 992 个 Type5 里 937 个 14 B/格文件往返 0 字节差异），另 55 个 13 B/格变体本仓不实现、上游亦拒绝",
             // ★ 本格式的背图在**块级**（3 B / 2×2 组），不是每格 `bk_img`：
             //   `Cell::bk_img` 恒 0 且 `write` 不写它 ⇒ 上层按格写 `bk_img` 会被**静默丢弃**。
             //   依据：C# `_upstream/CrystalStudio/LegacyMapReader.cs:401-410`（块循环）+ 本模块 `write`（不写 bk_img）。
@@ -353,7 +455,11 @@ impl MapFormat for Mir3Wemade {
             has_lib_bytes: true,
             fixed_cell_len: Some(CELL_LEN),
             has_tail: true,
-            has_real_samples: false,
+            // 2026-11-08 订正（旧值 `false`）：判据 2 = 「布局有真实样本验证」，现已满足 ——
+            //   `G:\WeMade Entertainment\Map` 的 992 个 Type5 里 937 个 14 B/格文件
+            //   `read → write` **0 字节差异**（`tests/real_samples.rs` 全量跑，见模块文档第五节）。
+            //   `editable` 仍为 `false`：判据 1 不满足（4 B 尾区 + `flag`/`mid_idx`/`mid_ani_frame` 不在编辑视图）。
+            has_real_samples: true,
             collision_note: "格内 flag 的 bit0 = 背景可走、bit1 = 前景可走（C# `:436-437` 是「非 1 就置阻挡位」，即 flag 位为 1 才可走）；C# 另把 light `& 0x0F` 再 `* 4`",
             collision_polarity: CollisionPolarity::FlagBitSetMeansWalkable,
             source: "CrystalStudio/LegacyMapReader.cs:382-452（LoadMapType5）",

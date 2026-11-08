@@ -138,7 +138,7 @@ pub enum FormatError {
     },
     /// 已知格式的**未实现变体**（不猜、不硬读）。
     ///
-    /// # 当前唯一的来源：`52 + 40·w·h` 的「40 B/格」长度形态 —— **无实证，仅防御**
+    /// # 来源一：`52 + 40·w·h` 的「40 B/格」长度形态 —— **无实证，仅防御**
     ///
     /// **真实语料里 0 个**：本机 1,158 个真实 `.map` 里，长度精确等于 `52 + 40·w·h`
     /// 的文件 **0 个**（`52 + 36·w·h` 的有 195 个）。
@@ -152,6 +152,16 @@ pub enum FormatError {
     /// ⇒ 本变体保留**只为防御未来出现的怪文件**（长度恰好凑成 `52 + 40·w·h`），
     /// 绝不按 36 B 硬读（那会把整张图读成花图）。
     /// **它只在长度精确成立时命中，不会误伤任何 36 B/格文件。**
+    ///
+    /// # 来源二（2026-11-08 新增）：`Mir3Wemade` 的 **13 B/格变体** —— 有实证，但上游亦拒绝
+    ///
+    /// `G:\WeMade Entertainment\Map` 的 992 个 Type5 文件里 **55 个**长度精确等于
+    /// `28 + 3·ceil(w/2)·floor(h/2) + 13·w·h`（比 14 B/格公式少 `w·h` 字节）。
+    /// 13 B/格在格内的布局**零证据**（上游源码 / 格式规格 / `T_MapInfo` 均无该形态）⇒ 本仓不实现；
+    /// 上游 `LoadMapType5` 亦拒绝它们（`_upstream/CrystalStudio/LegacyMapReader.cs:396` 的
+    /// `minimumCellBytes = 14` ⇒ `:54-55` 抛 `InvalidDataException("Map cell data is truncated.")`）。
+    /// 这一来源由 [`crate::formats::mir3_wemade::Mir3Wemade::diagnose_cell_len`] 构造，
+    /// **只在 [`crate::read_any_tolerant`] 的失败路径上产生**，不影响任何成功路径。
     UnsupportedVariant {
         /// 判定用的格式。
         format: FormatId,

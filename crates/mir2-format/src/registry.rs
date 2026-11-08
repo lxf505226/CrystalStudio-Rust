@@ -302,7 +302,14 @@ pub fn read_any_tolerant(bytes: &[u8]) -> Result<RawMap, FormatError> {
     }
     match detect_format_tolerant(bytes) {
         Some(f) => f.read(bytes),
-        None => Err(FormatError::UnknownFormat { len: bytes.len() }),
+        // 失败诊断（2026-11-08）：先问一遍「形似 Type5 但长度对不上 14 B/格公式」。
+        // 真实语料 `G:\WeMade Entertainment\Map` 里 55 个 13 B/格变体走的就是这一支，
+        // 原先只得到一句 `UnknownFormat`（「九种格式的判别式全部不成立」）——
+        // 用户看不出「这是 Type5 每格少 1 字节」。判据与文案全在
+        // `mir3_wemade::Mir3Wemade::diagnose_cell_len`，本函数只做一次转发：
+        // **能判别的文件根本走不到这一支**，所以任何成功路径都不受影响。
+        None => Err(mir3_wemade::Mir3Wemade::diagnose_cell_len(bytes)
+            .unwrap_or(FormatError::UnknownFormat { len: bytes.len() })),
     }
 }
 

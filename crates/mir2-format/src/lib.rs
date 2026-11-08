@@ -8,7 +8,7 @@
 //! | # | [`FormatId`] | C# 分支 | 头部 | 单格 | 真实样本 | 模块 |
 //! |---|--------------|---------|------|------|----------|------|
 //! | 1 | [`FormatId::CrystalCs`] | `LoadMapType100` | 8 | **变长** 26/38/35/33+ | ❌ 无 | [`formats::crystal_cs`] |
-//! | 2 | [`FormatId::Mir3Wemade`] | `LoadMapType5` | 28 + 背景块 | 14 | ❌ 无 | [`formats::mir3_wemade`] |
+//! | 2 | [`FormatId::Mir3Wemade`] | `LoadMapType5` | 28 + 背景块 | 14 | ✅ 937 个 | [`formats::mir3_wemade`] |
 //! | 3 | [`FormatId::Mir3Shanda`] | `LoadMapType6` | 40 | 20 | ❌ 无 | [`formats::mir3_shanda`] |
 //! | 4 | [`FormatId::AntiHack`] | `LoadMapType4` | 64 | 12 | ❌ 无 | [`formats::antihack`] |
 //! | 5 | [`FormatId::Wemade2010`] | `LoadMapType1` | 54 | 15 | ❌ 无 | [`formats::wemade2010`] |

@@ -474,7 +474,7 @@ pub struct FormatCaps {
     /// | `AntiHack` | 无未建模区（12 B 全具名、`tail` 恒空） | **0 张** | false |
     /// | `Wemade2010` | 1 B 尾区未建模（格内 rel 14） | 0 张 | false |
     /// | `Heroes34` | 1 B 尾区未建模 + `bk_img` 高 16 位改不到 | 0 张 | false |
-    /// | `Mir3Wemade` | 4 B 尾区未建模 + `flag`（碰撞/可走）不在视图里 | 0 张 | false |
+    /// | `Mir3Wemade` | 4 B 尾区未建模 + `flag`（碰撞/可走）不在视图里 | **937 个** | false |
     /// | `Mir3Shanda` | 7 B 尾区零注释 + `flag` 不在视图里 | 0 张 | false |
     /// | `CrystalCs` | 变长格 + 12/1 B 未建模 + 高 16 位/高 8 位改不到 | 0 张 | false |
     ///
