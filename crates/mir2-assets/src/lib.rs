@@ -80,7 +80,7 @@
 //!
 //! 官方 C# 编辑器 CrystalStudio 读的是第三种容器 `.lib`（单文件 + 内嵌偏移表 +
 //! 每帧 gzip 的 BGRA）。这条路径由本 crate 自己实现，逐字段对齐
-//! `Assets.cs:14-204@901dbe2f`（读取器）与 `Assets.cs:342-405@901dbe2f`（三族路径表）：
+//! `_upstream/CrystalStudio/Assets.cs:14-204`（读取器）与 `_upstream/CrystalStudio/Assets.cs:342-405`（三族路径表）：
 //!
 //! | 组件 | 职责 | 对应上游 |
 //! |---|---|---|
@@ -93,7 +93,7 @@
 //!
 //! - **path-backed，按帧 seek**：`CrystalLibrary::open` 只读文件头 + 偏移表
 //!   （v2/v3）或 Sanxiu header（v5/v6），帧数据在取帧时按偏移现读现丢
-//!   （对齐上游 `File.OpenRead` + 按帧 `Position`，`Assets.cs:85-106@901dbe2f`）——
+//!   （对齐上游 `File.OpenRead` + 按帧 `Position`，`_upstream/CrystalStudio/Assets.cs:85-106`）——
 //!   真实素材 `Tiles.Lib` 595 MB 也不会被整文件读进内存；
 //! - **磁盘是 BGRA，对外是 RGBA**：`.lib` 的像素字节顺序是 `B,G,R,A`，必须逐像素换位；
 //! - 尺寸护栏 `1 ..= 8192`、gzip 解压字节数必须**正好** `w*h*4`（多一字节也算损坏）；

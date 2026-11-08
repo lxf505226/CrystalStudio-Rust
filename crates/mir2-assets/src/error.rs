@@ -53,7 +53,7 @@ pub enum AssetError {
         /// 解码器给出的原因（已含 `anyhow` 上下文链）。
         reason: String,
     },
-    /// 原版 `.lib` 的文件头 / 版本 / 偏移表解析失败（`Assets.cs:22-67@901dbe2f` 的构造期校验）。
+    /// 原版 `.lib` 的文件头 / 版本 / 偏移表解析失败（`_upstream/CrystalStudio/Assets.cs:22-67` 的构造期校验）。
     ///
     /// 覆盖：版本号不认识、Sanxiu 加密标志非 0、`headerLength` 越界、图片数越界、
     /// Sanxiu 某图的偏移/长度越界、v2/v3 偏移表越界或截断。

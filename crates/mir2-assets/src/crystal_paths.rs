@@ -1,8 +1,8 @@
-//! 原版 CrystalStudio `.lib` 的路径发现与三族登记表（对齐 `Assets.cs:342-405@901dbe2f`）。
+//! 原版 CrystalStudio `.lib` 的路径发现与三族登记表（对齐 `_upstream/CrystalStudio/Assets.cs:342-405`）。
 //!
 //! # 一、上游怎么登记 `.lib`（逐行）
 //!
-//! `AssetStore.Register`（`Assets.cs:355-376@901dbe2f`）先定「基础目录」：
+//! `AssetStore.Register`（`_upstream/CrystalStudio/Assets.cs:355-376`）先定「基础目录」：
 //!
 //! ```text
 //! map = root/Map 存在 ? root/Map : root        // Assets.cs:360
@@ -65,7 +65,7 @@
 //! # 四、未覆盖（本单不做，后续单）
 //!
 //! - **Mir3**：`WemadeMir3\{wood,sand,snow,forest,none}\{Tilesc,Tiles30c,…}.lib`（ID `200+`）与
-//!   `ShandaMir3\{names}{states}.lib`（ID `300+`），`Assets.cs:366-372@901dbe2f`；
+//!   `ShandaMir3\{names}{states}.lib`（ID `300+`），`_upstream/CrystalStudio/Assets.cs:366-372`；
 //! - **完整扁平 AssetStore ID 表**：`AniTiles1 = 190`、`Tilesc/Housesc/Dungeonsc…`、
 //!   Sanxiu 的 `TryMapId`（`Tiles=0 / SmTiles=1000 / Objects=2000`，`Assets.cs:378-404`）；
 //! - `DataPaths.ResolveLibraryFolder(root)`（`Assets.cs:357`）的解析规则**待验证**，
@@ -85,11 +85,11 @@ pub enum CrystalAssetFormat {
     /// 自动探测：`WemadeMir2 → ShandaMir2 → Flat`，取第一个非空的。
     #[default]
     Auto,
-    /// `WemadeMir2\` 子目录（上游 ID `0..99`，`Assets.cs:361-362@901dbe2f`）。
+    /// `WemadeMir2\` 子目录（上游 ID `0..99`，`_upstream/CrystalStudio/Assets.cs:361-362`）。
     WemadeMir2,
-    /// `ShandaMir2\` 子目录（上游 ID `100..199`，`Assets.cs:363-365@901dbe2f`）。
+    /// `ShandaMir2\` 子目录（上游 ID `100..199`，`_upstream/CrystalStudio/Assets.cs:363-365`）。
     ShandaMir2,
-    /// 平铺在基础目录下（上游兜底，`Assets.cs:374@901dbe2f`）。
+    /// 平铺在基础目录下（上游兜底，`_upstream/CrystalStudio/Assets.cs:374`）。
     Flat,
 }
 
@@ -143,7 +143,7 @@ struct Rule {
     max_number: u32,
 }
 
-/// `WemadeMir2\` 的三条规则（`Assets.cs:361-362@901dbe2f`）。
+/// `WemadeMir2\` 的三条规则（`_upstream/CrystalStudio/Assets.cs:361-362`）。
 const WEMADE_RULES: [Rule; 3] = [
     Rule {
         family: Family::Ground,
@@ -162,7 +162,7 @@ const WEMADE_RULES: [Rule; 3] = [
     },
 ];
 
-/// `ShandaMir2\` 的三条规则（`Assets.cs:363-365@901dbe2f`）。
+/// `ShandaMir2\` 的三条规则（`_upstream/CrystalStudio/Assets.cs:363-365`）。
 const SHANDA_RULES: [Rule; 3] = [
     Rule {
         family: Family::Ground,
@@ -181,7 +181,7 @@ const SHANDA_RULES: [Rule; 3] = [
     },
 ];
 
-/// 平铺兜底的三条规则（`Assets.cs:374@901dbe2f`）。
+/// 平铺兜底的三条规则（`_upstream/CrystalStudio/Assets.cs:374`）。
 const FLAT_RULES: [Rule; 3] = [
     Rule {
         family: Family::Ground,
@@ -280,7 +280,7 @@ impl CrystalLibInfo<'_> {
 pub struct CrystalLibPaths {
     /// 传入的扫描根。
     root: PathBuf,
-    /// 实际生效的基础目录（`root/Map` 或 `root`，见 `Assets.cs:360@901dbe2f`）。
+    /// 实际生效的基础目录（`root/Map` 或 `root`，见 `_upstream/CrystalStudio/Assets.cs:360`）。
     map_dir: PathBuf,
     /// 实际扫描的目录（`map_dir` 或 `map_dir/<格式子目录>`）。
     scan_dir: PathBuf,
@@ -299,7 +299,7 @@ pub struct CrystalLibPaths {
 impl CrystalLibPaths {
     /// 扫描给定根目录并按 `format` 登记 `.lib` 库。
     ///
-    /// 基础目录取 `root/Map`（存在时）否则 `root`，与 `Assets.cs:360@901dbe2f` 一致；
+    /// 基础目录取 `root/Map`（存在时）否则 `root`，与 `_upstream/CrystalStudio/Assets.cs:360` 一致；
     /// 具体格式再往下走一层子目录（`Flat` 不离层）。
     ///
     /// 错误只有两种：根不是目录 → [`AssetError::RootNotDir`]；目录读不了 → [`AssetError::Io`]。

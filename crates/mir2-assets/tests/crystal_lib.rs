@@ -2,7 +2,7 @@
 //!
 //! # 为什么全是合成样本
 //!
-//! 全部样本由本文件按 `Assets.cs:14-204@901dbe2f` 的字段表逐字节拼出来：
+//! 全部样本由本文件按 `_upstream/CrystalStudio/Assets.cs:14-204` 的字段表逐字节拼出来：
 //! 这样每个断言都能指向「上游第几行要求的那个字段」，而不是「反正是从某个文件读出来的」，
 //! 公开仓 CI 也不依赖任何本机商业素材。
 //!
@@ -36,7 +36,7 @@ use mir2_assets::{
 
 // ===================== 合成样本构造 =====================
 
-/// gzip 压缩（每帧数据在 `.lib` 里都是 gzip 流，`Assets.cs:105@901dbe2f`）。
+/// gzip 压缩（每帧数据在 `.lib` 里都是 gzip 流，`_upstream/CrystalStudio/Assets.cs:105`）。
 fn gzip(data: &[u8]) -> Vec<u8> {
     use flate2::write::GzEncoder;
     use flate2::Compression;
@@ -82,7 +82,7 @@ fn frame(w: i16, h: i16, x: i16, y: i16, payload: Vec<u8>) -> LegacyFrame {
     }
 }
 
-/// 按 `Assets.cs:63-66@901dbe2f` 拼一个 v2/v3 `.lib`。
+/// 按 `_upstream/CrystalStudio/Assets.cs:63-66` 拼一个 v2/v3 `.lib`。
 fn build_legacy(version: i32, frames: &[LegacyFrame]) -> Vec<u8> {
     let prefix = 8 + if version == 3 { 4 } else { 0 } + 4 * frames.len();
     let mut body: Vec<u8> = Vec::new();
@@ -145,7 +145,7 @@ fn sanxiu(w: i16, h: i16, x: i16, y: i16, file_type: u8, payload: Vec<u8>) -> Sa
     }
 }
 
-/// 按 `Assets.cs:27-60@901dbe2f` 拼一个 Sanxiu v5/v6 `.lib`。
+/// 按 `_upstream/CrystalStudio/Assets.cs:27-60` 拼一个 Sanxiu v5/v6 `.lib`。
 fn build_sanxiu(version: i32, images: &[SanxiuImage]) -> Vec<u8> {
     let mut header: Vec<u8> = Vec::new();
     header.extend_from_slice(&(images.len() as i32).to_le_bytes());
@@ -355,7 +355,7 @@ fn sanxiu_v5_gzip与遮罩长度() {
 
 /// **Sanxiu v6**：`fileType 0` 走 gzip，`fileType 1` 走内嵌图片（这里是小 PNG）。
 ///
-/// `fileType 1` 的宽高**取解码出来的图片本身**（`Assets.cs:157-158@901dbe2f`），
+/// `fileType 1` 的宽高**取解码出来的图片本身**（`_upstream/CrystalStudio/Assets.cs:157-158`），
 /// 所以这里故意让 header 写 9×9、PNG 实际 3×2：`read_header` 报 9×9（header 优先），
 /// `decode` 报 3×2（图片优先），两者各自对齐上游。
 #[test]
@@ -397,7 +397,7 @@ fn sanxiu_v6_文件类型0与1() {
     assert_eq!(f1.rgba, png_rgba, "PNG 像素应原样成为 RGBA8");
 }
 
-/// **Sanxiu v6 的 GIF 尺寸回退**（`Assets.cs:74-82@901dbe2f`）：
+/// **Sanxiu v6 的 GIF 尺寸回退**（`_upstream/CrystalStudio/Assets.cs:74-82`）：
 /// header 宽高为 0 时读 10 字节，若前 3 字节是 `GIF` 就用 `[6..8]`/`[8..10]` 当宽高。
 #[test]
 fn sanxiu_v6_gif尺寸回退() {

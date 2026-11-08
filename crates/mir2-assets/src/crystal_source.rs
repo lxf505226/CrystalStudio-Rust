@@ -3,15 +3,15 @@
 //! # 一、职责
 //!
 //! 与 [`crate::WilSource`] 同构，只做三件事：**懒打开 + 小容量 LRU + 错误归集**。
-//! 真正的二进制解析在 [`crate::CrystalLibrary`]（对齐 `Assets.cs:14-204@901dbe2f`），
-//! 路径登记在 [`crate::CrystalLibPaths`]（对齐 `Assets.cs:342-405@901dbe2f`）。
+//! 真正的二进制解析在 [`crate::CrystalLibrary`]（对齐 `_upstream/CrystalStudio/Assets.cs:14-204`），
+//! 路径登记在 [`crate::CrystalLibPaths`]（对齐 `_upstream/CrystalStudio/Assets.cs:342-405`）。
 //!
 //! # 二、内存与缓存（path-backed：**不再整文件读入**）
 //!
 //! [`crate::CrystalLibrary::open`] 只解析**元数据区**：v2/v3 的文件头 + 偏移表
 //! （`8 或 12 + 4×count` 字节），或 Sanxiu 的 `9 + headerLength` 字节头部；
 //! 帧数据在取帧时按偏移 `seek` 现读、读完即丢（对齐上游 `File.OpenRead` +
-//! 按帧 `Position`，`Assets.cs:85-106@901dbe2f`）。
+//! 按帧 `Position`，`_upstream/CrystalStudio/Assets.cs:85-106`）。
 //!
 //! 所以这里的 LRU 缓存的是**库元数据**（偏移表 / 每图元数据），不是几百 MB 的库字节：
 //!

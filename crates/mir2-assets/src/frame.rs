@@ -12,13 +12,13 @@ use crate::lib_paths::LibRef;
 ///
 /// | 来源 | 字段 | 出处 |
 /// |---|---|---|
-/// | 二进制（WIL/WIX） | 帧头 `[4:6] = px i16` / `[6:8] = py i16` | `vendor/wil2atlas/src/wil_decoder.rs:206-209@412fe3e8` |
-/// | 二进制（WZL/WZX） | 块头 `[8:10] = px` / `[10:12] = py`（块头前多 4 字节 marker+unused） | `vendor/wil2atlas/src/wzl_decoder.rs:264-269@412fe3e8` |
-/// | 参考 C++ 客户端 | `TDXTextureInfo{ u16 nWidth; u16 nHeight; short px; short py; }` | `client/reference_full/Classes/Wil/WIL.h:50-56@412fe3e8` |
-/// | 官方 C# 编辑器 | `Sprite(Bitmap, int X, int Y)`，`X/Y` 读自帧记录 `[4:6]`/`[6:8]` | `CrystalStudio/CrystalStudio/Assets.cs:86@901dbe2f(未入库)` |
+/// | 二进制（WIL/WIX） | 帧头 `[4:6] = px i16` / `[6:8] = py i16` | `vendor/wil2atlas/src/wil_decoder.rs:206-209` |
+/// | 二进制（WZL/WZX） | 块头 `[8:10] = px` / `[10:12] = py`（块头前多 4 字节 marker+unused） | `vendor/wil2atlas/src/wzl_decoder.rs:264-269` |
+/// | 参考 C++ 客户端 | `TDXTextureInfo{ u16 nWidth; u16 nHeight; short px; short py; }` | `client/reference_full/Classes/Wil/WIL.h:50-56` |
+/// | 官方 C# 编辑器 | `Sprite(Bitmap, int X, int Y)`，`X/Y` 读自帧记录 `[4:6]`/`[6:8]` | `_upstream/CrystalStudio/Assets.cs:86(未入库)` |
 ///
 /// 语义 = **图片左上角相对锚点的绘制偏移**（与客户端一致：`DrawSprite(dx + px, dy + py)`，
-/// 见 `GodotClient/game/resources/atlas_loader.gd:318-319@412fe3e8` 的同款注释）。
+/// 见 `GodotClient/game/resources/atlas_loader.gd:318-319` 的同款注释）。
 ///
 /// # 覆盖范围：三条容器路径（`.wil` / `.wzl` / 原版 `.lib`）
 ///
@@ -33,9 +33,9 @@ use crate::lib_paths::LibRef;
 /// | 生产点 | 来源字段 |
 /// |---|---|
 /// | [`crate::WilSource::lookup_frame`] | WIL 帧头 `[4:6]` / WZL 块头 `[8:10]`（见上表） |
-/// | [`crate::CrystalLibrary::decode_checked`] | `.lib` 帧头 `[4:6]`；Sanxiu 取元数据的 `x/y`（`Assets.cs:86,163@901dbe2f`） |
+/// | [`crate::CrystalLibrary::decode_checked`] | `.lib` 帧头 `[4:6]`；Sanxiu 取元数据的 `x/y`（`_upstream/CrystalStudio/Assets.cs:86,163`） |
 ///
-/// `.lib` 的帧头与 WIL **前 8 字节逐字段同构**（`Assets.cs:86@901dbe2f`），
+/// `.lib` 的帧头与 WIL **前 8 字节逐字段同构**（`_upstream/CrystalStudio/Assets.cs:86`），
 /// 语义同一字段、位置相同，不需要另立字段。
 ///
 /// # ⚠ 消费口径（谁该用、谁不许用）
@@ -44,8 +44,8 @@ use crate::lib_paths::LibRef;
 ///
 /// | 消费点 | 用不用 | 上游依据 |
 /// |---|---|---|
-/// | 光罩（地图光照） | **无条件用** | `MapViewport.Presentation.cs:84-86@901dbe2f(未入库)`：`offset = new(sprite.X, sprite.Y)`，不看库号/图号/尺寸 ⇒ `miredit-render` 的 `lighting::light_bounds` 直接用本字段 |
-/// | 前景**加性混合**帧（`Front.Frames & 0x80 != 0`） | **用**（按分支条件） | `MapSpriteDrawing.cs:43-52@6450da90(未入库)` 的 `front && blend` 是**一条独立分支**：库 `14/27/100..198` ⇒ `px += X; py += 32-96 + Y`；否则先底边锚点，再按 **0-based 帧号** `2723..2732`（等价图号 2724..2733）⇒ `px += X; py += Y`。落地实现见 `miredit-render` 的 `compose.rs` §十（`混合锚点`） |
+/// | 光罩（地图光照） | **无条件用** | `_upstream/CrystalStudio/MapViewport.Presentation.cs:84-86(未入库)`：`offset = new(sprite.X, sprite.Y)`，不看库号/图号/尺寸 ⇒ `miredit-render` 的 `lighting::light_bounds` 直接用本字段 |
+/// | 前景**加性混合**帧（`Front.Frames & 0x80 != 0`） | **用**（按分支条件） | `_upstream/CrystalStudio/MapSpriteDrawing.cs:43-52(未入库)` 的 `front && blend` 是**一条独立分支**：库 `14/27/100..198` ⇒ `px += X; py += 32-96 + Y`；否则先底边锚点，再按 **0-based 帧号** `2723..2732`（等价图号 2724..2733）⇒ `px += X; py += Y`。落地实现见 `miredit-render` 的 `compose.rs` §十（`混合锚点`） |
 /// | **非混合**帧（表层普通帧 / 中层 / 地表） | **不许用** | 上游这类帧走格栅锚点（`MapSpriteDrawing.cs:53-55` 的 `tile` 判定与 `library == 28` 非混合特例另属台账 A-001，**未采纳**），本仓口径见 `compose.rs` §一的规则表 |
 ///
 /// > **行号口径（2026-11-08 订正）**：本节 `MapSpriteDrawing.cs` 的行号一律按 `@6450da90` 及以后

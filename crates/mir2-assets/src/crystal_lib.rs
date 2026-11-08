@@ -1,4 +1,4 @@
-//! 原版 CrystalStudio `.lib` 图库读取器（对齐 `Assets.cs:14-204@901dbe2f` 的 `CrystalLibrary`）。
+//! 原版 CrystalStudio `.lib` 图库读取器（对齐 `_upstream/CrystalStudio/Assets.cs:14-204` 的 `CrystalLibrary`）。
 //!
 //! # 一、为什么单独有一条 `.lib` 路径
 //!
@@ -10,7 +10,7 @@
 //!
 //! # 二、两种磁盘布局（逐字段对齐上游，不猜）
 //!
-//! ## 2.1 v2 / v3（`Assets.cs:63-66@901dbe2f`）
+//! ## 2.1 v2 / v3（`_upstream/CrystalStudio/Assets.cs:63-66`）
 //!
 //! ```text
 //! i32 version          // 2 或 3
@@ -19,7 +19,7 @@
 //! i32 offsets[count]   // 每项必须是 0 ..< 文件长度（Assets.cs:66）
 //! ```
 //!
-//! ## 2.2 Sanxiu v5 / v6（`Assets.cs:27-60@901dbe2f`）
+//! ## 2.2 Sanxiu v5 / v6（`_upstream/CrystalStudio/Assets.cs:27-60`）
 //!
 //! ```text
 //! i32 version          // 5 或 6
@@ -42,7 +42,7 @@
 //! 第 `i` 张的偏移 = 起点 + Σ(length + maskLength)。`length` 与 `maskLength` 都在
 //! 打开时校验过「非负 + 不越过文件末尾」（`Assets.cs:54`），越界即整库打开失败。
 //!
-//! ## 2.3 帧头（v2/v3，`Assets.cs:86-87@901dbe2f`）
+//! ## 2.3 帧头（v2/v3，`_upstream/CrystalStudio/Assets.cs:86-87`）
 //!
 //! ```text
 //! i16 w, i16 h, i16 x, i16 y    // 尺寸与锚点
@@ -55,7 +55,7 @@
 //!
 //! # 三、像素口径：磁盘是 BGRA，对外是 RGBA
 //!
-//! 上游把解压后的字节直接塞给 `RasterFormats.Bgra32` 位图（`Assets.cs:105-106@901dbe2f`），
+//! 上游把解压后的字节直接塞给 `RasterFormats.Bgra32` 位图（`_upstream/CrystalStudio/Assets.cs:105-106`），
 //! 每个像素在内存里是 `B,G,R,A`。本 crate 的 [`Frame::rgba`] 契约是**行优先 RGBA8**，
 //! 因此这里必须逐像素换位（[`bgra_to_rgba`]）—— 少这一步颜色会整体错（蓝红互换），
 //! 且是「看起来像、其实不对」的那种错。
@@ -68,11 +68,11 @@
 //!
 //! | `fileType` | 数据 | 宽高取值 | 出处 |
 //! |---|---|---|---|
-//! | `0` | gzip 压缩的 BGRA | header 的 `w/h` | `Assets.cs:160-163@901dbe2f` |
-//! | `1` | 一整个图片文件（GIF/PNG…） | **解码出来那张图本身的宽高** | `Assets.cs:157-158@901dbe2f` |
-//! | 其它 | —— | 上游抛 `InvalidDataException` | `Assets.cs:159@901dbe2f` |
+//! | `0` | gzip 压缩的 BGRA | header 的 `w/h` | `_upstream/CrystalStudio/Assets.cs:160-163` |
+//! | `1` | 一整个图片文件（GIF/PNG…） | **解码出来那张图本身的宽高** | `_upstream/CrystalStudio/Assets.cs:157-158` |
+//! | 其它 | —— | 上游抛 `InvalidDataException` | `_upstream/CrystalStudio/Assets.cs:159` |
 //!
-//! `fileType == 1` 有一处**只在 `ReadHeader` 里**的特例（`Assets.cs:74-82@901dbe2f`）：
+//! `fileType == 1` 有一处**只在 `ReadHeader` 里**的特例（`_upstream/CrystalStudio/Assets.cs:74-82`）：
 //! header 的 `w/h` 非正时，去偏移处读 10 字节，若前 3 字节是 `GIF` 就把
 //! 第 6..8、8..10 字节当作小端 `u16` 的宽高。它只读 10 字节、不做完整解码，
 //! 所以本实现的 [`CrystalLibrary::read_header`] 照抄该回退，而
@@ -106,7 +106,7 @@
 //! # 七、存储后端：path-backed，按帧 seek（**不整文件读入**）
 //!
 //! 上游 `CrystalLibrary` 用 `File.OpenRead` 打开、再用 `Position` 定位到帧头读那一帧
-//! （`Assets.cs:85-106@901dbe2f`），内存里从没有过整库字节。本实现逐步同构：
+//! （`_upstream/CrystalStudio/Assets.cs:85-106`），内存里从没有过整库字节。本实现逐步同构：
 //!
 //! | 阶段 | 实际读什么 | 备注 |
 //! |---|---|---|
@@ -146,7 +146,7 @@ const MAX_IMAGES: i64 = 2_000_000;
 const MAX_DIMENSION: i32 = 8192;
 /// Sanxiu 头部长度上限：128 MiB（`Assets.cs:31`）。
 const MAX_SANXIU_HEADER: i64 = 128 * 1024 * 1024;
-/// Sanxiu 头的前缀长度：`version(4) + flag(1) + headerLength(4)`（`Assets.cs:27-31`）。
+/// Sanxiu 头的前缀长度：`version(4) + flag(1) + headerLength(4)`（`Assets.cs:26-30`）。
 const SANXIU_PREFIX_LEN: u64 = 9;
 /// Sanxiu 元数据的 `shadow` 字节里「后面还跟着遮罩元数据」的标志位（`Assets.cs:49`）。
 const MASK_FLAG: u8 = 0x80;
@@ -211,7 +211,7 @@ enum Backing {
     /// 磁盘文件：只记长度，**不持句柄、不读数据区**。
     ///
     /// 每次取帧都现开现关（`File::open` + `seek` + 读该帧），与上游
-    /// `File.OpenRead` + 按帧 `Position` 定位同构（`Assets.cs:85-106@901dbe2f`）。
+    /// `File.OpenRead` + 按帧 `Position` 定位同构（`_upstream/CrystalStudio/Assets.cs:85-106`）。
     /// 好处：`CrystalLibrary` 恒为 `Send + Sync`（没有共享游标），也不会因为
     /// [`crate::CrystalLibSource`] 的 LRU 淘汰而泄漏文件句柄。
     File {
@@ -386,7 +386,7 @@ impl CrystalLibrary {
         matches!(self.layout, Layout::Sanxiu { .. })
     }
 
-    /// 图片数（= 上游 `Count => offsets.Length`，`Assets.cs:17@901dbe2f`）。
+    /// 图片数（= 上游 `Count => offsets.Length`，`_upstream/CrystalStudio/Assets.cs:17`）。
     ///
     /// 这是**索引表长度**，含空帧/无效帧；不等于「能解码出像素的帧数」。
     pub fn count(&self) -> u32 {
@@ -483,7 +483,7 @@ impl CrystalLibrary {
     ///
     /// 三个 `Ok(None)` 出口与上游逐条对齐：
     ///
-    /// 1. 帧号越界（`Assets.cs:70,95@901dbe2f`）；
+    /// 1. 帧号越界（`_upstream/CrystalStudio/Assets.cs:70,95`）；
     /// 2. v2/v3 的 `w <= 0 || h <= 0`（`Assets.cs:103`）；
     /// 3. Sanxiu 的 `ReadHeader(index) == null`（`Assets.cs:154`）或 `length == 0`
     ///    （`ReadModernBytes` 返回 null，`Assets.cs:145`）或数据越界（同处）。
@@ -666,7 +666,7 @@ impl CrystalLibrary {
         }))
     }
 
-    /// `fileType == 1` 的 GIF 尺寸回退（`Assets.cs:74-82@901dbe2f`）。
+    /// `fileType == 1` 的 GIF 尺寸回退（`_upstream/CrystalStudio/Assets.cs:74-82`）。
     ///
     /// 上游只读 10 字节：前 3 字节是 `GIF` 时，`[6..8]`、`[8..10]` 小端 `u16` 即宽高。
     /// 读不到 10 字节 → 上游抛异常，这里给结构化错误。
@@ -738,7 +738,7 @@ fn parse(path: &Path, meta: &mut MetaAccess<'_>) -> Result<(u32, u32, Layout), A
     }
 }
 
-/// 解析 Sanxiu v5/v6 头部（`Assets.cs:27-60@901dbe2f`）。
+/// 解析 Sanxiu v5/v6 头部（`_upstream/CrystalStudio/Assets.cs:27-60`）。
 ///
 /// 只读 `9 + headerLength` 字节的头部（`headerLength` 上限 128 MiB，
 /// 真实素材远小于此），图片数据区不碰。
@@ -844,7 +844,7 @@ fn parse_sanxiu(
     Ok((count, Layout::Sanxiu { offsets, images }))
 }
 
-/// 解析 v2/v3 头部（`Assets.cs:63-66@901dbe2f`）。
+/// 解析 v2/v3 头部（`_upstream/CrystalStudio/Assets.cs:63-66`）。
 ///
 /// 只读 `8 或 12 + 4×count` 字节的偏移表（`count ≤ 2_000_000` ⇒ 最多 8 MB），
 /// 帧数据与帧头一个字节都不读。
@@ -867,7 +867,7 @@ fn parse_legacy(
         ));
     }
     if version == 3 {
-        // 上游读掉一个未使用的 i32（`Assets.cs:65@901dbe2f`），不做任何校验。
+        // 上游读掉一个未使用的 i32（`_upstream/CrystalStudio/Assets.cs:65`），不做任何校验。
         meta.read_i32(8)?
             .ok_or_else(|| header_err(path, "v3 头缺少保留字段（i32）"))?;
     }
@@ -941,7 +941,7 @@ fn expected_len(w: i32, h: i32) -> Option<usize> {
 
 /// gzip 解压并要求**恰好** `expected` 字节（不足 / 超长 / 坏流都算损坏）。
 ///
-/// 上游等价做法：`ReadExactly(raw)` + 再读一字节必须 EOF（`Assets.cs:105,162@901dbe2f`）。
+/// 上游等价做法：`ReadExactly(raw)` + 再读一字节必须 EOF（`_upstream/CrystalStudio/Assets.cs:105,162`）。
 /// 这里用 `take(expected + 1)` + `read_to_end`：既不预分配 `expected` 大小的缓冲
 /// （避免被伪造的超大头骗走内存），也天然把「多一字节」变成可见事实。
 fn gunzip_exact(
