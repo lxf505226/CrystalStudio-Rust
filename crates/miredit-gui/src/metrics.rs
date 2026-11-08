@@ -485,9 +485,35 @@ pub const ZOOM_PER_NOTCH: f32 = 1.15;
 /// 鼠标滚轮一格约 50px）。来源：推导 + egui 默认行高约定。
 pub const SCROLL_PX_PER_NOTCH: f32 = 50.0;
 
-/// 鼠标所在格的高亮描边宽 2。来源：截图金色选框描边 2px（x=607..608 连续两列金色像素）——
-/// 本单把这个已实测的值从"装饰框"改用到"悬停格边框"，宽度不变。
-pub const CELL_HOVER_STROKE: f32 = 2.0;
+/// 鼠标所在格的高亮描边宽 **4**（屏幕像素，不随缩放变）。
+///
+/// **上游出处（逐字）**：GitHub `fluttergo/CrystalStudio@a78affdf` 的
+/// `CrystalStudio/MapViewport.cs:144` ——
+/// `private static readonly ScenePen hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4);`
+/// 末位实参 `4` 即笔画宽。绘制点 `:305`
+/// `dc.DrawRectangle(null, hoverCellOutline, new(origin.X + cell.X * 48 * Zoom, …));`，
+/// 调用链 `:350 DrawHoverCell(dc);`（定义 `:298`）。
+/// 上游 `:304` 注释明写 `// Screen coordinates keep the stroke four pixels wide at every zoom.`
+/// ⇒ 4 是**屏幕像素**、不随 `Zoom` 缩放，与本仓 `border_w` 直接吃 f32 宽（不乘 scale）一致。
+///
+/// ⚠ **真值来源特殊：别指望在本地 `_upstream` 复核**。
+/// 本地 `_upstream/CrystalStudio` 是 `901dbe2f` 的**旧快照**（`MapViewport.cs` 604 行，
+/// SHA256 `097A244E…6520A`），`hoverCellOutline` / `DarkBlue` / `DrawHoverCell` 三符号
+/// **各 0 命中** —— 本符号是 `a78affdf`（617 行 / 40,168 B）才有的。
+/// 真值取自 GitHub `a78affdf` 的 `MapViewport.cs:144`（Lead 2026-11-08 用 GitHub API 取证；
+/// 修复代理 2026-11-08 用 `api.github.com/…/contents/CrystalStudio/MapViewport.cs?ref=a78affdf`
+/// 独立复核，解码后 617 行、四处行号逐字一致）。
+///
+/// **历史引用（保留，勿据此回改）**：本值原为 **2.0**，出处是**截图实测**「金色选框描边 2px」
+/// （`x=607..608` 连续两列金色像素），当时只是把装饰框的宽度挪用到悬停格边框。
+/// 现在 2 与 4 冲突：**2 是截图采样、4 是源码真值**，冲突时源码优先 ⇒ 取 4。
+///
+/// ⚠ **已知位置差（本单未改，待产品裁定）**：上游 `Pen` 是**居中**笔画
+/// （宽 4 ⇒ 边外 2 + 边内 2），本仓 `crate::paint::border_w` 只能**内贴**（4 全在边内）。
+/// 要完全对齐居中语义需在绘制处 `r.expand(2.0)`（本仓已有同款先例：`dock_right.rs:665`
+/// 小地图视口框 `Pen(Black,4)` 就是 `expand(2)` + 宽 4）。本单只按真值三要素
+/// （色 `#00008B` / α 0.7 / 宽 4）落地，**未擅自改几何**，差异已在交付说明登记。
+pub const CELL_HOVER_STROKE: f32 = 4.0;
 
 /// 重渲时为平移/大物件预留的余量 **10 格**（960×640 世界像素）。
 ///
@@ -1064,7 +1090,11 @@ pub const PALETTE_COMBO_ROW_H: f32 = 20.0;
 /// 库下拉弹层最多显示 **8** 行（= 160 px，向下不越过分页行）；更多的库靠滚轮翻。
 pub const PALETTE_COMBO_ROWS: usize = 8;
 
-/// 素材面板里"选中格"的金色描边宽 **2**（与画布悬停格 `CELL_HOVER_STROKE` 同档）。
+/// 素材面板里"选中格"的金色描边宽 **2**。
+///
+/// ⚠ 这里原写作「与画布悬停格 `CELL_HOVER_STROKE` 同档」，**该说法 2026-11-08 已过期**：
+/// 悬停框按上游 `MapViewport.cs:144`（`a78affdf`）订正为 **4**，本值**不动**——
+/// 它属素材面板选中态，上游没有对应真值，不该跟着悬停框变粗（4 会让 84×… 的缩略图格子发糊）。
 pub const PALETTE_SELECT_STROKE: f32 = 2.0;
 
 /// 网格与分页行之间那条**提示行**的高度 **16**。
@@ -1153,7 +1183,8 @@ pub const STAMP_AA_FONT: f32 = 10.5;
 
 /// 选区虚线的线宽 **1.5**。
 ///
-/// 推导：与既有 `CELL_HOVER_STROKE(2.0)` 同档偏细 —— 悬停框是"当前格"（要显眼），
+/// 推导：比悬停框**细一档** —— 悬停框是"当前格"（要显眼；其值 2026-11-08 已按上游
+/// `MapViewport.cs:144` 由 2.0 订正为 4.0，这里比较的是"粗细档位"而不是具体数值），
 /// 选区框是"一块区域"（要能看清框内的地图），1.5 在 100% 缩放下正好落在 1~2 物理像素之间，
 /// 既不会像 1px 那样被抗锯齿吃掉，也不会像 2px 那样盖住格子边。
 pub const SEL_STROKE_W: f32 = 1.5;
@@ -1176,7 +1207,11 @@ pub const SEL_GAP_LEN: f32 = 4.0;
 // "颜色本体取强调金 `#CC9629`" 的注释都是误记（金 × α40 是自造值，`theme.rs` 已订正为官方蓝），
 // 故整条删除，避免有人再照这个 α 去乘一次。
 
-/// 印章轮廓框的线宽 **2.0**（= `CELL_HOVER_STROKE`）。
+/// 印章轮廓框的线宽 **2.0**。
+///
+/// ⚠ 这里原写作「= `CELL_HOVER_STROKE`」，**该等式 2026-11-08 已不成立**：
+/// 后者按上游 `MapViewport.cs:144` 订正为 4.0，本值**不变**——印章轮廓是"待放置预览框"，
+/// 上游没有它的真值，不该跟着悬停框变粗。
 ///
 /// 推导：轮廓是**只有边框、不画任何像素**的预览（任务书 §三.5 明令"不许画假像素"），
 /// 所以它必须比选区虚线更粗一点，才能在"没有填充色"的情况下被认出来。

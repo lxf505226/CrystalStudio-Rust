@@ -143,8 +143,27 @@ pub struct Palette {
     pub accent_soft: Color32,
     /// 主按钮文字色（在 `accent` 底上的字）。
     pub accent_button_text: Color32,
-    /// 画布上**鼠标所在格**的描边色。
-    pub cell_hover_gold: Color32,
+    /// 画布上**鼠标所在格**的描边色：深蓝 `#00008B` @ α 0.7（预乘落 `rgba_pm(0, 0, 97, 179)`）。
+    ///
+    /// **上游出处（逐字）**：GitHub `fluttergo/CrystalStudio@a78affdf` 的
+    /// `CrystalStudio/MapViewport.cs:144`
+    /// `private static readonly ScenePen hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4);`
+    /// —— 颜色 `Colors.DarkBlue`（Avalonia/System.Drawing 常量 = `#00008B`，即 RGB(0,0,139)）、
+    /// 不透明度 `.7`；`MapViewport.cs:305` 用它描悬停格。
+    /// ⚠ 本地 `_upstream` 是 `901dbe2f` **旧快照**（604 行），`DarkBlue` **0 命中**；
+    /// 真值来自 `a78affdf`（617 行），取证说明同 `metrics::CELL_HOVER_STROKE`。
+    ///
+    /// ⚠ **两套主题同值，因为上游是硬编码常量、不是主题刷**：
+    /// 上游这一行**不经** `ThemeService.Brush(...)` —— 对比同文件 `:143`
+    /// `private static ScenePen cursor => new(ThemeService.Brush("Accent"), 1.5);`（那才是主题刷），
+    /// 以及 `App.axaml` 里 `ThemeXXXXXX` 那些键。`ImmutableSolidColorBrush(Colors.DarkBlue, .7)`
+    /// 是**写死的** ⇒ 深浅两套必须逐字节相同，已登记进 `same_ok`，并由
+    /// [`主题无关字段取官方常量`] 按官方 straight-alpha 逐通道钉住（防"两套都抄错但抄成一样"）。
+    ///
+    /// **字段名**：原名 `cell_hover_gold` —— 真值是深蓝，「gold」已不成立（2026-11-08 改名）。
+    /// 新名与上游标识符 `hoverCellOutline` 一一对应，且避免与 `metrics::CELL_HOVER_STROKE`
+    /// （线宽常量）只差大小写、让 `grep` 互相污染。
+    pub cell_hover_outline: Color32,
     /// **悬停地砖信息浮层**里「不可行走」那行的字色（红）。
     ///
     /// ⚠ 官方 `MainWindow.CellHover.cs:61`
@@ -333,8 +352,21 @@ pub const LIGHT: Palette = Palette {
     accent_soft: Color32::from_rgb(0xF7, 0xEF, 0xDE),
     // 金按钮文字。`Set Library Folder` 文字区域最暗像素 = `#000000`。
     accent_button_text: Color32::from_rgb(0x00, 0x00, 0x00),
-    // 悬停格描边。截图 (607..896,813..911) 金色像素众数 `#D2AA59`（占该掩码 82%）。
-    cell_hover_gold: Color32::from_rgb(0xD2, 0xAA, 0x59),
+    // 悬停格描边。官方: MapViewport.cs:144@a78affdf
+    //       `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`（**写死常量**，不经 ThemeService）。
+    //       `Colors.DarkBlue` = `#00008B`（RGB 0,0,139）、α = 0.7。
+    //       预乘换算（**截断**口径，与本文件 `grid_line`/`selection_fill` 一致）：
+    //         α = 0.7×255 = 178.5 → **179**
+    //         R = 0×179/255 = 0、G = 0×179/255 = 0
+    //         B = 139×179/255 = 24881/255 = 97.57 → **97**（截断）
+    //       ⇒ `rgba_pm(0, 0, 97, 179)`。
+    //       ⚠ 若改用 `Color32::from_rgba_unmultiplied(0,0,139,179)` 得 **98**
+    //         （ecolor 0.33.3 的 `from_rgba_unmultiplied` 走 `fast_round` = 四舍五入），
+    //         差 1/255；本文件半透明色统一走 `rgba_pm` + 截断口径 ⇒ 取 97，
+    //         且与守卫用例里独立实现的 `pm`（`c*a/255` 整除）逐字节一致。
+    //       ⚠ 历史引用：本字段旧值 `#D2AA59`（截图 (607..896,813..911) 金色像素众数，
+    //         占该掩码 82%）——那是**截图采样**，与源码真值冲突时源码优先，已订正。
+    cell_hover_outline: rgba_pm(0, 0, 97, 179),
     // 悬停浮层「不可行走」字色。官方: MainWindow.CellHover.cs:61 `Brushes.Red`（写死常量、
     //       不经 ThemeService）⇒ 两套板同值；α=255 ⇒ 预乘与原值相同。
     hover_blocked_text: rgba_pm(255, 0, 0, 255),
@@ -512,10 +544,15 @@ pub const DARK: Palette = Palette {
     // 官方: ThemeService.Avalonia.cs:52 `OnAccent` = 亮度 > 145 ? 黑 : 白。
     //       accent `#8498FF` 亮度 = 132×.2126 + 152×.7152 + 255×.0722 = 155.2 > 145 ⇒ 黑。
     accent_button_text: Color32::from_rgb(0x00, 0x00, 0x00),
-    // 官方: ThemeService.Avalonia.cs:46 的**深色蓝键公式** `Blend(accent, White, 0.30)`
-    //       = (132,152,255)×0.7 + 255×0.3 = (168.9,182.9,255) ⇒ `#A8B6FF`。
-    //       （浅色那支同公式是 `Blend(accent, Black, 0.15)`，与截图取样 `#D2AA59` 属同一"强调色描边"角色。）
-    cell_hover_gold: Color32::from_rgb(0xA8, 0xB6, 0xFF),
+    // 悬停格描边（**与浅色板同值**）：官方 MapViewport.cs:144@a78affdf 写死
+    //       `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`，不经 ThemeService ⇒ 深色板不另算。
+    //       预乘换算（**截断**口径）：α=0.7×255=178.5→179；R=G=0；
+    //       B=139×179/255=97.57→97 ⇒ `rgba_pm(0, 0, 97, 179)`（算式与浅色板同一条，见上）。
+    //       ⚠ 历史引用：深色板旧值 `#A8B6FF` 来自
+    //         `ThemeService.Avalonia.cs:46` 的 `Blend(accent, White, 0.30)` 公式 ——
+    //         那是"强调色描边"角色（`ThemeXXXXXX` 类主题刷）的推导，**不是**悬停框的真值来源；
+    //         悬停框上游是硬编码常量，故深浅同值。该推导已作废，保留仅为追溯。
+    cell_hover_outline: rgba_pm(0, 0, 97, 179),
     // 同上：官方写死的 `Brushes.Red`，深色板同值。
     hover_blocked_text: rgba_pm(255, 0, 0, 255),
     // 官方: ThemeService.Avalonia.cs:55 `resources["CanvasGrid"] = … : Color.FromArgb(38, 160, 177, 199)`
@@ -627,18 +664,23 @@ pub fn ui() -> &'static Palette {
 mod tests {
     use super::*;
 
-    /// 两套色板必须**逐字段**都不相同（除了官方"与主题无关"的五项，见 `same_ok`）。
+    /// 两套色板必须**逐字段**都不相同（除了官方"与主题无关"的那几项，见 `same_ok`）。
     ///
     /// 这条挡的是"深色板漏抄一个字段，于是那一处仍然浅色"——那正是本单要防的回归。
     ///
     /// ⚠ `same_ok` **不是放宽**：进这张表的每个字段都有官方依据证明它**本就与主题无关**
-    /// （遮罩压在**地图**上；`OnAccent` 算出来两套都是黑；`CollisionMarkers.cs:6-7` 与
-    /// `MapViewport.cs:295` 都是写死常量、不经 `ThemeService`）。
+    /// （遮罩压在**地图**上；`OnAccent` 算出来两套都是黑；`CollisionMarkers.cs:6-7`、
+    /// `MapViewport.cs:295` 与 `MapViewport.cs:144@a78affdf` 都是写死常量、不经 `ThemeService`）。
     /// 反向纪律：凡是"官方有主题相关来源"的字段**一律不许**进这张表 —— 那才是真的把回归放过去。
-    /// 这五项另由 [`主题无关字段取官方常量`] 逐字节钉住官方值，防止"两套都抄错但抄成一样"。
+    /// 这张表里的每一项另由 [`主题无关字段取官方常量`] 逐字节钉住官方值，
+    /// 防止"两套都抄错但抄成一样"。
+    ///
+    /// 📌 **2026-11-08 变动**：`cell_hover_outline`（原 `cell_hover_gold`）由 `pairs` **移入**本表 ——
+    /// 上游 `MapViewport.cs:144@a78affdf` 是 `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`
+    /// 硬编码常量，不是 `ThemeXXXXXX` 主题刷 ⇒ 深浅必须同值。总数仍 49（一进一出，见断言）。
     #[test]
     fn 两套色板逐字段不同() {
-        // 与主题无关的五项（逐条依据见上）。
+        // 与主题无关的那几项（逐条依据见上）。
         let same_ok = [
             "modal_scrim",
             "accent_button_text",
@@ -649,6 +691,10 @@ mod tests {
             // A-011：落位诊断两色与主题无关（压在游戏画面上的硬编码诊断色）
             "stamp_blocked",
             "stamp_boundary",
+            // 2026-11-08：悬停格描边。上游 `MapViewport.cs:144@a78affdf` 写死
+            // `ImmutableSolidColorBrush(Colors.DarkBlue, .7)`（不经 `ThemeService`）
+            // ⇒ 深浅同值；官方值由 [`主题无关字段取官方常量`] 逐通道钉住。
+            "cell_hover_outline",
         ];
         let pairs = [
             ("title_bar", LIGHT.title_bar, DARK.title_bar),
@@ -676,7 +722,7 @@ mod tests {
             ("accent", LIGHT.accent, DARK.accent),
             ("accent_dark", LIGHT.accent_dark, DARK.accent_dark),
             ("accent_soft", LIGHT.accent_soft, DARK.accent_soft),
-            ("cell_hover_gold", LIGHT.cell_hover_gold, DARK.cell_hover_gold),
+            // `cell_hover_outline` 不在此列：上游是硬编码常量 ⇒ 已移入 `same_ok`（见上）。
             ("grid_line", LIGHT.grid_line, DARK.grid_line),
             ("separator", LIGHT.separator, DARK.separator),
             ("dock_divider", LIGHT.dock_divider, DARK.dock_divider),
@@ -707,7 +753,7 @@ mod tests {
         assert_eq!(
             pairs.len() + same_ok.len(),
             49,
-            "字段清单要覆盖全部 49 项（A-011 加了两条诊断色；B1-FIX 加了标签条三色：容器底/悬停底/选中下划线；B2 加了关闭符悬停底 close_hover_bg）"
+            "字段清单要覆盖全部 49 项（A-011 加了两条诊断色；B1-FIX 加了标签条三色：容器底/悬停底/选中下划线；B2 加了关闭符悬停底 close_hover_bg；2026-11-08 悬停格描边由 pairs 移入 same_ok，一进一出、总数不变）"
         );
         for (name, l, d) in pairs {
             assert_ne!(l, d, "字段 {name} 两套色板相同（深色模式会漏变）");
@@ -716,9 +762,11 @@ mod tests {
 
     /// **主题无关字段取官方常量**（与 `same_ok` 配对，防止"两套都抄错但抄成一样"）。
     ///
-    /// 这三项官方都是**写死常量、不经 `ThemeService`** ⇒ 深浅两套必须**逐字节等于官方预乘值**：
+    /// 这几项官方都是**写死常量、不经 `ThemeService`** ⇒ 深浅两套必须**逐字节等于官方预乘值**：
     /// - 低/高位阻挡：`CollisionMarkers.cs:6-7` `Color.FromArgb(90, 240, 85, 105)` / `(90, 65, 165, 245)`
     /// - 选区填充：`MapViewport.cs:295` `Color.FromArgb(30, 110, 150, 255)`
+    /// - 悬停格描边：`MapViewport.cs:144@a78affdf`
+    ///   `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)` ⇒ `#00008B` @ α0.7
     ///
     /// ⚠ 为什么必须有这条：`same_ok` 让它们退出"两套必须不同"的检查，**只退出不补就真是放宽了**。
     /// 这条把"退出逐字段不同"换成"必须等于官方"，强度只增不减。
@@ -730,9 +778,17 @@ mod tests {
     /// （`Color32::r/g/b` 返回的正是预乘后的字节，见 `ecolor` 的 `color32.rs:211-233`）。
     #[test]
     fn 主题无关字段取官方常量() {
-        /// 官方 straight-alpha → 预乘（**截断**口径，与 `egui` 的 `from_rgba_unmultiplied`
-        /// 同一个整数除法）。**测试内独立实现**：生产代码那个 `rgba_pm` 只做
+        /// 官方 straight-alpha → 预乘（**截断**口径，`c × a / 255` 整数除法）。
+        /// **测试内独立实现**：生产代码那个 `rgba_pm` 只做
         /// `from_rgba_premultiplied`、不含除法，两者没有共同实现可复用。
+        ///
+        /// ⚠ 2026-11-08 显式订正：这里原写「与 `egui` 的 `from_rgba_unmultiplied`
+        /// 同一个整数除法」，**该说法是错的**。实读 `ecolor 0.33.3`
+        /// （`src/color32.rs`，`Cargo.lock` 钉的版本）的 `from_rgba_unmultiplied`：
+        /// `fast_round(value as f32 * linear_f32_from_linear_u8(alpha))` ⇒ **四舍五入**，
+        /// 与本用例的**截断**在边界上会差 1（例：`139×179/255 = 97.57`，
+        /// 截断 97 / 四舍五入 98）。本仓半透明色统一按**截断**落盘，故本用例保留截断，
+        /// 并请勿据此注释去改用 `from_rgba_unmultiplied`（会与既有字段口径不一致）。
         fn pm(c: u8, a: u8) -> u8 {
             (u16::from(c) * u16::from(a) / 255) as u8
         }
@@ -762,6 +818,16 @@ mod tests {
                 (255, 255, 0, 0),
                 LIGHT.hover_blocked_text,
                 DARK.hover_blocked_text,
+            ),
+            (
+                // 官方 `MapViewport.cs:144@a78affdf`
+                // `new ImmutableSolidColorBrush(Colors.DarkBlue, .7)`
+                // ⇒ `Colors.DarkBlue` = `#00008B`（RGB 0,0,139）、α = 0.7×255 = 178.5 → 179。
+                // 期望预乘：R=0、G=0、B=139×179/255=97.57→**97**（截断）、α=179。
+                "cell_hover_outline",
+                (179, 0, 0, 139),
+                LIGHT.cell_hover_outline,
+                DARK.cell_hover_outline,
             ),
         ];
         for (name, (a, r, g, b), l, d) in cases {

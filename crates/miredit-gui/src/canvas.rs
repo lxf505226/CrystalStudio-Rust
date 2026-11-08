@@ -301,10 +301,17 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
         crate::grid::draw_in(&pv, l.viewport, c.view, Some((c.map_w, c.map_h)));
     }
 
-    // 悬停格高亮（2px 金边，颜色沿用截图实测的 `#D2AA59`）
+    // 悬停格高亮：宽 4、深蓝 `#00008B` @ α0.7（预乘 `rgba_pm(0, 0, 97, 179)`）。
+    // 上游 `MapViewport.cs:144@a78affdf`
+    // `hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4)`，
+    // 绘制点 `:305`（`:350` 调 `DrawHoverCell`）。上游 `:304` 注释
+    // `// Screen coordinates keep the stroke four pixels wide at every zoom.`
+    // ⇒ 宽是**屏幕像素**、不随缩放变；本仓 `border_w` 吃 f32 宽、不乘 scale，口径一致。
+    // ⚠ 上游 `Pen` 居中（边外 2 + 边内 2），本仓 `border_w` 只能内贴 —— 位置差已登记在
+    //    `metrics::CELL_HOVER_STROKE` 的文档里（本单未擅自改几何）。
     if let Some((x, y)) = c.hover {
         let r = c.view.cell_rect(l.viewport, i32::from(x), i32::from(y));
-        pt::border_w(&pv, r, m::CELL_HOVER_STROKE, t::ui().cell_hover_gold);
+        pt::border_w(&pv, r, m::CELL_HOVER_STROKE, t::ui().cell_hover_outline);
     }
 
     // ── 编辑器叠加层（2026-11-05）：矩形选区 → 印章待放置轮廓 → 待放置徽标 ──
