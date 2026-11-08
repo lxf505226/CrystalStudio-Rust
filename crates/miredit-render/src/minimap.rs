@@ -18,18 +18,18 @@
 //!
 //! # 一、官方口径（`@acfbbf8a` 回源订正，2026-11-06）
 //!
-//! 官方尺寸口径见 `I:\cs-new\MinimapExporter.cs` + `MinimapExportWindow.cs`：
+//! 官方尺寸口径见 `_upstream/CrystalStudio/MinimapExporter.cs` + `MinimapExportWindow.cs`：
 //!
 //! 1. **默认输出尺寸**：`width = document.Width * 12`、`height = document.Height * 8`
-//!    （`MinimapExporter.cs:20`），**不是 2048 长边**；
+//!    （`_upstream/CrystalStudio/MinimapExporter.cs:20`），**不是 2048 长边**；
 //! 2. **三档预设**：以 `Width*48` / `Height*32` 为基准除以 `{4, 2, 1}`，选中预设时
 //!    `checked(document.Width * 48 / divisor)` / `checked(document.Height * 32 / divisor)`
-//!    （`MinimapExportWindow.cs:36-38`）；
+//!    （`_upstream/CrystalStudio/MinimapExportWindow.cs:36-38`）；
 //! 3. **合法尺寸判据**：`w > 0 && h > 0 && (long)w*h <= Array.MaxLength / 4`
-//!    （`MinimapExporter.cs:15-16`）；本仓等价换算见 [`MINIMAP_MAX_PIXELS`]；
+//!    （`_upstream/CrystalStudio/MinimapExporter.cs:15-16`）；本仓等价换算见 [`MINIMAP_MAX_PIXELS`]；
 //! 4. **精度/换算公式**：`scale = min(width/(W*48.0), height/(H*32.0))`、
 //!    `level = scale >= 1 ? 0 : clamp((int)floor(log2(1/scale)), 0, 16)`
-//!    （`MinimapExporter.cs:47-48`）。官方用 16 级 overview mip，本仓只有 4 档
+//!    （`_upstream/CrystalStudio/MinimapExporter.cs:47-48`）。官方用 16 级 overview mip，本仓只有 4 档
 //!    ⇒ [`pick_official_scale`] 按「最接近且不越界」做**有据映射，不是自定值**。
 //!
 //! # 二、本仓更严的护栏（**保留更严者，不放宽**）
@@ -43,7 +43,7 @@ use crate::{RenderScale, CELL_H, CELL_W};
 /// 官方 `ValidSize(w,h)` 的**本仓 Rust 等价上限**（像素数，不是字节数）。
 ///
 /// 官方（.NET）：`w > 0 && h > 0 && (long)w*h <= Array.MaxLength / 4`
-/// （`I:\cs-new\MinimapExporter.cs:15-16`）。`Array.MaxLength = 0x7FFFFFC7`，
+/// （`_upstream/CrystalStudio/MinimapExporter.cs:15-16`）。`Array.MaxLength = 0x7FFFFFC7`，
 /// `/4 = 536,870,897` 个 `u32`，对应 **RGBA8 恰为 `2,147,483,588 B = 2 GiB - 4 B`**；
 /// 本仓 `ExportImage.rgba: Vec<u8>` 按字节分配，`isize::MAX` 在 64 位是
 /// `0x7FFF_FFFF_FFFF_FFFF`（9,223,372,036,854,775,807 B），令
@@ -69,7 +69,7 @@ pub const MAX_EXPORT_BYTES: u64 = 512 * 1024 * 1024;
 
 /// 官方三档小地图预设（基准 `W*48 × H*32`，除以 4 / 2 / 1）。
 ///
-/// @acfbbf8a `MinimapExportWindow.cs:21,36-38`：
+/// `_upstream/CrystalStudio/MinimapExportWindow.cs:21,36-38`：
 /// `Small (¼)` / `Medium (½)` / `Large (1:1)`，选中时写入
 /// `checked(document.Width * 48 / divisor)` 与 `checked(document.Height * 32 / divisor)`。
 /// 本枚举的 [`MinimapPreset::divisor`] 就是那三个除数，不另造倍率。
@@ -85,7 +85,7 @@ pub enum MinimapPreset {
 
 impl MinimapPreset {
     /// 官方 `new[] { 4, 2, 1 }[Preset.SelectedIndex]` 的除数
-    /// （`MinimapExportWindow.cs:36`；同处 `:37-38` 是
+    /// （`_upstream/CrystalStudio/MinimapExportWindow.cs:36`；同处 `:37-38` 是
     /// `checked(document.Width * 48 / divisor)` / `checked(document.Height * 32 / divisor)`）。
     pub const fn divisor(self) -> u32 {
         match self {
@@ -119,7 +119,7 @@ impl MinimapPreset {
 /// 「两个可空参数都缺省」/「尺寸面板预设」/「手动填宽高」。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum MinimapSize {
-    /// 官方默认：`W*12 × H*8`（`MinimapExporter.cs:20`）。
+    /// 官方默认：`W*12 × H*8`（`_upstream/CrystalStudio/MinimapExporter.cs:20`）。
     #[default]
     Default,
     /// 官方三档预设：`W*48/divisor × H*32/divisor`。
@@ -140,7 +140,7 @@ impl MinimapSize {
     /// 溢出返回中文原因，不静默截断。
     pub fn resolve(self, cells_w: u32, cells_h: u32) -> Result<(u32, u32), String> {
         let (width, height) = match self {
-            // 官方 `MinimapExporter.cs:20`：`width = outputWidth ?? checked(document.Width * 12)`、
+            // 官方 `_upstream/CrystalStudio/MinimapExporter.cs:20`：`width = outputWidth ?? checked(document.Width * 12)`、
             // `height = outputHeight ?? checked(document.Height * 8)`（缺省值，不是 2048 长边）。
             Self::Default => (u64::from(cells_w) * 12, u64::from(cells_h) * 8),
             Self::Preset(p) => {
@@ -163,7 +163,7 @@ impl MinimapSize {
 
 /// 官方 `ValidSize` 的等价判据 + 本仓更严的内存护栏（**不静默截断/降级**）。
 ///
-/// @acfbbf8a `MinimapExporter.cs:15-16,21-23`：官方只判 `w>0 && h>0 && w*h <= Array.MaxLength/4`；
+/// `_upstream/CrystalStudio/MinimapExporter.cs:15-16,21-23`：官方只判 `w>0 && h>0 && w*h <= Array.MaxLength/4`；
 /// 本仓 [`MINIMAP_MAX_PIXELS`] 是该 .NET 数字按 `Vec<u8>` / `isize::MAX` 做的等价换算
 /// （不是抄数字），同时 [`MAX_EXPORT_SIDE`] / [`MAX_EXPORT_BYTES`] 更严，冲突时**保留更严者**。
 /// ⇒ 0 / 超大像素一律给中文原因并拒绝。
@@ -197,10 +197,10 @@ pub fn valid_minimap_size(width: u32, height: u32) -> Result<(), String> {
 
 /// 官方 16 级 overview mip → 本仓 4 档的**有据映射**（不是自定值）。
 ///
-/// @acfbbf8a `MinimapExporter.cs:47-48`：
+/// `_upstream/CrystalStudio/MinimapExporter.cs:47-48`：
 /// `scale = min(width/(W*48.0), height/(H*32.0))`；
 /// `level = scale >= 1 ? 0 : clamp(floor(log2(1/scale)), 0, 16)`；
-/// 官方 `Assets.cs:119` 的 `1 << level` 把源图缩小 `2^level` 倍。
+/// 官方 `_upstream/CrystalStudio/Assets.cs:119` 的 `1 << level` 把源图缩小 `2^level` 倍。
 /// 本仓 [`RenderScale`] 只有 `Quarter(1/4) / Half(1/2) / One(1) / Two(2)`，
 /// **没有 16 级 mip** ⇒ 取「最接近且不越过目标尺寸的档位」：
 ///
@@ -214,11 +214,11 @@ pub fn valid_minimap_size(width: u32, height: u32) -> Result<(), String> {
 /// ⚠ **官方用 16 级 overview mip，本仓只有 4 档 ⇒ 有据映射，不是自定值**。
 /// 目标像素尺寸最终仍由 [`crate::preview_raster::fit_centered_opaque`] 精确落到
 /// [`valid_minimap_size`] 判过的宽高（等比 + 居中 + 不透明黑底 + 最近邻，上游
-/// `PreviewRaster.cs:15-19,35-38`），不放大采样核、不改任何 render 常量。
+/// `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38`），不放大采样核、不改任何 render 常量。
 ///
 /// ⚠ **订正（2026-11-08）**：本行原文写的是「最终仍由 [`crate::compare::resize_to`]
 /// 精确落到 …」，那是**旧口径**（面积平均、且目标宽高原样铺满 ⇒ 非等比请求会拉伸失真）。
-/// 按上游 `MinimapExporter.cs:56-57` → `PreviewRaster.cs:15-19,35-38` 改为上面这条。
+/// 按上游 `_upstream/CrystalStudio/MinimapExporter.cs:56-57` → `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38` 改为上面这条。
 /// 原文保留作历史引用；`resize_to` 本身**没动**（仍服务 mip 预缩与诊断）。
 pub fn pick_official_scale(
     cells_w: u32,

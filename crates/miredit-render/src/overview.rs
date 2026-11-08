@@ -4,14 +4,14 @@
 //!
 //! | 环节 | 上游 | 本模块对应 |
 //! |---|---|---|
-//! | 窗内小地图取像素 | `MapMinimap.Avalonia.cs:45` → `:50 source.OverviewScene`（`MapViewport.Minimap.cs:7`） | [`render_overview`] 的输出 |
-//! | 换图时**无条件**建 level 4 总览 | `MapViewport.cs:145`（`WarmOverview()`）→ `Overview.cs:42-47`（`StartOverview(settings, 4)`） | 档位由调用方传 `level`（本模块不替产品选档） |
-//! | 逐帧预缩 | `Assets.cs:119` `width = max(1, (w + (1<<level) - 1) >> level)` | [`预缩帧`]（同一算式：向上取整、下限 1） |
-//! | 合成 | `OverviewBatch.cs:25-104`（4 层 + 行带） | 本模块的三层循环（层序 / 层内序照 [`crate::compose`]） |
+//! | 窗内小地图取像素 | `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:45` → `:50 source.OverviewScene`（`_upstream/CrystalStudio/MapViewport.Minimap.cs:7`） | [`render_overview`] 的输出 |
+//! | 换图时**无条件**建 level 4 总览 | `_upstream/CrystalStudio/MapViewport.cs:145`（`WarmOverview()`）→ `_upstream/CrystalStudio/MapViewport.Overview.cs:42-47`（`StartOverview(settings, 4)`） | 档位由调用方传 `level`（本模块不替产品选档） |
+//! | 逐帧预缩 | `_upstream/CrystalStudio/Assets.cs:119` `width = max(1, (w + (1<<level) - 1) >> level)` | [`预缩帧`]（同一算式：向上取整、下限 1） |
+//! | 合成 | `_upstream/CrystalStudio/OverviewBatch.cs:25-104`（4 层 + 行带） | 本模块的三层循环（层序 / 层内序照 [`crate::compose`]） |
 //!
 //! **为什么必须逐帧预缩、不能「先按 1× 合成再整幅缩小」**：`700×700` 格的地图，
 //! 1× 画布是 `33600 × 22400 px = 3.0 GiB`，先合成再缩必然把内存顶爆 —— 上游正是为此
-//! 才在**解码时**就按 level 缩小（`Assets.cs:108-140` 的 `DecodeOverview`），本模块同口径。
+//! 才在**解码时**就按 level 缩小（`_upstream/CrystalStudio/Assets.cs:108-140` 的 `DecodeOverview`），本模块同口径。
 //!
 //! # 二、放置口径与 [`crate::compose`] **同源**（本模块最要紧的一条）
 //!
@@ -42,7 +42,7 @@
 //! 1. **判定在分配之前**：先定档、再 `Canvas::new`，不存在「先申请再缩」；
 //! 2. **不静默降档截断**：抬档是**换分辨率**（不是裁掉/截屏），且用 [`Overview::level`]
 //!    如实回报实际档位 —— 调用方看得到图是 `1/32` 还是 `1/16` 的；
-//! 3. **到 16 就报错**：16 是上游 mip 上限（`MinimapExporter.cs:47-48` 的
+//! 3. **到 16 就报错**：16 是上游 mip 上限（`_upstream/CrystalStudio/MinimapExporter.cs:47-48` 的
 //!    `clamp(..., 0, 16)`），不再无限抬。
 //!
 //! # 四、已知差异与不做的事（如实登记，不静默）
@@ -98,7 +98,7 @@ use crate::types::{LayerMask, RenderOptions, CELL_H, CELL_W};
 
 /// 总览级别的**上游上限**（16 级 mip）。
 ///
-/// 出处：`MinimapExporter.cs:47-48` 的 `level = clamp((int)floor(log2(1/scale)), 0, 16)`。
+/// 出处：`_upstream/CrystalStudio/MinimapExporter.cs:47-48` 的 `level = clamp((int)floor(log2(1/scale)), 0, 16)`。
 /// 超过它一律报 [`OverviewError::LevelOutOfRange`]，不再无限抬档。
 pub const OVERVIEW_MAX_LEVEL: u8 = 16;
 
@@ -376,7 +376,7 @@ fn 定档(
 /// （`底边锚点` 的 `32 - 帧高`、`library == 28` 特例的 `X/Y`），不是预缩后的尺寸
 /// ⇒ 预缩完就能把 1× 像素丢掉（本结构只留元数据），避免整幅原帧常驻内存。
 struct 缩帧 {
-    /// 已按 `2^level` 预缩的帧（尺寸 = `max(1, (w + s - 1) >> level)`，上游 `Assets.cs:119`）。
+    /// 已按 `2^level` 预缩的帧（尺寸 = `max(1, (w + s - 1) >> level)`，上游 `_upstream/CrystalStudio/Assets.cs:119`）。
     图: Rc<Frame>,
     /// 原帧宽（1×，落格用）。
     原宽: u32,
@@ -388,7 +388,7 @@ struct 缩帧 {
 
 /// 取一帧并按 `2^level` 盒式预缩，按 `(库, 帧号)` 缓存（`None` 也缓存）。
 ///
-/// - **尺寸**：`max(1, (w + (1<<level) - 1) >> level)`，逐字照上游 `Assets.cs:119`；
+/// - **尺寸**：`max(1, (w + (1<<level) - 1) >> level)`，逐字照上游 `_upstream/CrystalStudio/Assets.cs:119`；
 /// - **采样**：复用 [`resize_to`]（面积平均），**本模块不另写采样器**；
 /// - **条目上限**：[`MAX_CACHE_ENTRIES`]（与 `frames` 的 1× 缓存同一条纪律）——
 ///   超出后**停止新增**，宁可重复取帧/预缩也不无限吃内存（正确性不受影响）。

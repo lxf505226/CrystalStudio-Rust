@@ -370,7 +370,7 @@ fn 合成_三档亮度严格递增() {
 fn 合成_物件层关掉时只压暗不加光() {
     let (map, src, vp) = 合成场景();
     let (cx, cy) = 光心(&vp, 0, 0, 9).expect("光心应落在视口内");
-    // 关掉物件层：官方 `Presentation.cs:73` 的 `if (VisibleLayers[2])` ⇒ 只画遮罩、不叠光
+    // 关掉物件层：官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:73` 的 `if (VisibleLayers[2])` ⇒ 只画遮罩、不叠光
     let 无物件层 = try_render_region_with_options(
         &map,
         &src,
@@ -467,7 +467,7 @@ fn 合成_没有前景图的格子不发光() {
 
 #[test]
 fn 合成_视口外的光源会外溢进来() {
-    // 官方遍历整份文档的光源（`Presentation.cs:73`）⇒ 视口外的光源也会外溢进视口。
+    // 官方遍历整份文档的光源（`_upstream/CrystalStudio/MapViewport.Presentation.cs:73`）⇒ 视口外的光源也会外溢进视口。
     // 本库用「视口外扩 16 格」等价实现（`lighting::扫描外扩格数`），本测试钉住它真的生效。
     //
     // 光源格 (5,5) 在视口 (0,10,20×10) **上方 5 格**（图内、但不在视口内）；
@@ -618,7 +618,7 @@ fn 合成_锚点为零时与改前逐字节相同() {
 #[test]
 fn 合成_开门不移动光罩() {
     // ★ 官方光罩用**静态基准帧**的 `sprite.X/Y`（`(fr_img & 0x7FFF) - 1`），
-    //   不含门偏移（`Presentation.cs:84-86`）。若光罩沿用了前景层的「当前帧号」（含门偏移），
+    //   不含门偏移（`_upstream/CrystalStudio/MapViewport.Presentation.cs:84-86`）。若光罩沿用了前景层的「当前帧号」（含门偏移），
     //   开门时光罩会跟着跳到门帧的锚点上。
     //
     // 判据设计：假源对**任何帧号**都返回同一块纯白像素 ⇒ 门开只可能通过「锚点」影响画面。

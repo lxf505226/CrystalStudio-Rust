@@ -225,12 +225,12 @@ fn 验收门3_真实地图抽样渲染并导出png() {
 // 验收门 6~9：低/高位阻挡可视化通道（默认关闭，开了才画）
 //
 //   口径（crate 文档 §七）：低阻挡 = `wBkImg & 0x8000`、高阻挡 = `wFrImg & 0x8000`
-//   （客户端 `TMap.cpp:339`）；颜色/形状/透明度借 C# `CollisionMarkers.cs:6-7,19-25`。
+//   （客户端 `TMap.cpp:339`）；颜色/形状/透明度借 C# `_upstream/CrystalStudio/CollisionMarkers.cs:6-7,19-25`。
 // =============================================================================
 
-/// 低阻挡标记色 + 默认 alpha（`CollisionMarkers.cs:6`）。
+/// 低阻挡标记色 + 默认 alpha（`_upstream/CrystalStudio/CollisionMarkers.cs:6`）。
 const 低标记: [u8; 4] = [240, 85, 105, CollisionOverlay::DEFAULT_ALPHA];
-/// 高位阻挡标记色 + 默认 alpha（`CollisionMarkers.cs:7`）。
+/// 高位阻挡标记色 + 默认 alpha（`_upstream/CrystalStudio/CollisionMarkers.cs:7`）。
 const 高标记: [u8; 4] = [65, 165, 245, CollisionOverlay::DEFAULT_ALPHA];
 
 /// 直接从 `mir2-map` 的格数据数「窗口内带某位」的格数 —— **完全不经过渲染库**，

@@ -4,17 +4,17 @@
 //!
 //! | 口径 | 上游位置 | 原式 |
 //! |---|---|---|
-//! | 等比缩放比 | `PreviewRaster.cs:15` | `double scale = Math.Min((width - padding*2)/area.Width, (height - padding*2)/area.Height);` |
-//! | 居中偏移 | `PreviewRaster.cs:16-17` | `offsetX = (width - area.Width*scale)/2 - area.X*scale;`（`offsetY` 同形）|
-//! | 不透明黑底 | `PreviewRaster.cs:19` | `if (opaque) for (int i = 3; i < output.Length; i += 4) output[i] = 255;`（RGB 保持 0）|
-//! | 采样区间 | `PreviewRaster.cs:31-32` | `x0 = Math.Max(0, (int)Math.Ceiling(left - .5)); x1 = Math.Min(width, (int)Math.Ceiling(left + w - .5));`（`y` 同形）|
-//! | **最近邻**采样 | `PreviewRaster.cs:35,38` | `sy = Math.Clamp((int)((y + .5 - top) * pixels.Height / h), 0, pixels.Height - 1);`、`sx = Math.Clamp((int)((x + .5 - left) * pixels.Width / w), 0, pixels.Width - 1);` |
-//! | 合成 | `PreviewRaster.cs:45-46` | `a == 255` ⇒ 整像素覆盖；`a != 0` ⇒ `out[c] = Math.Min(255, src[c] + (out[c]*(255-a) + 127)/255)` |
-//! | 调用点 | `MinimapExporter.cs:56-57` | `PreviewRaster.Create(drawings, new Rect(0, 0, document.Width*48.0, document.Height*32.0), width, height, default, padding: 0, opaque: true);` |
+//! | 等比缩放比 | `_upstream/CrystalStudio/PreviewRaster.cs:15` | `double scale = Math.Min((width - padding*2)/area.Width, (height - padding*2)/area.Height);` |
+//! | 居中偏移 | `_upstream/CrystalStudio/PreviewRaster.cs:16-17` | `offsetX = (width - area.Width*scale)/2 - area.X*scale;`（`offsetY` 同形）|
+//! | 不透明黑底 | `_upstream/CrystalStudio/PreviewRaster.cs:19` | `if (opaque) for (int i = 3; i < output.Length; i += 4) output[i] = 255;`（RGB 保持 0）|
+//! | 采样区间 | `_upstream/CrystalStudio/PreviewRaster.cs:31-32` | `x0 = Math.Max(0, (int)Math.Ceiling(left - .5)); x1 = Math.Min(width, (int)Math.Ceiling(left + w - .5));`（`y` 同形）|
+//! | **最近邻**采样 | `_upstream/CrystalStudio/PreviewRaster.cs:35,38` | `sy = Math.Clamp((int)((y + .5 - top) * pixels.Height / h), 0, pixels.Height - 1);`、`sx = Math.Clamp((int)((x + .5 - left) * pixels.Width / w), 0, pixels.Width - 1);` |
+//! | 合成 | `_upstream/CrystalStudio/PreviewRaster.cs:45-46` | `a == 255` ⇒ 整像素覆盖；`a != 0` ⇒ `out[c] = Math.Min(255, src[c] + (out[c]*(255-a) + 127)/255)` |
+//! | 调用点 | `_upstream/CrystalStudio/MinimapExporter.cs:56-57` | `PreviewRaster.Create(drawings, new Rect(0, 0, document.Width*48.0, document.Height*32.0), width, height, default, padding: 0, opaque: true);` |
 //!
 //! # 二、本仓为什么只对应「第二段」
 //!
-//! 上游第一步是按 mip 级别**逐帧解码**（`Assets.PrepareOverviewAsync` → `Assets.cs:108-140`
+//! 上游第一步是按 mip 级别**逐帧解码**（`Assets.PrepareOverviewAsync` → `_upstream/CrystalStudio/Assets.cs:108-140`
 //! 的 `DecodeOverview` → `OverviewPixels.Reduce`），本仓没有 mip 精灵缓存，第一步由
 //! [`crate::tiled::render_tiled`] 按「最接近且不越界的档位」出整幅（`pick_official_scale`
 //! 已经用上游同一条 `scale = min(...)` 选档，见 `minimap.rs`）。**第二段**（本模块）才是
@@ -23,9 +23,9 @@
 //!
 //! # 三、与 mip 预缩的分工（**不许合并**）
 //!
-//! 面积平均只出现在上游的 **mip 预缩** `OverviewPixels.cs:7-42`（`Reduce`：预乘后按
+//! 面积平均只出现在上游的 **mip 预缩** `_upstream/CrystalStudio/OverviewPixels.cs:7-42`（`Reduce`：预乘后按
 //! `x*width/targetWidth` 的整块求均值），作用在**逐帧解码**阶段。导出成图那一步
-//! （`PreviewRaster.cs:35-38`）是**最近邻**，两件事不能互相替代。本仓的对应物：
+//! （`_upstream/CrystalStudio/PreviewRaster.cs:35-38`）是**最近邻**，两件事不能互相替代。本仓的对应物：
 //!
 //! | 环节 | 本仓落点 | 采样 |
 //! |---|---|---|
@@ -50,7 +50,7 @@ use crate::png_io::PngImage;
 /// `RGB(0,0,0) A255`，采样是**最近邻**。
 ///
 /// 这就是上游 `PreviewRaster.Create(tiles, area, width, height, …, padding: 0, opaque: true)`
-/// 在「tiles 已经合成为一张整幅」时的等价落点（`MinimapExporter.cs:56-57` 是那条调用）。
+/// 在「tiles 已经合成为一张整幅」时的等价落点（`_upstream/CrystalStudio/MinimapExporter.cs:56-57` 是那条调用）。
 ///
 /// # 参数
 ///
@@ -67,7 +67,7 @@ use crate::png_io::PngImage;
 pub fn fit_centered_opaque(源: &PngImage, 目标宽: u32, 目标高: u32) -> PngImage {
     let (sw, sh) = (源.width, 源.height);
     let mut rgba = vec![0u8; 目标宽 as usize * 目标高 as usize * 4];
-    // 上游 `PreviewRaster.cs:19`：`opaque` ⇒ 只把 alpha 写成 255，RGB 保持 0（黑底）。
+    // 上游 `_upstream/CrystalStudio/PreviewRaster.cs:19`：`opaque` ⇒ 只把 alpha 写成 255，RGB 保持 0（黑底）。
     for px in rgba.as_chunks_mut::<4>().0 {
         px[3] = 255;
     }
@@ -79,15 +79,15 @@ pub fn fit_centered_opaque(源: &PngImage, 目标宽: u32, 目标高: u32) -> Pn
         };
     }
 
-    // 上游 `PreviewRaster.cs:15-17`：本仓的 `area` 恒为 `(0, 0, sw, sh)`（导出整图，不裁子矩形）
-    // ⇒ `area.X == area.Y == 0`、`padding == 0`（`MinimapExporter.cs:56-57` 传的就是 0）。
+    // 上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-17`：本仓的 `area` 恒为 `(0, 0, sw, sh)`（导出整图，不裁子矩形）
+    // ⇒ `area.X == area.Y == 0`、`padding == 0`（`_upstream/CrystalStudio/MinimapExporter.cs:56-57` 传的就是 0）。
     let scale = (f64::from(目标宽) / f64::from(sw)).min(f64::from(目标高) / f64::from(sh));
     let left = (f64::from(目标宽) - f64::from(sw) * scale) / 2.0;
     let top = (f64::from(目标高) - f64::from(sh) * scale) / 2.0;
     let w = f64::from(sw) * scale;
     let h = f64::from(sh) * scale;
 
-    // 上游 `PreviewRaster.cs:31-32`：内容区在目标里的半开区间（含 .5 补偿，别改成四舍五入）
+    // 上游 `_upstream/CrystalStudio/PreviewRaster.cs:31-32`：内容区在目标里的半开区间（含 .5 补偿，别改成四舍五入）
     let x0 = (left - 0.5).ceil().max(0.0) as u32;
     let x1 = (left + w - 0.5).ceil().min(f64::from(目标宽)) as u32;
     let y0 = (top - 0.5).ceil().max(0.0) as u32;
@@ -101,7 +101,7 @@ pub fn fit_centered_opaque(源: &PngImage, 目标宽: u32, 目标高: u32) -> Pn
         };
     }
 
-    // 上游 `PreviewRaster.cs:38`：`sx = clamp((int)((x + .5 - left) * sw / w), 0, sw-1)`。
+    // 上游 `_upstream/CrystalStudio/PreviewRaster.cs:38`：`sx = clamp((int)((x + .5 - left) * sw / w), 0, sw-1)`。
     // 横向只与 `x` 有关 ⇒ 先算成表（同一表达式、同一求值顺序，结果与逐像素重算逐字节相同）。
     let mut xs: Vec<u32> = Vec::with_capacity((x1 - x0) as usize);
     for x in x0..x1 {
@@ -110,7 +110,7 @@ pub fn fit_centered_opaque(源: &PngImage, 目标宽: u32, 目标高: u32) -> Pn
     }
 
     for y in y0..y1 {
-        // 上游 `PreviewRaster.cs:35`：`sy = clamp((int)((y + .5 - top) * sh / h), 0, sh-1)`
+        // 上游 `_upstream/CrystalStudio/PreviewRaster.cs:35`：`sy = clamp((int)((y + .5 - top) * sh / h), 0, sh-1)`
         let sy = (((f64::from(y) + 0.5 - top) * f64::from(sh) / h) as i64).clamp(0, i64::from(sh) - 1);
         let 源行 = sy as usize * sw as usize * 4;
         let 目标行 = y as usize * 目标宽 as usize * 4;
@@ -126,7 +126,7 @@ pub fn fit_centered_opaque(源: &PngImage, 目标宽: u32, 目标高: u32) -> Pn
             let dst = [rgba[di], rgba[di + 1], rgba[di + 2], rgba[di + 3]];
             // 与 `Canvas::blit` 同一条 `over`（`a == 255` 覆盖、`a == 0` 不碰、
             // 其余按 `(src*a + dst*dst_a_keep)/out_a` 整型合成）。底色是 A=255 的黑 ⇒
-            // 结果与上游 `PreviewRaster.cs:45-46` 那条预乘式逐字节相同。
+            // 结果与上游 `_upstream/CrystalStudio/PreviewRaster.cs:45-46` 那条预乘式逐字节相同。
             let out = over(src, dst);
             rgba[di..di + 4].copy_from_slice(&out);
         }

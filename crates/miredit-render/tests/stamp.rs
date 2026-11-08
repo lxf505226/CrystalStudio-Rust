@@ -279,7 +279,7 @@ fn 打开图源() -> Option<(Box<dyn SpriteSource>, 源类)> {
 /// # 适配**只剩搬运**：库号换算走产品核心
 ///
 /// `.X` 里的三族库号是 **C# `Assets` 分配号**（`0/1/2` = `Tiles`/`Smtiles`/`Objects`，
-/// 见 `Assets.cs:361-365@901dbe2f`），而 [`PositionedCell`] 要的是**族内序号**（地图格字节
+/// 见 `_upstream/CrystalStudio/Assets.cs:361-365`），而 [`PositionedCell`] 要的是**族内序号**（地图格字节
 /// `btTiles`/`btsmTiles`/`btArea` 口径）。这一步的唯一实现在
 /// [`miredit_core::cells_from_stamp`]（A-024 已下沉，GUI / web / 本测试共用同一份）——
 /// **本文件不再自带任何减基址的换算表**（A-020 早期版本曾有，已删）。
@@ -1443,7 +1443,7 @@ fn 四枚印章缩略图拼图() {
 /// 三件事一起钉，缺一条这个坑就会再回来：
 ///
 /// 1. **实测原文**：`mir_00000.X` 25 格的库号是 **地表 `0` / 中层 `1` / 前景 `2`**
-///    —— 正是 `Assets.cs:361-365@901dbe2f` 登记表的前三行（`Tiles` / `Smtiles` / `Objects`）；
+///    —— 正是 `_upstream/CrystalStudio/Assets.cs:361-365` 登记表的前三行（`Tiles` / `Smtiles` / `Objects`）；
 /// 2. **原样当族内序号用会取错文件**：前景 `2` 会解析到 `Objects3.Lib`（`surface(2)`），
 ///    而正确要的是 `Objects.Lib`（`surface(0)`）—— 两者是**不同的图**
 ///    （A-024 取证：原样渲染 `fnv=91cb7906…` 是别的画，换算后 `7482cb46…` 才是这枚印章）；

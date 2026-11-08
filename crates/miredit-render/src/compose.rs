@@ -8,25 +8,25 @@
 //! | 2 | 地表帧 = 96×64 px，覆盖 2×2 世界格，**落格 = 世界格 / 2** | `map_view.gd:11-13` |
 //! | 3 | 地表**只铺偶偶格**（`x%2==0 && y%2==0`），其余格无地表 | `map_view.gd:12,199`（`GameScene.cpp:3545-3553`）|
 //! | 4 | 地表像素位 = `(x/2)*96 = x*48`，纵向 `y*32` | `map_view.gd:13` |
-//! | 5 | 中层：**tile 尺寸（48×32 / 96×64）且非混合 ⇒ 左上**；否则**底边**（`y_top = (y+1)*32 - 帧高`） | C# `MapSpriteDrawing.cs:24,55@f115352`（`.gd` 恒左上：`map_overlay_layer.gd:17,79`，A-001 起不跟） |
-//! | 6 | 表层：同上式（`front=true, blend=false`）⇒ **tile 尺寸不位移**，非 tile 才底边；另有 `library==28` 且帧锚点非零 ⇒ **只叠锚点** | C# `MapSpriteDrawing.cs:53-55`（`.gd` 恒底边：`map_overlay_layer.gd:96-99`，A-001 起不跟） |
+//! | 5 | 中层：**tile 尺寸（48×32 / 96×64）且非混合 ⇒ 左上**；否则**底边**（`y_top = (y+1)*32 - 帧高`） | C# `_upstream/CrystalStudio/MapSpriteDrawing.cs:24,55`（`.gd` 恒左上：`map_overlay_layer.gd:17,79`，A-001 起不跟） |
+//! | 6 | 表层：同上式（`front=true, blend=false`）⇒ **tile 尺寸不位移**，非 tile 才底边；另有 `library==28` 且帧锚点非零 ⇒ **只叠锚点** | C# `_upstream/CrystalStudio/MapSpriteDrawing.cs:53-55`（`.gd` 恒底边：`map_overlay_layer.gd:96-99`，A-001 起不跟） |
 //! | 7 | 帧号 **1-based**，`0` = 无图，取图 `(img & 0x7FFF) - 1` | `map_loader.gd:51-52`、`map_overlay_layer.gd:20` |
 //! | 8 | 库路由：`btTiles`→地面 / `btsmTiles`→中层 / `btArea`→表层 | `map_loader.gd:39-45`、`map_overlay_layer.gd:67,71,84,88` |
 //!
 //! # 二、层序与层内顺序
 //!
 //! - **层序**：地表 → 中层 → 表层（后画的压前画的）。
-//!   出处（**主指 = 上游 C#**，按用户 2026-11-08「上游 = C#」令）：`MapViewport.cs:253`
+//!   出处（**主指 = 上游 C#**，按用户 2026-11-08「上游 = C#」令）：`_upstream/CrystalStudio/MapViewport.cs:253`
 //!   的 `for (int layer = 0; layer < 3; layer++) if (VisibleLayers[layer])` —— `layer`
 //!   0/1/2 = 地表/中层/表层，同一循环里按序把 chunk / row 追加进 `scene.Children`
-//!   （`MapViewport.cs:260-262`，追加那一句在 `:261`；表层 `:276-277`，追加在 `:277`）
+//!   （`_upstream/CrystalStudio/MapViewport.cs:260-262`，追加那一句在 `:261`；表层 `:276-277`，追加在 `:277`）
 //!   ⇒ 后层压前层；
-//!   `MinimapExporter.cs:29` 的 `for (int layer = 0; layer < 3; layer++)` 是同一序
+//!   `_upstream/CrystalStudio/MinimapExporter.cs:29` 的 `for (int layer = 0; layer < 3; layer++)` 是同一序
 //!   （导出侧照抄编辑器的层序）。
 //!   历史依据（三源里的 Godot 客户端）：`map_view.gd:108-114`（`add_child` 顺序 = 绘制序：
 //!   「中层先、表层后」）、`map_overlay_layer.gd:22-24`。
 //! - **层内顺序**：**行优先**——`dy` 外层、`dx` 内层，同一行内 x 递增。
-//!   出处：C# `MapViewport.cs:255`（`for cy` 外 / `for cx` 内）、`:362`（`for y` 外 /
+//!   出处：C# `_upstream/CrystalStudio/MapViewport.cs:255`（`for cy` 外 / `for cx` 内）、`:362`（`for y` 外 /
 //!   `for x` 内）、`:271`（表层 `for y` 外 → `for cx` 内，`:279` 再 `for x`）；
 //!   原始 C++ `GameScene.cpp:3429-3433`（`j` 外 / `i` 内）、`:3545-3556`（同）。
 //!
@@ -165,20 +165,20 @@
 //!    官方在屏幕上多出来的视口边缘在本库不存在 ⇒ 恒等裁剪；
 //! 3. **不计入 `cells_drawn`**：遮罩不是「格子落笔」，与阻挡标记同一条纪律（§六.3）。
 //! 4. **光罩位置用前景帧的 `anchor`，三层合成不用**：官方光罩无条件加 `sprite.X/Y`
-//!    （`Presentation.cs:84-86`），画精灵却只在特例下加（`MapSpriteDrawing.cs:19-31`）
+//!    （`_upstream/CrystalStudio/MapViewport.Presentation.cs:84-86`），画精灵却只在特例下加（`_upstream/CrystalStudio/MapSpriteDrawing.cs:19-31`）
 //!    ⇒ 本模块只把 `src` 递给 `lighting::apply` 取偏移，三个落格循环一行都不碰它。
 //!
 //! # 九、前景加性混合（`Front.Frames & 0x80`，**只管表层**）
 //!
-//! 上游 `CrystalStudio/MapSpriteDrawing.cs:5@6450da90`：
+//! 上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:5`：
 //!
 //! ```text
 //! internal static bool FrontBlend(byte frames) => (frames & 0x80) != 0;   // :5
 //! ```
 //!
-//! 被 `FrontBlend` 选中的帧**不做覆盖，而做加性叠加**（`MapViewport.cs:381`：
+//! 被 `FrontBlend` 选中的帧**不做覆盖，而做加性叠加**（`_upstream/CrystalStudio/MapViewport.cs:381`：
 //! `dc.DrawImage(blend ? MapSpriteDrawing.Additive(...) : s.Bitmap, bounds)`）。
-//! 合成公式在 `MapSpriteDrawing.cs:68-96` 的 `Composite`（Pbgra32 预乘空间）：
+//! 合成公式在 `_upstream/CrystalStudio/MapSpriteDrawing.cs:68-96` 的 `Composite`（Pbgra32 预乘空间）：
 //! RGB 逐通道 `min(255, dst+src)`、alpha **不参与加法**取 `max(旧 dst.a, max(加后 RGB))`。
 //! 本仓的画布是 straight RGBA8 ⇒ 预乘/反预乘在 [`crate::canvas`] 里显式做，
 //! 舍入口径与「待回源」标注见 `Canvas::blit_additive` 的文档。
@@ -186,7 +186,7 @@
 //! 四条硬口径：
 //!
 //! 1. **只在前景层**：本模块只有 §表层这个循环看 `cell.ani_frame` 的 `0x80`；
-//!    地表/中层一行都不碰。中层那套 `MiddleBlend`（`MapSpriteDrawing.cs:8`）对
+//!    地表/中层一行都不碰。中层那套 `MiddleBlend`（`_upstream/CrystalStudio/MapSpriteDrawing.cs:8`）对
 //!    **12/14 B 档作废**：这两档的 `.map` 里**没有**中层动画字节
 //!    （`mir2-format::Cell::mid_ani_frame` 恒填 `0`）⇒ `MiddleFrames(frames) ≡ 0`
 //!    ⇒ `MiddleBlend` 永不成立。本单不动中层；
@@ -205,7 +205,7 @@
 //! # 十、前景加性混合帧的**落格锚点**（`Bounds(..., blend: true)`）
 //!
 //! §九 只决定「怎么混」，本节决定「混合帧落在哪」。上游 `Bounds` 里 `front && blend`
-//! 是一条**独立分支**，与格栅锚点互斥（`MapSpriteDrawing.cs:43-52@6450da90`；本地未入库
+//! 是一条**独立分支**，与格栅锚点互斥（`_upstream/CrystalStudio/MapSpriteDrawing.cs:43-52`；本地未入库
 //! 快照 `_upstream/CrystalStudio/MapSpriteDrawing.cs`，sha256 `0AEB302F…`）：
 //!
 //! ```text
@@ -226,12 +226,12 @@
 //! 三条必须逐字照抄的口径（错一条就与上游不一致）：
 //!
 //! 1. **`image` 是 0-based 帧号，不是图号**：上游传进 `Bounds` 的实参来自
-//!    `MapPreview.FrontImage`（`MapPreview.cs:8`：`(front.Image & 0x7FFF) - 1`）⇒ 窗口
+//!    `MapPreview.FrontImage`（`_upstream/CrystalStudio/MapPreview.cs:8`：`(front.Image & 0x7FFF) - 1`）⇒ 窗口
 //!    `2723..2732` 对应的**图号是 2724..2733**。台账 A-018 把窗口写成「图号 2723..2732」
 //!    是**简写错位（差 1）**，本实现按 0-based 帧号。
 //! 2. **门偏移参与取帧、也参与这个判断**：上游把 `FrontImage(...)` 的结果（含
 //!    `doorsOpen` 时的 `DoorOffset` 相加；本仓掩 `0x7F` 的口径见 §七 硬口径 3）直接传给 `Bounds`
-//!    （`MapViewport.cs:287`）⇒ 本实现用**加过 [`门偏移`] 之后**的 `索引` 做窗口判断，
+//!    （`_upstream/CrystalStudio/MapViewport.cs:287`）⇒ 本实现用**加过 [`门偏移`] 之后**的 `索引` 做窗口判断，
 //!    不用 `帧号(cell.fr_img)`。（本仓不做动画帧，§四.1；上游那一步 `animationFrame/…`
 //!    的叠加以外不涉及本规则。）
 //! 3. **`py += 32 - 96 + Y` 里的 96 是三格基线常量**：别改成 `32 - 帧高`，那会让这一支
@@ -250,10 +250,10 @@
 //!
 //! | 上游格式 | 前景库号 | 出处 |
 //! |---|---|---|
-//! | `Old12` | `btArea + 2` | `LegacyMapReader.cs:147` |
-//! | `AntiHack`（12 B） | `btArea + 2` | `LegacyMapReader.cs:360` |
-//! | `Shanda14` / `Shanda2012` | `btArea + 120` | `LegacyMapReader.cs:247` / `:298` |
-//! | `Mir3Wemade` / `Mir3Shanda` | `btArea + 200 / + 300` | `LegacyMapReader.cs:424` / `:476` |
+//! | `Old12` | `btArea + 2` | `_upstream/CrystalStudio/LegacyMapReader.cs:147` |
+//! | `AntiHack`（12 B） | `btArea + 2` | `_upstream/CrystalStudio/LegacyMapReader.cs:360` |
+//! | `Shanda14` / `Shanda2012` | `btArea + 120` | `_upstream/CrystalStudio/LegacyMapReader.cs:247` / `:298` |
+//! | `Mir3Wemade` / `Mir3Shanda` | `btArea + 200 / + 300` | `_upstream/CrystalStudio/LegacyMapReader.cs:424` / `:476` |
 //!
 //! 渲染层的视图档位 `mir2_map::CellFormat` **只有三档**：`Old12`（= 上面两种 12 B 格，
 //! 两者都是 `+2`，见 `miredit-core/src/convert.rs` 的投影表）与 `New14` / `Ext36`；后两档
@@ -276,7 +276,7 @@
 //! ## 十.4 与 A-001 的边界（别把两条并成一条）
 //!
 //! A-001 管的是**非混合帧**的格栅锚点例外（`anchored && (!tile || blend)` 的 `tile` 判定、
-//! `library == 28` 且非混合的特例，`MapSpriteDrawing.cs:53-55`）—— 那条要跟 `.gd` 还是跟
+//! `library == 28` 且非混合的特例，`_upstream/CrystalStudio/MapSpriteDrawing.cs:53-55`）—— 那条要跟 `.gd` 还是跟
 //! C# 仍是**产品裁定**，本单**不碰**。本节只覆盖 `front && blend` 这一条上游分支，而 `.gd`
 //! 客户端**根本没有加性混合**（`map_overlay_layer.gd:96-100` 只有底边锚点，`map_view.gd` /
 //! `MapLayers` 里没有 `FrontBlend` 的对应物）⇒ 混合帧这一类的唯一参照就是 C#，不存在
@@ -284,7 +284,7 @@
 
 //! # 十一、A-001：非加性帧的格栅锚点（**用户裁定：跟 C#**，2026-11-07）
 //!
-//! 上游 `MapSpriteDrawing.cs:24,53-55@f115352`（本地快照 `_upstream/CrystalStudio/`）：
+//! 上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:24,53-55`（本地快照 `_upstream/CrystalStudio/`）：
 //!
 //! ```text
 //! 24: bool tile = (sprite.Width == 48 && sprite.Height == 32) || (sprite.Width == 96 && sprite.Height == 64);
@@ -293,7 +293,7 @@
 //! 55: else if (anchored && (!tile || blend)) py += 32 - sprite.Height;
 //! ```
 //!
-//! 调用点：中层 `MapViewport.cs:268`（`anchored: true, front: false, blend: MiddleBlend`）、
+//! 调用点：中层 `_upstream/CrystalStudio/MapViewport.cs:268`（`anchored: true, front: false, blend: MiddleBlend`）、
 //! 表层 `:287`（`anchored: true, front: true, blend: FrontBlend`）、
 //! 地表 `:364-365`（总览/小地图 `anchored: false`）。
 //!
@@ -381,7 +381,7 @@ pub(crate) fn render(
                 match cache.get(取样.库, 取样.索引) {
                     Some(f) => {
                         // 落格算式在 [`层放置`]（地表 `anchored = false` ⇒ 永远左上，
-                        // `MapViewport.cs:364-365`）。
+                        // `_upstream/CrystalStudio/MapViewport.cs:364-365`）。
                         let (px, py) = 层放置(
                             层别::地表,
                             dx,
@@ -452,7 +452,7 @@ pub(crate) fn render(
                 // 取帧与混合方式都在 [`层取帧`]：门开帧偏移**只有前景层有**
                 // （`options.doors_open == false` 时 [`门偏移`] 恒 0 ⇒ 索引与改动前同一个值，
                 // 见模块文档 §七），加性判据是 [`表层混合`]（`Front.Frames & 0x80`，
-                // 上游 `MapSpriteDrawing.cs:5@6450da90` 的 `FrontBlend`）。
+                // 上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:5` 的 `FrontBlend`）。
                 //
                 // 与门偏移**正交**：门只改「取第几帧」，混合方式只看 `ani_frame` 的高位，
                 // 两者互不影响（模块文档 §九）。
@@ -467,7 +467,7 @@ pub(crate) fn render(
                         //
                         // ⚠ 传进去的是**加过门偏移**的 `索引`：上游把
                         // `MapPreview.FrontImage(...)` 的结果同时用于取帧与帧号窗口判断
-                        // （`MapViewport.cs:287`），门偏移因此参与「落不落进 2723..2732」。
+                        // （`_upstream/CrystalStudio/MapViewport.cs:287`），门偏移因此参与「落不落进 2723..2732」。
                         let (px, py) = 层放置(
                             层别::表层,
                             dx,
@@ -501,16 +501,16 @@ pub(crate) fn render(
 
     // ---- 地图光照：三层**全部画完之后**才盖遮罩（模块文档 §八）----
     //
-    // 位置照官方 `MapViewport.Presentation.cs:34-35`：遮罩画在精灵场景之后、
-    // 阻挡/灯光/门标记之前（`Presentation.cs:40-50`）⇒ **标记不被压暗**。
+    // 位置照官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:34-35`：遮罩画在精灵场景之后、
+    // 阻挡/灯光/门标记之前（`_upstream/CrystalStudio/MapViewport.Presentation.cs:40-50`）⇒ **标记不被压暗**。
     // `options.lighting == MapLighting::Day` 时这里立即返回，画布一个字节都不动。
     //
-    // 传 `src` 只为取前景帧的**锚点偏移**（官方 `Presentation.cs:84-86` 的 `sprite.X/Y`）：
-    // 光罩要它、三层合成**不要**它（`MapSpriteDrawing.cs:19-31` 里 anchor 只在特例下生效）
+    // 传 `src` 只为取前景帧的**锚点偏移**（官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:84-86` 的 `sprite.X/Y`）：
+    // 光罩要它、三层合成**不要**它（`_upstream/CrystalStudio/MapSpriteDrawing.cs:19-31` 里 anchor 只在特例下生效）
     // ⇒ 这个偏移不会回流到上面三个循环，三层像素与本改动前逐字节相同。
     crate::lighting::apply(&mut canvas, map, vp, mask.front, options.lighting, src);
 
-    // ---- 阻挡标记：三层画完之后再叠（C# `MapViewport.Presentation.cs:40-42` 的位置：
+    // ---- 阻挡标记：三层画完之后再叠（C# `_upstream/CrystalStudio/MapViewport.Presentation.cs:40-42` 的位置：
     //      地图精灵之后、灯光/门标记之前）----
     //
     // 遍历口径：**本处仍是列优先（`dx` 外 / `dy` 内），已不再与三层一致** —— 三层于
@@ -600,9 +600,9 @@ pub(crate) fn 底边锚点(dx: i32, dy: i32, 帧高: u32) -> (i32, i32) {
 }
 
 
-// ─────────────────── A-001：非加性帧的格栅锚点（`MapSpriteDrawing.cs:24,53-55`） ───────────────────
+// ─────────────────── A-001：非加性帧的格栅锚点（`_upstream/CrystalStudio/MapSpriteDrawing.cs:24,53-55`） ───────────────────
 
-/// 帧是不是**「tile 尺寸」**：上游 `MapSpriteDrawing.cs:24@6450da90`
+/// 帧是不是**「tile 尺寸」**：上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:24`
 /// `(sprite.Width == 48 && sprite.Height == 32) || (sprite.Width == 96 && sprite.Height == 64)`。
 ///
 /// 为什么单拎出来：这个判定在 `Bounds` 里**只出现一次**却被两条分支共用，散在循环里写成
@@ -612,7 +612,7 @@ pub(crate) fn tile尺寸(帧宽: u32, 帧高: u32) -> bool {
     matches!((帧宽, 帧高), (48, 32) | (96, 64))
 }
 
-/// 中层混合：上游 `MapSpriteDrawing.cs:8@6450da90`
+/// 中层混合：上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:8`
 /// `frames != 255 && (frames & 15) is 8 or 10`。
 ///
 /// ⚠ 本仓 `mir2_map::Cell` **没有「中层动画帧」字节**（12 B/14 B 档 C# 侧
@@ -623,7 +623,7 @@ pub(crate) fn 中层混合(frames: u8) -> bool {
     frames != 255 && matches!(frames & 15, 8 | 10)
 }
 
-/// 表层加性混合：上游 `MapSpriteDrawing.cs:5@6450da90` 的 `FrontBlend`（`frames & 0x80 != 0`）。
+/// 表层加性混合：上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:5` 的 `FrontBlend`（`frames & 0x80 != 0`）。
 ///
 /// 与 [`中层混合`] 是两套判据（前者看高位、后者看低 4 位），**不要合并**。
 #[inline]
@@ -637,7 +637,7 @@ pub(crate) const 中层帧缺省: u8 = 0;
 /// 前景库号（C# `Foreground.Library`）在**本仓能算的档**里换算；算不出来就 `None`。
 ///
 /// 换算表与 [`三格库分支`] 同源（模块文档 §十.2）：`Old12`/`AntiHack` 都是 `btArea + 2`
-/// （`LegacyMapReader.cs:147` / `:360`），故视图档 [`CellFormat::Old12`] 能给值；
+/// （`_upstream/CrystalStudio/LegacyMapReader.cs:147` / `:360`），故视图档 [`CellFormat::Old12`] 能给值；
 /// `New14` / `Ext36` 里同时挤着 `+120` / `+200` / `+300` / CrystalCs（无 `area`）
 /// ⇒ **推不出就不猜**。
 #[inline]
@@ -645,7 +645,7 @@ pub(crate) fn 前景库号(格式: CellFormat, 库号原值: u8) -> Option<i32> 
     matches!(格式, CellFormat::Old12).then(|| i32::from(库号原值) + 2)
 }
 
-/// **非加性帧**的落格锚点：上游 `MapSpriteDrawing.cs:53-55@6450da90`。
+/// **非加性帧**的落格锚点：上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:53-55`。
 ///
 /// ```text
 /// else if (front && library == 28 && (sprite.X != 0 || sprite.Y != 0))   // :53
@@ -662,7 +662,7 @@ pub(crate) fn 前景库号(格式: CellFormat, 库号原值: u8) -> Option<i32> 
 /// | `帧宽` / `帧高` | `sprite.Width/Height` | 决定 [`tile尺寸`] 与 `32 - Height` |
 /// | `锚点` | `sprite.X/Y` | 帧头锚点（[`Frame::anchor`]） |
 /// | `front` | `front` | 地表 / 中层为 `false`；表层为 `true` |
-/// | `锚定` | `anchored` | 地表 `false`（`MapViewport.cs:364-365` 总览/小地图），中层/表层 `true`（`:268` / `:287`） |
+/// | `锚定` | `anchored` | 地表 `false`（`_upstream/CrystalStudio/MapViewport.cs:364-365` 总览/小地图），中层/表层 `true`（`:268` / `:287`） |
 /// | `混合` | `blend` | 表层：加性帧走 [`混合锚点`]（A-018），**不进本函数**；中层：[`中层混合`] |
 ///
 /// # 三条口径（别合并）
@@ -673,7 +673,7 @@ pub(crate) fn 前景库号(格式: CellFormat, 库号原值: u8) -> Option<i32> 
 /// 3. `48×32` 的 tile 帧：`32 - 32 == 0` ⇒ 两条分支数值相同（像素不变），
 ///    只有 `96×64` 与「非 tile」才真的动像素。
 // 9 个参数是**逐字对齐上游** `Bounds(sprite, x, y, library, image, anchored, front, blend, format)`
-// 的实参表（`MapSpriteDrawing.cs:19-22`）：拆成结构体反而看不出与上游的一一对应关系。
+// 的实参表（`_upstream/CrystalStudio/MapSpriteDrawing.cs:19-22`）：拆成结构体反而看不出与上游的一一对应关系。
 // 与 `stamp_convert::cells_from_stamp` 同类处置（那条也是"参数就是上游签名"）。
 #[allow(clippy::too_many_arguments)]
 #[inline]
@@ -707,7 +707,7 @@ pub(crate) fn 非加性锚点(
 /// 三层在 `Bounds` 里的两个开关（`anchored` / `front`），由层决定而不是调用方随手传。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum 层别 {
-    /// 地表：`anchored = false`（`MapViewport.cs:364-365`）⇒ 永远左上。
+    /// 地表：`anchored = false`（`_upstream/CrystalStudio/MapViewport.cs:364-365`）⇒ 永远左上。
     地表,
     /// 中层：`anchored = true, front = false`（`:268`）。
     中层,
@@ -807,8 +807,8 @@ pub(crate) fn 层取帧(
 ///
 /// | 取样 | 走的算式 | 出处 |
 /// |---|---|---|
-/// | `加性 == true`（只有表层可能） | [`混合锚点`] | `MapSpriteDrawing.cs:43-52@6450da90` |
-/// | 否则 | [`非加性锚点`]（`anchored` / `front` 由 [`层别`] 决定） | `MapSpriteDrawing.cs:53-55` |
+/// | `加性 == true`（只有表层可能） | [`混合锚点`] | `_upstream/CrystalStudio/MapSpriteDrawing.cs:43-52` |
+/// | 否则 | [`非加性锚点`]（`anchored` / `front` 由 [`层别`] 决定） | `_upstream/CrystalStudio/MapSpriteDrawing.cs:53-55` |
 ///
 /// ⚠ 参数是**上游 `Bounds(...)` 的实参表**（9 个），拆成结构体反而看不出与源码的
 /// 一一对应关系；与 [`非加性锚点`] 的 `#[allow]` 同一处置。
@@ -832,7 +832,7 @@ pub(crate) fn 层放置(
     }
 }
 
-/// **前景加性混合帧**的锚点：上游 `MapSpriteDrawing.cs:43-52@6450da90` 的 `front && blend` 分支。
+/// **前景加性混合帧**的锚点：上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:43-52` 的 `front && blend` 分支。
 ///
 /// 与 [`底边锚点`] 的关系：非混合帧**一律**走 [`底边锚点`]，本函数只被
 /// `cell.ani_frame & 0x80 != 0` 的分支调用（模块文档 §十.1）。
@@ -844,7 +844,7 @@ pub(crate) fn 层放置(
 /// | `dx` / `dy` | **视口内**格坐标（与 [`底边锚点`] 同口径，乘 48/32 前） | `x` / `y` |
 /// | `格式` | 视图档位，只用于判「库号能不能算」（§十.2） | —— |
 /// | `库号原值` | 格内 `btArea` 原样字节 | `library`（= `btArea + 2`，见 [`三格库分支`]） |
-/// | `索引` | **加过门偏移之后**的 0-based 帧号 | `image`（`MapPreview.cs:8`） |
+/// | `索引` | **加过门偏移之后**的 0-based 帧号 | `image`（`_upstream/CrystalStudio/MapPreview.cs:8`） |
 /// | `帧高` | 解码帧高 | `sprite.Height` |
 /// | `锚点` | 帧头 `(px, py)` = [`Frame::anchor`] | `sprite.X` / `sprite.Y` |
 ///
@@ -852,7 +852,7 @@ pub(crate) fn 层放置(
 ///
 /// 上游把 `MapPreview.FrontImage(...)`（含 `doorsOpen` 时的 `DoorOffset`）一次算好后
 /// 同时用于取帧和 `Bounds` 的 `image is >= 2723 and <= 2732`
-/// （`MapViewport.cs:287`）⇒ 门偏移会改变「落不落进帧号窗口」。本实现与取帧用同一个值。
+/// （`_upstream/CrystalStudio/MapViewport.cs:287`）⇒ 门偏移会改变「落不落进帧号窗口」。本实现与取帧用同一个值。
 #[inline]
 pub(crate) fn 混合锚点(
     dx: i32,
@@ -880,13 +880,13 @@ pub(crate) fn 混合锚点(
     }
 }
 
-/// 上游 `library is 14 or 27 || library is > 99 and < 199`（`MapSpriteDrawing.cs:45`）
+/// 上游 `library is 14 or 27 || library is > 99 and < 199`（`_upstream/CrystalStudio/MapSpriteDrawing.cs:45`）
 /// 在**本仓原值空间**里的等价判据。模块文档 §十.2 是完整推导，这里只留结论与边界。
 ///
 /// # 为什么只有 12 字节档
 ///
 /// 上游 `library` 是 C# 侧前景库号，等于「格内 `btArea` + 格式常量」：`Old12`/`AntiHack`
-/// 是 `+2`（`LegacyMapReader.cs:147` / `:360`），`Shanda14`/`Shanda2012` 是 `+120`
+/// 是 `+2`（`_upstream/CrystalStudio/LegacyMapReader.cs:147` / `:360`），`Shanda14`/`Shanda2012` 是 `+120`
 /// （`:247` / `:298`），`Mir3*` 是 `+200`/`+300`（`:424` / `:476`）。
 /// 视图档位 [`CellFormat`] 只有三档，`New14` / `Ext36` 里同时混着 `+120` / `+200` /
 /// `+300` 三种格式 ⇒ **推不出库号就不猜**，这两档直接返回 `false`（只保留不依赖库号的
@@ -956,7 +956,7 @@ pub fn 帧号(img: u16) -> Option<u32> {
 /// 全量实测 1097 张 `.map`：**43 张图 / 1,764 格**的 `door_offset` 已置 `0x80`，
 /// 其中 **1,229 格**同时有前景图与非 0 门索引（**1,173 格库号 `area == 0` ⇒ `Objects`
 /// 库真实存在，会真的画出来**）。照官方编辑器
-/// `CrystalStudio/MapPreview.cs:6-10@901dbe2f(未入库)` 的整字节相加，
+/// `_upstream/CrystalStudio/MapPreview.cs:6-10` 的整字节相加，
 /// 这些格会加 `128 + low` ⇒ 画出完全无关的帧。逐条数据见 [`RenderOptions`] 的类型文档 §三。
 ///
 /// # 为什么跟客户端、不跟官方编辑器
@@ -972,7 +972,7 @@ pub fn 帧号(img: u16) -> Option<u32> {
 ///
 /// **两处都掩了位**。而官方 C# 编辑器同一处写成
 /// `image + (doorsOpen && (cell.Door & 0x7F) != 0 ? cell.DoorOffset : 0)`
-/// （`CrystalStudio/MapPreview.cs:6-10@901dbe2f(未入库)`）—— `DoorOffset` **整字节相加、
+/// （`_upstream/CrystalStudio/MapPreview.cs:6-10`）—— `DoorOffset` **整字节相加、
 /// 没有掩 `0x80`**，那是它在这批数据上的偏差（会画错上面 1,229 格里的每一格）。
 /// 本仓一律以**客户端字节语义**为准（与 [`CollisionOverlay`] 那节「判定按 `TMap.cpp:339`、
 /// 只借 C# 的视觉样式」是同一条纪律）。
@@ -1130,7 +1130,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // §十 前景加性混合帧的**落格锚点**（A-018）：上游 `MapSpriteDrawing.cs:43-52`
+    // §十 前景加性混合帧的**落格锚点**（A-018）：上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:43-52`
     // -----------------------------------------------------------------------
     //
     // 这一组用例的共同手法：用「只有一个不透明像素的 16×8 帧」把「帧落在哪」化成
@@ -1324,7 +1324,7 @@ mod tests {
     /// **帧号窗口用的是「加过门偏移之后」的索引**（模块文档 §十 口径 2）。
     ///
     /// 上游把 `MapPreview.FrontImage(...)`（含 `doorsOpen` 时的 `DoorOffset`）一次算好后
-    /// 同时用于取帧与 `image is >= 2723 and <= 2732`（`MapViewport.cs:287`）⇒
+    /// 同时用于取帧与 `image is >= 2723 and <= 2732`（`_upstream/CrystalStudio/MapViewport.cs:287`）⇒
     /// 同一个格：闭门时索引 `2623`（窗口外）、开门后索引 `2623+100 = 2723`（窗口内）。
     #[test]
     fn 混合帧_门偏移会改变是否落进帧号窗口() {
@@ -1374,7 +1374,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // §十一 A-001：非加性帧的格栅锚点（`MapSpriteDrawing.cs:24,53-55`，跟 C#）
+    // §十一 A-001：非加性帧的格栅锚点（`_upstream/CrystalStudio/MapSpriteDrawing.cs:24,53-55`，跟 C#）
     // -----------------------------------------------------------------------
     //
     // 上游原文（`_upstream/CrystalStudio/MapSpriteDrawing.cs`）：
@@ -1382,7 +1382,7 @@ mod tests {
     //   53: else if (front && library == 28 && (sprite.X != 0 || sprite.Y != 0))
     //   54: { px += sprite.X; py += sprite.Y; }
     //   55: else if (anchored && (!tile || blend)) py += 32 - sprite.Height;
-    // 调用点：中层 `MapViewport.cs:268`（anchored:true, front:false, blend=MiddleBlend）、
+    // 调用点：中层 `_upstream/CrystalStudio/MapViewport.cs:268`（anchored:true, front:false, blend=MiddleBlend）、
     //        表层 `:287`（anchored:true, front:true, blend=FrontBlend）、
     //        地表 `:364-365`（总览/小地图 anchored:false）。
 
@@ -1559,7 +1559,7 @@ mod tests {
         );
     }
 
-    /// **`library == 28` 特例**（`MapSpriteDrawing.cs:53-54`）：只叠帧锚点，**不做底边锚定**。
+    /// **`library == 28` 特例**（`_upstream/CrystalStudio/MapSpriteDrawing.cs:53-54`）：只叠帧锚点，**不做底边锚定**。
     ///
     /// 库号 28 ⇔ `area = 26`（12 B 档 `+2`）；锚点 `(5, 7)` ⇒ 落点 `(5, 7)`，
     /// 而普通非 tile 的底边锚点会是 `(0, 32-帧高)`。

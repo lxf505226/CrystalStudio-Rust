@@ -7,7 +7,7 @@
 //! 透明像素不遮不挡。这与 `Sprite2D` / `draw_texture` 的默认 alpha 混合同语义。
 //!
 //! 本模块只管三件事：**整型 over 混合**（无浮点、无 SIMD、结果可复现）、**前景加性
-//! （additive）混合**（`FrontBlend`，见 `CrystalStudio/MapSpriteDrawing.cs:5,68-96@6450da90`）、
+//! （additive）混合**（`FrontBlend`，见 `_upstream/CrystalStudio/MapSpriteDrawing.cs:5,68-96`）、
 //! 以及把帧按像素坐标**裁剪**贴进画布。不含任何游戏语义 —— 落格规则在 `compose.rs`，
 //! 这里只认「像素坐标」。
 
@@ -55,7 +55,7 @@ impl Canvas {
     ///
     /// # 出处（上游语义）
     ///
-    /// 上游 `CrystalStudio/MapSpriteDrawing.cs:5@6450da90`：
+    /// 上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:5`：
     /// `FrontBlend(frames) => (frames & 0x80) != 0` 选中这条混合；`:68-96` 的
     /// `Composite` 在 **Pbgra32（预乘）** 空间逐像素做：
     ///
@@ -268,7 +268,7 @@ impl Canvas {
 /// 全部用 `u32` 整数运算；`a_s == 255` 直接取源、`a_s == 0` 直接取目标（快路径）。
 ///
 /// `pub(crate)` 的第二个调用方是 [`crate::preview_raster`]（导出成图压到不透明黑底）：
-/// 那里的目标恒为 `A == 255` 的黑 ⇒ 本函数退化成上游 `PreviewRaster.cs:45-46` 那条预乘式
+/// 那里的目标恒为 `A == 255` 的黑 ⇒ 本函数退化成上游 `_upstream/CrystalStudio/PreviewRaster.cs:45-46` 那条预乘式
 /// （`src[c] + dst[c]*(255-a)/255`，`dst` 为 0 ⇒ 只剩 `src[c]`），两处共用一份实现，不再抄第二份。
 #[inline]
 pub(crate) fn over(src: [u8; 4], dst: [u8; 4]) -> [u8; 4] {
@@ -301,7 +301,7 @@ pub(crate) fn over(src: [u8; 4], dst: [u8; 4]) -> [u8; 4] {
 
 /// 单像素「前景加性混合」（straight RGBA8 画布上的整型实现）。
 ///
-/// 上游 `CrystalStudio/MapSpriteDrawing.cs:68-96@6450da90` 在 **Pbgra32（预乘）**
+/// 上游 `_upstream/CrystalStudio/MapSpriteDrawing.cs:68-96` 在 **Pbgra32（预乘）**
 /// 空间做 `rgb = min(255, dst+src)`、`a = max(旧 dst.a, max(加后 rgb))`，并保持预乘。
 /// 本画布是 straight ⇒ 这里**先预乘、再相加、再反预乘**（公式与「本仓自定舍入」的
 /// 说明见 [`Canvas::blit_additive`] 的文档）。
@@ -429,7 +429,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // 前景加性混合（`MapSpriteDrawing.cs:5,68-96@6450da90`）
+    // 前景加性混合（`_upstream/CrystalStudio/MapSpriteDrawing.cs:5,68-96`）
     //
     // 下面用 `1×1` 画布：底色**直接种进缓冲区**（绕开 `over` 自己的舍入），
     // 保证「dst 就是这个值」这个前提精确，再把一帧同样 1×1 的源贴上去。

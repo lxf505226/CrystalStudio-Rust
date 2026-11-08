@@ -9,40 +9,40 @@
 //!
 //! | # | 位置（CrystalStudio） | 关键代码 | 本模块对应 |
 //! |---|---|---|---|
-//! | 1 | `MapViewport.cs:93` | `DarknessVisible => Lighting != MapLighting.Day` | [`MapLighting::Day`] ⇒ [`apply`] **直接返回**，一个字节都不碰 |
-//! | 2 | `MapViewport.Presentation.cs:34-35` | `dc.DrawImage(DarknessMask(), …)` | `Canvas::apply_black_mask` |
-//! | 3 | `MapViewport.Presentation.cs:77` | `byte darkness = Lighting switch { DawnDusk => 205, Day => 0, _ => 255 }`（同函数 `:70-71` 是上游**长边 1536 降采样**，本仓 1:1 —— 见 §二·补） | [`MapLighting::darkness`] |
-//! | 4 | `MapViewport.Presentation.cs:94-100`（关键行 `:99`） | `pixels[i] = Math.Max(0, pixels[i] - texture.Pixels[…])` | `叠加光源` 的 `saturating_sub` |
-//! | 5 | `MapPreview.cs:14-15` | `EmitsLight` = `Light ∈ 1..9` **且**有前景图 | [`emits_light`] |
-//! | 6 | `MapPreview.cs:17-19` | 11 项 `lightSizes` 表 | [`LIGHT_SIZES`] |
-//! | 7 | `MapPreview.cs:23` | `index = Math.Min(light * 3, 9)` | [`light_bounds`] |
-//! | 8 | `MapPreview.cs:26` | **定位用 `sizes[index]`、贴图用 `sizes[index+1]`** | [`light_bounds`]（**故意保留这格错位，不"修正"**） |
-//! | 9 | `MapPreview.cs:34` | 贴图宽 `1→445 / 2→685 / 其它→925` | 由 `sizes[index+1]` 自然得出，见 [`LIGHT_SIZES`] 的自洽核验 |
+//! | 1 | `_upstream/CrystalStudio/MapViewport.cs:93` | `DarknessVisible => Lighting != MapLighting.Day` | [`MapLighting::Day`] ⇒ [`apply`] **直接返回**，一个字节都不碰 |
+//! | 2 | `_upstream/CrystalStudio/MapViewport.Presentation.cs:34-35` | `dc.DrawImage(DarknessMask(), …)` | `Canvas::apply_black_mask` |
+//! | 3 | `_upstream/CrystalStudio/MapViewport.Presentation.cs:77` | `byte darkness = Lighting switch { DawnDusk => 205, Day => 0, _ => 255 }`（同函数 `:70-71` 是上游**长边 1536 降采样**，本仓 1:1 —— 见 §二·补） | [`MapLighting::darkness`] |
+//! | 4 | `_upstream/CrystalStudio/MapViewport.Presentation.cs:94-100`（关键行 `:99`） | `pixels[i] = Math.Max(0, pixels[i] - texture.Pixels[…])` | `叠加光源` 的 `saturating_sub` |
+//! | 5 | `_upstream/CrystalStudio/MapPreview.cs:14-15` | `EmitsLight` = `Light ∈ 1..9` **且**有前景图 | [`emits_light`] |
+//! | 6 | `_upstream/CrystalStudio/MapPreview.cs:17-19` | 11 项 `lightSizes` 表 | [`LIGHT_SIZES`] |
+//! | 7 | `_upstream/CrystalStudio/MapPreview.cs:23` | `index = Math.Min(light * 3, 9)` | [`light_bounds`] |
+//! | 8 | `_upstream/CrystalStudio/MapPreview.cs:26` | **定位用 `sizes[index]`、贴图用 `sizes[index+1]`** | [`light_bounds`]（**故意保留这格错位，不"修正"**） |
+//! | 9 | `_upstream/CrystalStudio/MapPreview.cs:34` | 贴图宽 `1→445 / 2→685 / 其它→925` | 由 `sizes[index+1]` 自然得出，见 [`LIGHT_SIZES`] 的自洽核验 |
 //!
 //! # 二、三档的**全部**差异就是一个字节
 //!
 //! | 档 | 环境光 ambient（注释值） | 遮罩 alpha = `255 - ambient` | 代码字面量 |
 //! |---|---:|---:|---|
-//! | [`MapLighting::DawnDusk`] | 50 | **205** | `Presentation.cs:77` `DawnDusk => 205` |
+//! | [`MapLighting::DawnDusk`] | 50 | **205** | `_upstream/CrystalStudio/MapViewport.Presentation.cs:77` `DawnDusk => 205` |
 //! | [`MapLighting::Day`] | 255 | **0** | 同左 `Day => 0` |
 //! | [`MapLighting::Night`] | 0 | **255** | 同左 `_ => 255`（默认分支 = Night） |
 //!
-//! `255-50=205` / `255-255=0` / `255-0=255` ⇒ 注释（`MapViewport.Presentation.cs:75-76`
+//! `255-50=205` / `255-255=0` / `255-0=255` ⇒ 注释（`_upstream/CrystalStudio/MapViewport.Presentation.cs:75-76`
 //! 「dawn/evening = 50, day = 255, standard night = 0」）与同一函数的字面量（`:77`）
 //! **双证自洽**。
 //!
-//! ⚠ **行号订正（2026-11-08）**：原文两处引的都是 `Presentation.cs:68-69`，实为 `:75-76`
+//! ⚠ **行号订正（2026-11-08）**：原文两处引的都是 `_upstream/CrystalStudio/MapViewport.Presentation.cs:68-69`，实为 `:75-76`
 //! —— `d66237b` 之后上游该文件行号漂移，注释**内容逐字未变**（原句仍是那两行）。
 //! 旧值保留作历史引用。真值不在 `MapLighting.cs` 里（那个文件只有 3 行，纯枚举定义）。
 //!
 //! ⚠ **本模块不生成任何衰减曲线**：三张光罩 PNG 是从官方目录**原样拷贝**的
 //! （`assets/lights/{445,685,925}.png`，SHA256 与 `CrystalStudio/CrystalStudio/PreviewLights/`
 //! 逐字节相同），本模块只做「解码 → 取 R → 减 alpha」。**没有 `205/0/255` 以外的任何自定数值**，
-//! 也没有任何三档之间的过渡/动画（官方是三档互斥单选，`MainWindow.axaml.cs:676-683`）。
+//! 也没有任何三档之间的过渡/动画（官方是三档互斥单选，`_upstream/CrystalStudio/MainWindow.axaml.cs:676-683`）。
 //!
 //! # 二·补、遮罩**采样分辨率**：上游降采样再拉伸，本仓 1:1（A-005，有意差异）
 //!
-//! 上游 `MapViewport.Presentation.cs:66-71` 的 `DarknessMask()` 先算
+//! 上游 `_upstream/CrystalStudio/MapViewport.Presentation.cs:66-71` 的 `DarknessMask()` 先算
 //! `scale = Math.Min(1, 1536 / Math.Max(ActualWidth, ActualHeight))`，
 //! 即**长边超过 1536 就按 1536 降采样**（注释原文："Keep work bounded on large displays.
 //! The smooth light mask does not need one texel per physical pixel"），
@@ -61,15 +61,15 @@
 //! # 三、四条硬口径
 //!
 //! 1. **「白天」= 关**：`darkness == 0` ⇒ [`apply`] 第一行就 `return`，连遮罩都不建
-//!    （照官方 `MapViewport.cs:93` 的 `DarknessVisible` 短路写，**不造一个恒等系数**）。这也是
+//!    （照官方 `_upstream/CrystalStudio/MapViewport.cs:93` 的 `DarknessVisible` 短路写，**不造一个恒等系数**）。这也是
 //!    [`crate::RenderOptions::default()`] 能与改动前**逐字节相同**的来源；
 //! 2. **盖三层、裁在地图矩形内**：本模块在 `compose` 的三层循环**全部结束之后**才跑
 //!    （见 `compose.rs` 的调用点），而离屏画布**本身就是地图矩形**
 //!    （`宽 = cells_w*48`、`高 = cells_h*32`）⇒ 「裁到地图矩形」在这里是恒等裁剪，
-//!    不需要额外 `clip`。官方在屏幕上多出来的视口边缘（`Presentation.cs:31-32` 的
+//!    不需要额外 `clip`。官方在屏幕上多出来的视口边缘（`_upstream/CrystalStudio/MapViewport.Presentation.cs:31-32` 的
 //!    `PushClip(map)`）在本库不存在；
 //! 3. **光源只从物件层（表层）取，且要该层可见**：`front_visible == false` 时
-//!    **只画遮罩、不叠任何光**（官方 `Presentation.cs:73` 的 `if (VisibleLayers[2])`）；
+//!    **只画遮罩、不叠任何光**（官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:73` 的 `if (VisibleLayers[2])`）；
 //! 4. **合成式是 `max(0, alpha - intensity)`**：`u8::saturating_sub`，不是乘、不是加。
 //!
 //! # 四、偏移口径与已知偏差（如实登记，不静默）
@@ -77,7 +77,7 @@
 //! （① 曾经是偏差、2026-11-05 已补齐；②③ 仍是偏差，逐条写明。）
 //!
 //! **① 光罩的世界坐标偏移 `offset` = 前景帧的 `anchor`（2026-11-05 已补齐）。**
-//! 官方 `MapViewport.Presentation.cs:84-87@901dbe2f(未入库)`：
+//! 官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:84-86`：
 //! `offset = new(sprite.X, sprite.Y)`，`sprite` 取 `Assets.Get(front.Library, (front.Image & 0x7FFF) - 1)`
 //! ⇒ **无条件**生效（不看库号/图号/尺寸），且是**静态基准帧**（不含门偏移、不含动画步进）。
 //! 本模块照此实现：帧号走 [`crate::compose::帧号`]（= `(fr_img & 0x7FFF) - 1`，
@@ -95,13 +95,13 @@
 //! ⇒ 不是「个位数到几十」这种可忽略量级，而是「一半的图一个像素都不差、另一半每一束光都错」的双峰分布。
 //!
 //! **② 光罩强度的取法**：官方把 PNG 转成 **Pbgra32（预乘）** 后取 **R 通道**
-//! （`MapPreview.cs:40-43`，注释「Premultiplication reproduces SourceAlpha * colour」）⇒
+//! （`_upstream/CrystalStudio/MapPreview.cs:40-43`，注释「Premultiplication reproduces SourceAlpha * colour」）⇒
 //! 本模块取 `R × A / 255`（四舍五入 `(r*a+127)/255`）。⚠ 预乘的**舍入方式**（截断 vs 四舍五入）
 //! 未从 Avalonia 源码核实，差 **±1**，视觉不可辨；已按「四舍五入」实现并在此登记。
 //! 实测三张 PNG 的 `R = G = B`、`A ≥ R`（例：`445.png` 中心 `(222,169)` = `A255 R237`，
 //! `(222,10)` = `A74 R41`），故预乘后强度 ≤ 237，**单个光源不可能把遮罩压到全亮**。
 //!
-//! **③ 图外光源的扫描范围**：官方遍历整份文档的 `presentationCells`（`Presentation.cs:73`），
+//! **③ 图外光源的扫描范围**：官方遍历整份文档的 `presentationCells`（`_upstream/CrystalStudio/MapViewport.Presentation.cs:73`），
 //! 图外的光源也会外溢到视口内。本库为省掉「整图扫描」按光罩尺寸反算了一个**充分**外扩量
 //! （见 [`扫描外扩格数`]），等价于全图扫描（推导写在那个常量的文档里）。
 
@@ -115,31 +115,31 @@ use crate::compose::{取格, 帧号};
 use crate::png_io::read_png_from_memory;
 use crate::types::{Viewport, CELL_H, CELL_W};
 
-/// 地图光照档位（官方 `public enum MapLighting { DawnDusk, Day, Night }`，`MapLighting.cs:3`）。
+/// 地图光照档位（官方 `public enum MapLighting { DawnDusk, Day, Night }`，`_upstream/CrystalStudio/MapLighting.cs:3`）。
 ///
 /// **默认 = [`MapLighting::Day`]**，与官方两处默认一致：
-/// `MapViewport.cs:92` 的 `Lighting { get; set; } = MapLighting.Day`、
-/// `MainWindow.axaml:5` 的 `DayLighting … IsChecked="True"`。
+/// `_upstream/CrystalStudio/MapViewport.cs:92` 的 `Lighting { get; set; } = MapLighting.Day`、
+/// `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `DayLighting … IsChecked="True"`。
 ///
 /// ⚠ 官方**不持久化**这个选择（`SettingsStore.cs` / `SettingsWindow.cs` 里一处都没有）⇒
 /// 本库同样不做持久化，默认值就是「白天」。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum MapLighting {
-    /// 黎明 / 黄昏：环境光 50 ⇒ 遮罩 alpha **205**（`Presentation.cs:77`）。
+    /// 黎明 / 黄昏：环境光 50 ⇒ 遮罩 alpha **205**（`_upstream/CrystalStudio/MapViewport.Presentation.cs:77`）。
     DawnDusk,
-    /// 白天：环境光 255 ⇒ 遮罩 alpha **0** ⇒ **完全不画遮罩**（`MapViewport.cs:93` 的 `DarknessVisible` 短路）。
+    /// 白天：环境光 255 ⇒ 遮罩 alpha **0** ⇒ **完全不画遮罩**（`_upstream/CrystalStudio/MapViewport.cs:93` 的 `DarknessVisible` 短路）。
     ///
     /// 这是 [`Default`]，也是「输出与改动前逐字节相同」的那一档。
     #[default]
     Day,
-    /// 夜晚：环境光 0 ⇒ 遮罩 alpha **255**（`Presentation.cs:77` 的 `_ => 255` 默认分支）。
+    /// 夜晚：环境光 0 ⇒ 遮罩 alpha **255**（`_upstream/CrystalStudio/MapViewport.Presentation.cs:77` 的 `_ => 255` 默认分支）。
     Night,
 }
 
 impl MapLighting {
     /// 全屏黑色遮罩的 alpha：`255 - 环境光`。
     ///
-    /// 逐值对应官方 `MapViewport.Presentation.cs:77` 的
+    /// 逐值对应官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:77` 的
     /// `Lighting switch { DawnDusk => 205, Day => 0, _ => 255 }`。
     pub const fn darkness(self) -> u8 {
         match self {
@@ -149,10 +149,10 @@ impl MapLighting {
         }
     }
 
-    /// 官方注释里的环境光值（`MapViewport.Presentation.cs:75-76`：dawn/evening = 50、
+    /// 官方注释里的环境光值（`_upstream/CrystalStudio/MapViewport.Presentation.cs:75-76`：dawn/evening = 50、
     /// day = 255、night = 0）。
     ///
-    /// ⚠ 行号订正（2026-11-08）：原引 `Presentation.cs:68-69`，实为 `:75-76`（`d66237b` 之后
+    /// ⚠ 行号订正（2026-11-08）：原引 `_upstream/CrystalStudio/MapViewport.Presentation.cs:68-69`，实为 `:75-76`（`d66237b` 之后
     /// 行号漂移，注释内容未变）。旧值保留作历史引用。
     ///
     /// 与 [`MapLighting::darkness`] 的关系恒为 `darkness == 255 - ambient`（测试钉住）。
@@ -174,7 +174,7 @@ impl MapLighting {
     }
 }
 
-/// 官方 11 项 `lightSizes` 表（`CrystalStudio/CrystalStudio/MapPreview.cs:17-19`，逐字抄）。
+/// 官方 11 项 `lightSizes` 表（`_upstream/CrystalStudio/MapPreview.cs:17-19`，逐字抄）。
 ///
 /// | idx | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 |
 /// |---|---|---|---|---|---|---|---|---|---|---|---|
@@ -182,7 +182,7 @@ impl MapLighting {
 ///
 /// **自洽核验（不是巧合）**：`index = min(light*3, 9)`、贴图取 `sizes[index+1]` ⇒
 /// `light=1 → sizes[4] = 445×338`、`light=2 → sizes[7] = 685×521`、`light=3..9 → sizes[10] = 925×703`，
-/// 与官方 `MapPreview.cs:34` 的 `width = light == 1 ? 445 : light == 2 ? 685 : 925` **逐值吻合**，
+/// 与官方 `_upstream/CrystalStudio/MapPreview.cs:34` 的 `width = light == 1 ? 445 : light == 2 ? 685 : 925` **逐值吻合**，
 /// 也与三张 PNG 的 IHDR 尺寸（445×338 / 685×521 / 925×703）**逐值吻合**。
 /// ⇒ 错位关系（定位用 `index`、贴图用 `index+1`）是官方**故意保留**的，**不许"修正"**。
 pub const LIGHT_SIZES: [(u32, u32); 11] = [
@@ -199,7 +199,7 @@ pub const LIGHT_SIZES: [(u32, u32); 11] = [
     (925, 703),
 ];
 
-/// 这一格**是否发光**（官方 `MapPreview.EmitsLight`，`MapPreview.cs:14-15`）。
+/// 这一格**是否发光**（官方 `MapPreview.EmitsLight`，`_upstream/CrystalStudio/MapPreview.cs:14-15`）。
 ///
 /// 条件（两个都要）：
 ///
@@ -217,7 +217,7 @@ pub fn emits_light(cell: &Cell) -> bool {
 
 /// 一束光在**世界像素坐标**里的矩形：`(左上 x, 左上 y, 贴图宽, 贴图高)`。
 ///
-/// 逐字对应官方 `MapPreview.LightBounds`（`MapPreview.cs:21-29`）：
+/// 逐字对应官方 `MapPreview.LightBounds`（`_upstream/CrystalStudio/MapPreview.cs:21-29`）：
 ///
 /// ```text
 /// index        = min(light * 3, 9)
@@ -228,10 +228,10 @@ pub fn emits_light(cell: &Cell) -> bool {
 /// ```
 ///
 /// ⚠ 三个细节都不许"顺手修正"：
-/// - **`index` 与 `index+1` 的错位**（`MapPreview.cs:24-25` 注释原文「The client creates
+/// - **`index` 与 `index+1` 的错位**（`_upstream/CrystalStudio/MapPreview.cs:24-25` 注释原文「The client creates
 ///   textures starting at LightSizes[1], but positions them using LightSizes[index].
 ///   Preserve that one-entry difference.」）；
-/// - **`-14` / `+11`** 这两个非对称常数（`MapPreview.cs:27-28` 逐字：
+/// - **`-14` / `+11`** 这两个非对称常数（`_upstream/CrystalStudio/MapPreview.cs:27-28` 逐字：
 ///   `x * 48 - positionSize.Width / 2 - 14 + offset.X` /
 ///   `y * 32 + 11 - positionSize.Height / 2 + offset.Y` —— 注意 `-14` 在 x 侧、`+11`
 ///   在 y 侧，**不对称也不是同一个符号**，抄错一个就整束光偏）；
@@ -268,7 +268,7 @@ pub fn light_bounds(x: i32, y: i32, light: u8, offset: (i32, i32)) -> Option<(i3
 
 /// 图外光源的扫描外扩量（**格**）。
 ///
-/// 官方遍历整份文档的所有「有光/有门」格（`Presentation.cs:73`），所以**视口外的光源也会
+/// 官方遍历整份文档的所有「有光/有门」格（`_upstream/CrystalStudio/MapViewport.Presentation.cs:73`），所以**视口外的光源也会
 /// 外溢进视口**。本库不整图扫描，改为「视口外扩 N 格」——N 由光罩尺寸反算，取**充分**值：
 ///
 /// 一束光只可能在满足下式时碰到视口（`ox/oy` = 视口左上角世界像素、`W/H` = 视口像素宽高）：
@@ -305,7 +305,7 @@ pub const 扫描外扩格数: i32 = 16;
 ///
 /// # 与上游的采样差异（A-005，有意差异；判据见模块文档 §二·补）
 ///
-/// 上游 `DarknessMask()`（`MapViewport.Presentation.cs:66-71`）把遮罩栅格**按长边降到 ≤1536**
+/// 上游 `DarknessMask()`（`_upstream/CrystalStudio/MapViewport.Presentation.cs:66-71`）把遮罩栅格**按长边降到 ≤1536**
 /// 再拉伸回视口；本函数按**可见区世界像素 1:1** 建表（[`Viewport::pixel_size`]）。
 ///
 /// - **没有数值差异**：三档 alpha（`205/0/255`）、[`LIGHT_SIZES`] 11 项表、`sizes[index]` 的
@@ -317,10 +317,10 @@ pub const 扫描外扩格数: i32 = 16;
 ///
 /// # 参数
 ///
-/// - `front_visible`：物件层（表层）是否可见。官方 `Presentation.cs:73` 的
+/// - `front_visible`：物件层（表层）是否可见。官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:73` 的
 ///   `if (VisibleLayers[2])` ⇒ **层关掉时只压暗、不加光**；
 /// - `src`：帧源，**只用来取前景帧的锚点偏移**（[`SpriteSource::anchor`]，不解码像素）。
-///   官方光罩位置用 `sprite.X / sprite.Y`（`Presentation.cs:84-86`），这里就取那个值。
+///   官方光罩位置用 `sprite.X / sprite.Y`（`_upstream/CrystalStudio/MapViewport.Presentation.cs:84-86`），这里就取那个值。
 ///   光罩**强度**与它无关（强度只来自贴图）—— 官方同口径：`EmitsLight` 只判图号非 0，
 ///   不判 `Assets.Get` 是否成功，取不到帧时 `offset` 保持零、光罩照画。
 pub(crate) fn apply(
@@ -333,7 +333,7 @@ pub(crate) fn apply(
 ) {
     let darkness = lighting.darkness();
     if darkness == 0 {
-        return; // 白天：连遮罩都不画（官方 `MapViewport.cs:93` 的 `DarknessVisible`）
+        return; // 白天：连遮罩都不画（官方 `_upstream/CrystalStudio/MapViewport.cs:93` 的 `DarknessVisible`）
     }
     let Some((宽, 高)) = vp.pixel_size() else {
         return; // 视口本身非法（`compose` 早一步已拒，这里只是不 panic）
@@ -345,7 +345,7 @@ pub(crate) fn apply(
     canvas.apply_black_mask(&遮罩);
 }
 
-/// 逐格把光罩强度从遮罩 alpha 里减掉（官方 `Presentation.cs:87-93` 的循环）。
+/// 逐格把光罩强度从遮罩 alpha 里减掉（官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:87-93` 的循环）。
 fn 叠加光源(
     遮罩: &mut [u8],
     宽: u32,
@@ -383,7 +383,7 @@ fn 叠加光源(
             if !emits_light(cell) {
                 continue;
             }
-            // 偏移 = 该格**静态基准帧**的 anchor（官方 `Presentation.cs:84-86`）。
+            // 偏移 = 该格**静态基准帧**的 anchor（官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:84-86`）。
             //
             // 三个必须守住的细节：
             // 1. **静态基准帧**：帧号用 `帧号(cell.fr_img)`（= `(fr_img & 0x7FFF) - 1`），
@@ -457,7 +457,7 @@ static 光罩445: OnceLock<Option<LightMask>> = OnceLock::new();
 static 光罩685: OnceLock<Option<LightMask>> = OnceLock::new();
 static 光罩925: OnceLock<Option<LightMask>> = OnceLock::new();
 
-/// 按贴图**宽**取光罩（官方 `MapPreview.LightTexture` 就是按宽做键，`MapPreview.cs:34`）。
+/// 按贴图**宽**取光罩（官方 `MapPreview.LightTexture` 就是按宽做键，`_upstream/CrystalStudio/MapPreview.cs:34`）。
 ///
 /// 只认 `445 / 685 / 925` 三个宽度（[`LIGHT_SIZES`] 里 `index+1` 的取值只有这三个）。
 /// 解码失败返回 `None`（⇒ 该束光不生效，**不 panic、也不伪造强度**）。
@@ -471,7 +471,7 @@ fn 光罩(宽度: u32) -> Option<&'static LightMask> {
     槽.get_or_init(|| 解码光罩(宽度)).as_ref()
 }
 
-/// 解码一张 PNG 成强度表：`强度 = R × A / 255`（官方转 Pbgra32 后取 R，`MapPreview.cs:40-43`）。
+/// 解码一张 PNG 成强度表：`强度 = R × A / 255`（官方转 Pbgra32 后取 R，`_upstream/CrystalStudio/MapPreview.cs:40-43`）。
 fn 解码光罩(宽度: u32) -> Option<LightMask> {
     let 字节 = match 宽度 {
         445 => PNG_445,
@@ -516,7 +516,7 @@ mod tests {
 
     #[test]
     fn 尺寸表错位与贴图宽自洽() {
-        // 官方 MapPreview.cs:34：1→445 / 2→685 / 其它→925
+        // 官方 _upstream/CrystalStudio/MapPreview.cs:34：1→445 / 2→685 / 其它→925
         for light in 1..=9u8 {
             let (_, _, 贴图宽, 贴图高) = light_bounds(0, 0, light, (0, 0)).expect("1..=9 合法");
             let index = (usize::from(light) * 3).min(9);

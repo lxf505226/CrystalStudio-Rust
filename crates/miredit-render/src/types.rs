@@ -295,13 +295,13 @@ impl Default for LayerMask {
 }
 
 /// 渲染选项（地图层）：**开启门** + **地图光照** 两个开关
-/// （对应编辑器菜单「视图 → 开启门」（`MainWindow.axaml:5` 的 `DoorsOpenToggle`）与
-/// 「视图 → 地图光照」（`MapLighting.cs:3` 的 `MapLighting` 枚举））。
+/// （对应编辑器菜单「视图 → 开启门」（`_upstream/CrystalStudio/MainWindow.axaml:5` 的 `DoorsOpenToggle`）与
+/// 「视图 → 地图光照」（`_upstream/CrystalStudio/MapLighting.cs:3` 的 `MapLighting` 枚举））。
 ///
 /// # 一、默认 = 现状（**逐字节不变**）
 ///
 /// [`Default`] 是 `doors_open: false` + `lighting: MapLighting::Day`：前景层帧号仍只有
-/// `(fr_img & 0x7FFF) - 1` 这一项，且**白天档连遮罩都不画**（官方 `MapViewport.cs:89`
+/// `(fr_img & 0x7FFF) - 1` 这一项，且**白天档连遮罩都不画**（官方 `_upstream/CrystalStudio/MapViewport.cs:93`
 /// 的短路口径），与引入本结构之前的输出**逐字节相同**。[`crate::try_render_region`] /
 /// [`crate::try_render_region_with`] / [`crate::try_render_region_scaled`] 三个旧入口的
 /// **签名一个都没改**，内部一律按本默认值转调 —— 调用方（`miredit-gui` / `miredit-web`）
@@ -325,7 +325,7 @@ impl Default for LayerMask {
 /// 1. **只有前景层有门**：地表 / 中层一个像素都不受影响（门帧与闭门帧同属 `Objects` 库，
 ///    `GameScene.cpp:3341,3388`）；
 /// 2. **`door_index & 0x7F == 0` 的格不受影响** —— 没有门的格即便 `door_offset` 非 0 也不加；
-/// 3. **不加阻挡、不改数据**：编辑器该项也只改「画哪一帧」（`MapPreview.cs:6-10`），
+/// 3. **不加阻挡、不改数据**：编辑器该项也只改「画哪一帧」（`_upstream/CrystalStudio/MapPreview.cs:6-10`），
 ///    可走性另有 `TMap.cpp:339` 的 `0x8000` 判据（见 [`CollisionOverlay`]），两者不许混。
 ///
 /// # 三、为什么是 `& 0x7F` 掩码（**不能整字节相加**）
@@ -349,7 +349,7 @@ impl Default for LayerMask {
 ///
 /// 官方 C# 编辑器的同一处实现是
 /// `image + (doorsOpen && (cell.Door & 0x7F) != 0 ? cell.DoorOffset : 0)`
-/// （`CrystalStudio/MapPreview.cs:6-10`）—— 它**没有掩 `0x80`**。按 §三 的实测数据，
+/// （`_upstream/CrystalStudio/MapPreview.cs:6-10`）—— 它**没有掩 `0x80`**。按 §三 的实测数据，
 /// 那是编辑器在该数据上的**偏差**（会画错上面 1,229 格里的每一格），不是我们自定的口径。
 /// 本仓一律以**客户端字节语义**为准（与 [`CollisionOverlay`] 那节「判定按 `TMap.cpp:339`、
 /// 只借 C# 的视觉样式」是同一条纪律）。
@@ -357,14 +357,14 @@ impl Default for LayerMask {
 /// # 五、缓存键（调用方注意）
 ///
 /// 门开合**改变的是帧号**，所以凡是「按视口缓存渲染结果」的调用方，必须把
-/// `doors_open` 并进缓存键（官方编辑器就是这么做的：`MapViewport.cs:91-99` 的 setter
+/// `doors_open` 并进缓存键（官方编辑器就是这么做的：`_upstream/CrystalStudio/MapViewport.cs:101` 的 setter
 /// 里 `frontRows.Clear()`，并把 `(DoorsOpen ? 16 : 0)` 并进 `RenderLayerSettings` 第 5 位，
-/// `:85`）。本库自身**不缓存跨次结果**（`FrameCache` 只在一次渲染内有效），无需额外处理。
+/// `:89`）。本库自身**不缓存跨次结果**（`FrameCache` 只在一次渲染内有效），无需额外处理。
 ///
 /// # 六、`lighting`：地图光照（2026-11-05 新增）
 ///
-/// 三档互斥（官方 `MapLighting.cs:3` 的 `enum MapLighting { DawnDusk, Day, Night }`），
-/// **默认 [`MapLighting::Day`]**（`MapViewport.cs:88`），语义是
+/// 三档互斥（官方 `_upstream/CrystalStudio/MapLighting.cs:3` 的 `enum MapLighting { DawnDusk, Day, Night }`），
+/// **默认 [`MapLighting::Day`]**（`_upstream/CrystalStudio/MapViewport.cs:92`），语义是
 /// 「**全屏黑色遮罩（alpha = 255 − 环境光）+ 逐格用光罩贴图减 alpha**」，**不是逐格改色**：
 ///
 /// | 档 | 环境光 | 遮罩 alpha | 效果 |
@@ -381,10 +381,10 @@ impl Default for LayerMask {
 ///
 /// 1. 不自己生成衰减曲线 —— 只解码官方 `assets/lights/*.png`；
 /// 2. 不微调 `205 / 0 / 255` —— 官方字面量 + 注释双证自洽；
-/// 3. 不给三档加过渡动画 —— 官方是三个互斥 `CheckBox`（`MainWindow.axaml.cs:676-683`）。
+/// 3. 不给三档加过渡动画 —— 官方是三个互斥 `CheckBox`（`_upstream/CrystalStudio/MainWindow.axaml.cs:676-683`）。
 ///
 /// 缓存键：与 `doors_open` 同理，**`lighting` 也必须并进调用方的视口缓存键**
-/// （官方把 `Lighting` 放进 `darknessKey`，`Presentation.cs:65`）。
+/// （官方把 `Lighting` 放进 `darknessKey`，`_upstream/CrystalStudio/MapViewport.Presentation.cs:66`）。
 ///
 /// # 例子
 ///
@@ -489,14 +489,14 @@ impl RenderOptions {
 /// Rust 侧同口径见 `mir2-map/src/cell.rs:204-212` 的 `Cell::is_walkable`。
 ///
 /// ⚠ **与 C# 编辑器的差异**：`CrystalStudio` 把「低/高阻挡」编成 `BackImage` 的
-/// `0x20000000` / `0x40000000` 两个**自有位**（`MapViewport.cs:23`），那是编辑器内部的
+/// `0x20000000` / `0x40000000` 两个**自有位**（`_upstream/CrystalStudio/MapViewport.cs:24`），那是编辑器内部的
 /// 待写回状态，**不是客户端语义**。本库只借它的**视觉样式**，判定一律走 `0x8000`。
 ///
 /// # 视觉（借 C# 的样式）
 ///
 /// 整格 48×32 铺一层半透明纯色：低阻挡 `RGB(240,85,105)`、高位阻挡 `RGB(65,165,245)`，
-/// 默认 alpha `90/255`（`CollisionMarkers.cs:6-7` 的 `Color.FromArgb(90, …)`）；
-/// 同格两者都有 ⇒ **左半格**（24×32）低阻挡、**右半格**高阻挡（`CollisionMarkers.cs:19-23`）。
+/// 默认 alpha `90/255`（`_upstream/CrystalStudio/CollisionMarkers.cs:6-7` 的 `Color.FromArgb(90, …)`）；
+/// 同格两者都有 ⇒ **左半格**（24×32）低阻挡、**右半格**高阻挡（`_upstream/CrystalStudio/CollisionMarkers.cs:19-23`）。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CollisionOverlay {
     /// 是否叠加**低阻挡**标记（`wBkImg & 0x8000`）。
@@ -511,7 +511,7 @@ pub struct CollisionOverlay {
 impl CollisionOverlay {
     /// 默认标记透明度 `90`。
     ///
-    /// 出处：`CrystalStudio/CollisionMarkers.cs:6-7`
+    /// 出处：`_upstream/CrystalStudio/CollisionMarkers.cs:6-7`
     /// （`Color.FromArgb(90, 240, 85, 105)` / `Color.FromArgb(90, 65, 165, 245)`，首参即 alpha）。
     pub const DEFAULT_ALPHA: u8 = 90;
 

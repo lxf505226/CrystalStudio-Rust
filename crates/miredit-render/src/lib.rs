@@ -32,7 +32,7 @@
 //! | 帧号口径 | **1-based**，`0`=无图，取图 `(img&0x7FFF)-1` | `map_loader.gd:51-52`、`map_overlay_layer.gd:20`；原作 `GameScene.cpp:3575-3577` |
 //! | 库路由 | `btTiles`→地面 / `btsmTiles`→中层 / `btArea`→表层 | `map_loader.gd:39-45`、`map_overlay_layer.gd:67,71,84,88`；原作 `MShare.cpp:808-873` |
 //! | 层序 | 地表 → 中层 → 表层 | `map_view.gd:108-114`、`map_overlay_layer.gd:22-24` |
-//! | 层内顺序 | **行优先**（`dy` 外 / `dx` 内） | C# `MapViewport.cs:255,271,362`；原作 `GameScene.cpp:3429-3433,3545-3556`（`.gd` 列优先是少数派，订正记录见 §五.1）|
+//! | 层内顺序 | **行优先**（`dy` 外 / `dx` 内） | C# `_upstream/CrystalStudio/MapViewport.cs:255,271,362`；原作 `GameScene.cpp:3429-3433,3545-3556`（`.gd` 列优先是少数派，订正记录见 §五.1）|
 //! | 地表锚点 | 左上角 = `(x*48, y*32)` | `map_view.gd:13` |
 //! | 中层锚点 | 左上角 = `(x*48, y*32)` | `map_overlay_layer.gd:79` |
 //! | 表层锚点 | **底边**钉格底：`y_top=(y+1)*32-h` | `map_overlay_layer.gd:18-19,96-99`；原作 `GameScene.cpp:3515` |
@@ -118,18 +118,18 @@
 //!
 //! | 项 | 取值 | 出处 |
 //! |---|---|---|
-//! | 低阻挡色 | `RGB(240,85,105)` | `CrystalStudio/CollisionMarkers.cs:6`（`First`）|
-//! | 高位阻挡色 | `RGB(65,165,245)` | `CrystalStudio/CollisionMarkers.cs:7`（`Second`）|
+//! | 低阻挡色 | `RGB(240,85,105)` | `_upstream/CrystalStudio/CollisionMarkers.cs:6`（`First`）|
+//! | 高位阻挡色 | `RGB(65,165,245)` | `_upstream/CrystalStudio/CollisionMarkers.cs:7`（`Second`）|
 //! | 透明度 | `alpha = 90/255`（默认） | 同上两行的首参 |
-//! | 形状 | 整格 `48×32` 纯色块 | `CollisionMarkers.cs:24`（`DrawRectangle(..., cell)`）|
-//! | 同格两者都有 | **左半格**低（`24×32`）+ **右半格**高（`24×32`） | `CollisionMarkers.cs:19-23`（`cell.Width / 2`）|
-//! | 时机 | 地图精灵之后、灯光/门标记之前 | `MapViewport.Presentation.cs:40-42` |
+//! | 形状 | 整格 `48×32` 纯色块 | `_upstream/CrystalStudio/CollisionMarkers.cs:24`（`DrawRectangle(..., cell)`）|
+//! | 同格两者都有 | **左半格**低（`24×32`）+ **右半格**高（`24×32`） | `_upstream/CrystalStudio/CollisionMarkers.cs:19-23`（`cell.Width / 2`）|
+//! | 时机 | 地图精灵之后、灯光/门标记之前 | `_upstream/CrystalStudio/MapViewport.Presentation.cs:40-42` |
 //!
 //! ## 7.3 与 C# 的**冲突**及裁定（照任务书「以客户端语义为准」）
 //!
 //! C# 编辑器把「低/高阻挡」编成 `Cell.BackImage` 的 `0x20000000` / `0x40000000` 两个
-//! **自有位**（`MapViewport.cs:23` 的 `ActiveCollisionMask`，`:480` 写入、
-//! `:83` 的 `VisibleCollisionMask` 过滤）——那是它**尚未写回 `.map` 的编辑态**，
+//! **自有位**（`_upstream/CrystalStudio/MapViewport.cs:24` 的 `ActiveCollisionMask`，`:480` 写入、
+//! `:87` 的 `VisibleCollisionMask` 过滤）——那是它**尚未写回 `.map` 的编辑态**，
 //! 与客户端 `.map` 里的 `0x8000` 不是同一套位，**两者不可混用**。
 //! ⇒ 本库：**判定按 §7.1 的客户端语义**，只借 §7.2 的颜色/形状/时机。
 //!
@@ -161,7 +161,7 @@
 //!
 //! # 九、开启门（门开帧偏移，[`RenderOptions::doors_open`]，2026-11-05 新增）
 //!
-//! 编辑器菜单「视图 → 开启门」（`MainWindow.axaml:5` 的 `DoorsOpenToggle`，**默认不勾**）
+//! 编辑器菜单「视图 → 开启门」（`_upstream/CrystalStudio/MainWindow.axaml:5` 的 `DoorsOpenToggle`，**默认不勾**）
 //! 在渲染层的实现：**只改前景层画哪一帧**，不改阻挡、不改数据、不做过渡动画。
 //!
 //! ## 9.1 公式（客户端口径，`GameScene.cpp:3328-3388`）
@@ -184,7 +184,7 @@
 //! 3. **必须 `& 0x7F`**：`0x80` 是「运行期已开门」标志位，不是偏移。全量实测
 //!    **43 张图 / 1,764 格**已置位，其中 **1,229 格**有前景图 + 非 0 门索引
 //!    （**1,173 格库号 0 = `Objects` 真实存在，会真画出来**）⇒ 整字节相加会 `+128+low`
-//!    画错帧。**官方 C# 编辑器 `MapPreview.cs:6-10` 没掩 `0x80`，那是它的偏差，本库不跟**
+//!    画错帧。**官方 C# 编辑器 `_upstream/CrystalStudio/MapPreview.cs:6-10` 没掩 `0x80`，那是它的偏差，本库不跟**
 //!    （与 §七 阻挡位「判定按客户端、只借 C# 视觉」同一条纪律）。逐条数据见
 //!    [`RenderOptions`] 类型文档 §三/§四。
 //!
@@ -193,7 +193,7 @@
 //! 1× 走 [`try_render_region_with_options`]，多倍率走 [`try_render_region_scaled_with`]
 //! （`RenderScale::One` 档仍**直接转调** 1× 路径 ⇒ 两入口在 1× 上逐字节相同）。
 //! 门开合改变的是帧号 ⇒ **按视口缓存渲染结果的调用方必须把 `doors_open` 并进缓存键**
-//! （官方编辑器 `MapViewport.cs:91-99` 的 `frontRows.Clear()` + `:85` 的
+//! （官方编辑器 `_upstream/CrystalStudio/MapViewport.cs:101` 的 `frontRows.Clear()` + `:89` 的
 //! `(DoorsOpen ? 16 : 0)` 就是同一件事）。本库自身不跨次缓存，无需处理。
 //!
 //! ## 9.4 帧号 / 门偏移**只有一份**（2026-11-05 收口）
@@ -211,17 +211,17 @@
 //!
 //! # 十、地图光照（[`RenderOptions::lighting`]，2026-11-05 新增）
 //!
-//! 编辑器菜单「视图 → 地图光照」三档（`MapLighting.cs:3` 的 `enum { DawnDusk, Day, Night }`，
-//! **默认 `Day`**，`MapViewport.cs:88`）在渲染层的实现。官方机制**不是逐格改色**：
+//! 编辑器菜单「视图 → 地图光照」三档（`_upstream/CrystalStudio/MapLighting.cs:3` 的 `enum { DawnDusk, Day, Night }`，
+//! **默认 `Day`**，`_upstream/CrystalStudio/MapViewport.cs:92`）在渲染层的实现。官方机制**不是逐格改色**：
 //!
 //! ```text
 //! ① 全屏黑色遮罩，alpha = 255 - 环境光            // 205 / 0 / 255
 //! ② 每束光：alpha = max(0, alpha - 光罩强度)      // 逐格减
 //! ③ 遮罩盖三层、裁在地图矩形内；光源只从物件层取
-//! ④ 「白天」= 关（连遮罩都不画，MapViewport.cs:89）
+//! ④ 「白天」= 关（连遮罩都不画，_upstream/CrystalStudio/MapViewport.cs:93）
 //! ```
 //!
-//! ## 10.1 三档常量（`MapViewport.Presentation.cs:68-70`，注释 + 字面量双证自洽）
+//! ## 10.1 三档常量（`_upstream/CrystalStudio/MapViewport.Presentation.cs:68-70`，注释 + 字面量双证自洽）
 //!
 //! | 档 | 环境光 | 遮罩 alpha |
 //! |---|---:|---:|
@@ -229,27 +229,27 @@
 //! | [`MapLighting::Day`] | 255 | **0** |
 //! | [`MapLighting::Night`] | 0 | **255** |
 //!
-//! ## 10.2 逐格光罩（`MapPreview.cs:14-34` + `Presentation.cs:73-93`）
+//! ## 10.2 逐格光罩（`_upstream/CrystalStudio/MapPreview.cs:14-34` + `_upstream/CrystalStudio/MapViewport.Presentation.cs:73-93`）
 //!
 //! - **发光条件**：`cell.light ∈ 1..=9` **且**该格有前景图（`fr_img & 0x7FFF != 0`）
 //!   —— 见 [`emits_light`]；没有前景图的格子即便 `light` 合法也**不发光**；
 //! - **下标**：`index = min(light * 3, 9)`；**定位用 `LIGHT_SIZES[index]`、贴图用
-//!   `LIGHT_SIZES[index + 1]`**（官方 `MapPreview.cs:24-25` 注释明说这是客户端原样、
+//!   `LIGHT_SIZES[index + 1]`**（官方 `_upstream/CrystalStudio/MapPreview.cs:24-25` 注释明说这是客户端原样、
 //!   故意的错位，**不许"修正"**）⇒ 贴图宽 `1→445 / 2→685 / 其它→925`；
-//! - **强度**：官方光罩 PNG 的**预乘 R 通道**（`MapPreview.cs:40-43`）；
+//! - **强度**：官方光罩 PNG 的**预乘 R 通道**（`_upstream/CrystalStudio/MapPreview.cs:40-43`）；
 //! - **合成**：`alpha = max(0, alpha - intensity)`。
 //!
 //! ## 10.3 三条硬口径
 //!
 //! 1. **默认（白天）逐字节不变**：`darkness == 0` ⇒ `lighting::apply` 立即返回；
-//! 2. **三层之后、标记之前**：与官方 `Presentation.cs:34-35 → :40-50` 的次序一致
+//! 2. **三层之后、标记之前**：与官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:34-35 → :40-50` 的次序一致
 //!    ⇒ **阻挡标记不被压暗**（见 [`compose`] 模块文档 §八）；
 //! 3. **不做无据自造**：不生成衰减曲线（只用官方 `assets/lights/*.png`）、
 //!    不微调 `205/0/255`、不加档位过渡动画。
 //!
 //! ## 10.4 光罩偏移（2026-11-05 补齐，原「已知偏差」已消除）
 //!
-//! 光罩的 `offset` = 官方 `sprite.X/Y`（`MapViewport.Presentation.cs:84-86@901dbe2f(未入库)`），
+//! 光罩的 `offset` = 官方 `sprite.X/Y`（`_upstream/CrystalStudio/MapViewport.Presentation.cs:84-86`），
 //! 本仓取 [`mir2_assets::Frame::anchor`]（帧头那对 i16）。⚠ **订正旧表述**：本文件曾写它
 //! 「在本仓**不可得**（`Frame` 只有 `width/height/rgba`）⇒ 取 `(0,0)`」——
 //! 按 `deliverables/取证-帧偏移数据可得性-2026-11-05.md` §1.4，数据一直都在，
@@ -258,7 +258,7 @@
 //! 见 [`lighting`] 模块文档 §四①。
 //!
 //! ⚠ **偏移只给光罩用**：三层合成**不碰** `anchor`（官方画精灵时 `sprite.X/Y` 只在特例下生效，
-//! `MapSpriteDrawing.cs:19-31@901dbe2f(未入库)`）⇒ 补偏移后三层像素逐字节不变（测试钉住）。
+//! `_upstream/CrystalStudio/MapSpriteDrawing.cs:19-31`）⇒ 补偏移后三层像素逐字节不变（测试钉住）。
 //!
 //! # 十一、小地图尺寸口径（[`minimap`] 模块，2026-11-06 新增）
 //!
@@ -266,9 +266,9 @@
 //!
 //! | 项目 | 值 | 出处 |
 //! |---|---|---|
-//! | 官方默认尺寸 | `W*12 × H*8` | `MinimapExporter.cs:20@acfbbf8a` |
-//! | 三档预设除数 | `small/medium/large = 4/2/1`（基准 `W*48 × H*32`）| `MinimapExportWindow.cs:36-38@acfbbf8a` |
-//! | 官方合法判据 | `w>0 && h>0 && w*h <= Array.MaxLength/4` | `MinimapExporter.cs:15-16@acfbbf8a` |
+//! | 官方默认尺寸 | `W*12 × H*8` | `_upstream/CrystalStudio/MinimapExporter.cs:20` |
+//! | 三档预设除数 | `small/medium/large = 4/2/1`（基准 `W*48 × H*32`）| `_upstream/CrystalStudio/MinimapExportWindow.cs:36-38` |
+//! | 官方合法判据 | `w>0 && h>0 && w*h <= Array.MaxLength/4` | `_upstream/CrystalStudio/MinimapExporter.cs:15-16` |
 //! | 本仓更严的护栏 | 单边 [`MAX_EXPORT_SIDE`]、整幅 [`MAX_EXPORT_BYTES`] | 本仓既有内存护栏 |
 //! | 16 级 mip → 4 档 | [`pick_official_scale`]（最接近且不越界）| 有据映射，非自定值 |
 //!
@@ -277,11 +277,11 @@
 //!
 //! # 十二、窗内小地图的总览图（[`overview`] 模块，2026-11-07 新增）
 //!
-//! 窗内小地图取的是**共享总览场景**的像素（`MapMinimap.Avalonia.cs:45` → `:50
-//! source.OverviewScene`、`MapViewport.Minimap.cs:7`），而总览是 `1/2^level` 尺度的
-//! **逐帧预缩 + 合成**（`MapViewport.cs:145` `WarmOverview()` →
-//! `Overview.cs:42-47` `StartOverview(settings, 4)`；预缩算式 `Assets.cs:119`，
-//! 合成 `OverviewBatch.cs:25-104`）—— 不是「1× 合成后再缩」（`700×700` 格 1× 就是 3.0 GiB）。
+//! 窗内小地图取的是**共享总览场景**的像素（`_upstream/CrystalStudio/MapMinimap.Avalonia.cs:45` → `:50
+//! source.OverviewScene`、`_upstream/CrystalStudio/MapViewport.Minimap.cs:7`），而总览是 `1/2^level` 尺度的
+//! **逐帧预缩 + 合成**（`_upstream/CrystalStudio/MapViewport.cs:145` `WarmOverview()` →
+//! `_upstream/CrystalStudio/MapViewport.Overview.cs:42-47` `StartOverview(settings, 4)`；预缩算式 `_upstream/CrystalStudio/Assets.cs:119`，
+//! 合成 `_upstream/CrystalStudio/OverviewBatch.cs:25-104`）—— 不是「1× 合成后再缩」（`700×700` 格 1× 就是 3.0 GiB）。
 //!
 //! [`render_overview`] 只做**渲染层**：输出
 //! `ceil(W*48 / 2^level) × ceil(H*32 / 2^level)` 的 RGBA8（`700×700` @ `level 4`
@@ -346,7 +346,7 @@ pub use overview::{
 };
 pub use png_io::{encode_rgba_png, PngImage};
 // 导出成图的**最终合成**（等比 + 居中 + 不透明黑底 + 最近邻），对齐上游
-// `PreviewRaster.Create(..., padding: 0, opaque: true)`（`MinimapExporter.cs:56-57`）。
+// `PreviewRaster.Create(..., padding: 0, opaque: true)`（`_upstream/CrystalStudio/MinimapExporter.cs:56-57`）。
 // 只给导出链用；mip 预缩（面积平均）仍走 `overview` / `scale`，两者**不合并**。
 pub use preview_raster::fit_centered_opaque;
 pub use scale::{try_render_region_scaled, try_render_region_scaled_with};
@@ -400,7 +400,7 @@ pub fn try_render_region(
 /// # 语义 / 视觉 / 与 C# 编辑器的差异
 ///
 /// 见 crate 文档 §七「阻挡可视化口径」（判定按客户端 `TMap.cpp:339`，颜色与形状借
-/// `CrystalStudio/CollisionMarkers.cs:6-7,19-25`）。
+/// `_upstream/CrystalStudio/CollisionMarkers.cs:6-7,19-25`）。
 ///
 /// # 计数
 ///
@@ -477,7 +477,7 @@ pub fn try_render_region_with(
 /// 出处：官方客户端 `client/reference_full/Classes/scenes/GameScene.cpp:3328-3388`
 /// （`:3367`/`:3375` 判据、`:3370`/`:3378` 加偏移、`:3381` `-1`、`:3388` 取帧）。
 /// **必须 `& 0x7F`**（`0x80` 是运行期开合标志位，不是偏移），**不跟**官方编辑器
-/// `MapPreview.cs:6-10` 的整字节相加 —— 理由与实测数据（43 张图 / 1,764 格 / 1,173 格
+/// `_upstream/CrystalStudio/MapPreview.cs:6-10` 的整字节相加 —— 理由与实测数据（43 张图 / 1,764 格 / 1,173 格
 /// 库号为 0）见 [`RenderOptions`] 的类型文档 §三/§四。地表 / 中层**不受影响**（没有门）。
 ///
 /// # 计数
@@ -906,9 +906,9 @@ mod tests {
         assert_eq!(out.pixel(48, 64).unwrap()[3], 0, "帧底边不得超过格底");
     }
 
-    /// 低阻挡标记色 + 默认 alpha（`CollisionMarkers.cs:6` 的 `Color.FromArgb(90,240,85,105)`）。
+    /// 低阻挡标记色 + 默认 alpha（`_upstream/CrystalStudio/CollisionMarkers.cs:6` 的 `Color.FromArgb(90,240,85,105)`）。
     const 低标记: [u8; 4] = [240, 85, 105, CollisionOverlay::DEFAULT_ALPHA];
-    /// 高位阻挡标记色 + 默认 alpha（`CollisionMarkers.cs:7` 的 `Color.FromArgb(90,65,165,245)`）。
+    /// 高位阻挡标记色 + 默认 alpha（`_upstream/CrystalStudio/CollisionMarkers.cs:7` 的 `Color.FromArgb(90,65,165,245)`）。
     const 高标记: [u8; 4] = [65, 165, 245, CollisionOverlay::DEFAULT_ALPHA];
 
     #[test]

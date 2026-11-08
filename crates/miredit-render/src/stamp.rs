@@ -24,8 +24,8 @@
 //!
 //! | 上游文件:行 | 排序 |
 //! |---|---|
-//! | `CrystalStudio/MapViewport.StampRendering.cs:141` / `:143` | `cells.OrderBy(c => c.Y).ThenBy(c => c.X)`（中层、物件各一遍；`:137-138` 注释「Assembled stamps use the map's layer and row order」） |
-//! | `CrystalStudio/StampPreview.cs:60` | `drawings.OrderBy(c => c.Layer).ThenBy(c => c.Y).ThenBy(c => c.X)` |
+//! | `_upstream/CrystalStudio/MapViewport.StampRendering.cs:141` / `:143` | `cells.OrderBy(c => c.Y).ThenBy(c => c.X)`（中层、物件各一遍；`:137-138` 注释「Assembled stamps use the map's layer and row order」） |
+//! | `_upstream/CrystalStudio/StampPreview.cs:72` | `drawings.OrderBy(c => c.Layer).ThenBy(c => c.Y).ThenBy(c => c.X)` |
 //!
 //! **与 [`crate::compose`] 的关系（2026-11-08 订正）**：`compose` 于 `d66237b` 已把层内序改成
 //! 行优先；stamp 本身行优先、**行为未变** ⇒ 原「与 `compose` 的列优先是**有意不同**」这条
@@ -40,7 +40,7 @@
 //! > 格间不重叠（含 1×1 单格）时两种顺序输出逐字节相同，故 `tests/stamp.rs` 的
 //! > 「印章与地图渲染逐字节同源」与本条不冲突。
 //!
-//! 注意：A-010 的**结论**（印章行优先、对齐上游 `MapViewport.StampRendering.cs:141/143`）不变，
+//! 注意：A-010 的**结论**（印章行优先、对齐上游 `_upstream/CrystalStudio/MapViewport.StampRendering.cs:141/143`）不变，
 //! 变的只是它当年用来对比的参照物（「地图是列优先」）。`tests/stamp.rs` 的「逐字节同源」
 //! 本来就不依赖那条对比，仍然成立。
 //!
@@ -339,8 +339,8 @@ pub fn render_stamp(
     let mut missing = 0usize;
     // 「这一格至少写过 1 个像素」——`cells_drawn` 的唯一判据（同 `compose.rs:44-47`）
     let mut touched = vec![false; cells.len()];
-    // 行优先（`dy` 外、`dx` 内）：A-010 口径修正，对齐上游 `MapViewport.StampRendering.cs:141/143`
-    // （`cells.OrderBy(c => c.Y).ThenBy(c => c.X)`）与 `StampPreview.cs:60`（Layer → Y → X）。
+    // 行优先（`dy` 外、`dx` 内）：A-010 口径修正，对齐上游 `_upstream/CrystalStudio/MapViewport.StampRendering.cs:141/143`
+    // （`cells.OrderBy(c => c.Y).ThenBy(c => c.X)`）与 `_upstream/CrystalStudio/StampPreview.cs:72`（Layer → Y → X）。
     // `compose` 于 `d66237b` 已改行优先；stamp 本身行优先、**行为未变** ⇒ 原「与 compose.rs 的
     // 列优先**有意不同**」这条对比前提已消失（现在两者层内序一致，跨格重叠时遮挡方向也一致）。
     // 稳定排序 ⇒ 同坐标的重复格保持调用方给的顺序。

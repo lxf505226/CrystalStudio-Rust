@@ -17,15 +17,15 @@
 //! # 二、视觉口径（借 C# `CrystalStudio` 的样式，不借它的位编码）
 //!
 //! - 色值：低阻挡 `RGB(240,85,105)` / 高位阻挡 `RGB(65,165,245)`
-//!   —— `CrystalStudio/CollisionMarkers.cs:6-7` 的 `First` / `Second`；
+//!   —— `_upstream/CrystalStudio/CollisionMarkers.cs:6-7` 的 `First` / `Second`；
 //! - 透明度：`90/255`（同上两行的首参 alpha）；
 //! - 形状：**整格** 48×32 纯色块；同格两者都有 ⇒ 左半格（24×32）低、右半格高
-//!   —— `CollisionMarkers.cs:19-25`（`type == 3` 分支按 `cell.Width / 2` 切两半，
+//!   —— `_upstream/CrystalStudio/CollisionMarkers.cs:19-25`（`type == 3` 分支按 `cell.Width / 2` 切两半，
 //!   其余情况整格铺一种色）；
-//! - 时机：三层精灵**画完之后**再叠（`MapViewport.Presentation.cs:40-42`
+//! - 时机：三层精灵**画完之后**再叠（`_upstream/CrystalStudio/MapViewport.Presentation.cs:40-42`
 //!   把 `CollisionMarkers.Draw` 放在地图绘制之后、灯光/门标记之前）。
 //!
-//! ⚠ C# 的 `MapViewport.cs:23` 用 `BackImage` 的 `0x20000000` / `0x40000000` 表示低/高阻挡，
+//! ⚠ C# 的 `_upstream/CrystalStudio/MapViewport.cs:24` 用 `BackImage` 的 `0x20000000` / `0x40000000` 表示低/高阻挡，
 //! 那是**编辑器自己的待写回编码**，与客户端 `0x8000` 语义无关 ⇒ 本库只照抄颜色/形状/时机，
 //! 判定一律按 §一。
 //!
@@ -47,12 +47,12 @@ pub(crate) const BLOCK_BIT: u16 = 0x8000;
 
 /// 低阻挡标记色 `RGB(240,85,105)`。
 ///
-/// 出处：`CrystalStudio/CollisionMarkers.cs:6`（`Color.FromArgb(90, 240, 85, 105)` 的 RGB 部分）。
+/// 出处：`_upstream/CrystalStudio/CollisionMarkers.cs:6`（`Color.FromArgb(90, 240, 85, 105)` 的 RGB 部分）。
 pub(crate) const LOW_RGB: [u8; 3] = [240, 85, 105];
 
 /// 高位阻挡标记色 `RGB(65,165,245)`。
 ///
-/// 出处：`CrystalStudio/CollisionMarkers.cs:7`（`Color.FromArgb(90, 65, 165, 245)` 的 RGB 部分）。
+/// 出处：`_upstream/CrystalStudio/CollisionMarkers.cs:7`（`Color.FromArgb(90, 65, 165, 245)` 的 RGB 部分）。
 pub(crate) const HIGH_RGB: [u8; 3] = [65, 165, 245];
 
 /// 该格是否**低阻挡**：背景层 `wBkImg` 带 `0x8000`。
@@ -73,7 +73,7 @@ pub(crate) const fn has_high(cell: &Cell) -> bool {
 ///
 /// `(px, py)` 是该格左上角的**画布像素**坐标（= `dx*48, dy*32`，与三层同一套锚点）。
 ///
-/// 分三种情形（对应 `CollisionMarkers.cs:19-25`）：
+/// 分三种情形（对应 `_upstream/CrystalStudio/CollisionMarkers.cs:19-25`）：
 /// - 两个通道都命中 ⇒ 左半格低、右半格高（`cell.Width / 2` ⇒ 24 px）；
 /// - 只命中一个 ⇒ 整格铺该通道的色；
 /// - 一个都没命中（含通道关着）⇒ 什么都不画。
@@ -91,7 +91,7 @@ pub(crate) fn draw_cell(
     match (low, high) {
         (false, false) => (false, false),
         (true, true) => {
-            // 同格两者都有：左半格低 / 右半格高（CollisionMarkers.cs:21-22）
+            // 同格两者都有：左半格低 / 右半格高（_upstream/CrystalStudio/CollisionMarkers.cs:21-22）
             let half = CELL_W / 2;
             let 低 = canvas.fill_rect(带透明度(LOW_RGB, a), px, py, half, CELL_H);
             let 高 = canvas.fill_rect(带透明度(HIGH_RGB, a), px + half as i32, py, CELL_W - half, CELL_H);
