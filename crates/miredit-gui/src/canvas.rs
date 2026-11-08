@@ -307,10 +307,17 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
     // 绘制点 `:305`（`:350` 调 `DrawHoverCell`）。上游 `:304` 注释
     // `// Screen coordinates keep the stroke four pixels wide at every zoom.`
     // ⇒ 宽是**屏幕像素**、不随缩放变；本仓 `border_w` 吃 f32 宽、不乘 scale，口径一致。
-    // ⚠ 上游 `Pen` 居中（边外 2 + 边内 2），本仓 `border_w` 只能内贴 —— 位置差已登记在
-    //    `metrics::CELL_HOVER_STROKE` 的文档里（本单未擅自改几何）。
+    //
+    // ★ 几何：上游 `Pen` 的笔画是**居中**的（Avalonia/Skia 语义），宽 4 ⇒ **边外 2 + 边内 2**。
+    //   本仓 `paint::border_w` 只能**内贴**（`paint.rs:45-66` 四条边全画在 `r` 内侧，
+    //   函数内部不做任何偏移或收缩 ⇒ 这里 `expand` 不会与它叠加），所以必须先
+    //   `r.expand(w / 2)` 再按宽 4 内贴，才与上游的居中笔画等价。
+    //   ⚠ 不 expand 的后果是**整条描边整体偏内 2px**：实测剖面 4px 全落在格矩形内侧
+    //   `x625..628`，而居中笔画（上游等价位置）是 `x623..626`。这是几何错误，不是风格取舍。
+    //   同款先例：`dock_right.rs:661-666` 小地图视口框 `Pen(Black,4)` 就是 `expand(2)` + 宽 4，
+    //   那里的注释记着「不 expand 会让后画层盖掉外半 ⇒ 层次反转」的血泪。
     if let Some((x, y)) = c.hover {
-        let r = c.view.cell_rect(l.viewport, i32::from(x), i32::from(y));
+        let r = hover_outline_rect(c.view, l.viewport, i32::from(x), i32::from(y));
         pt::border_w(&pv, r, m::CELL_HOVER_STROKE, t::ui().cell_hover_outline);
     }
 
@@ -343,6 +350,21 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
 
     // 左下角缩放浮层（压在画布之上，属"浮层"）
     draw_zoom_pill(&pv, l, c.text);
+}
+
+/// 悬停格描边的**绘制矩形**：格矩形外扩 `宽 / 2`。
+///
+/// 上游 `MapViewport.cs:144@a78affdf` 的 `hoverCellOutline` 是 `Pen`，笔画**居中**
+/// （宽 4 ⇒ 边外 2 + 边内 2）；本仓 [`pt::border_w`] 只能**内贴**。
+/// 两者合起来才等价：先 `expand(w / 2)` 让矩形边界落到「描边中线」上，
+/// 再按宽 `w` 内贴 ⇒ 外半 `w/2` + 内半 `w/2`。
+///
+/// 单列成函数是为了让**外扩量**这个最容易漏的量能被单测钉住
+/// （[`tests::悬停描边是居中笔画`]）：直接内联 `r.expand(2.0)` 时，测试只能看代码、
+/// 不能看几何 —— 与 [`crate::canvas_overlay::border_strips`] 的拆分理由同源。
+fn hover_outline_rect(view: &CanvasView, canvas: Rect, x: i32, y: i32) -> Rect {
+    view.cell_rect(canvas, x, y)
+        .expand(m::CELL_HOVER_STROKE / 2.0)
 }
 
 /// 缩放浮层：圆角底板 + 1px 边框 + 减号 / `N%` / `+` / 竖线 / `适应窗口`。
@@ -472,6 +494,57 @@ mod tests {
         // 两条带的宽度都够放下 4 个中文字（12px 字号 ⇒ 48px）
         assert!(fit.width() >= 48.0, "「适应地图」带太窄：{}", fit.width());
         assert!(orig.width() >= 48.0, "「原始大小」带太窄：{}", orig.width());
+    }
+
+    /// **悬停格描边 = 居中笔画**（上游 `Pen` 语义：宽 4 ⇒ 边外 2 + 边内 2）。
+    ///
+    /// 这条钉的是三元组 `(外扩量, 宽度, 颜色)` 里最容易漏的**外扩量**：只钉「宽 4 + 深蓝」
+    /// 的测试对「`expand` 取 0」的错版**照样绿** —— 本仓 2026-11-08 之前正是那种错版
+    /// （4px 全在格矩形内侧：`--hover 350,350` 实测剖面 `x625..628`，居中笔画应是 `x623..626`）。
+    #[test]
+    fn 悬停描边是居中笔画() {
+        let l = Layout::compute(Rect::from_min_size(
+            pos2(0.0, 0.0),
+            vec2(m::WINDOW_W, m::WINDOW_H),
+        ));
+        // 视口左上角与下面那组平移/缩放，都是 `--hover 350,350` 实跑日志里的真值：
+        // `[网格] … 视口左 156 上 105，平移 16331,10809，缩放 1`。
+        // 窗口/停靠区常量若变，这条会红 —— 按新的日志更新期望值，**别改判据**。
+        assert_eq!(
+            (l.viewport.left(), l.viewport.top()),
+            (156.0, 105.0),
+            "视口左上角（`--shot` 取证坐标的基准）"
+        );
+        let mut view = CanvasView::default();
+        view.pan_x = 16331.0;
+        view.pan_y = 10809.0;
+        let cell = view.cell_rect(l.viewport, 350, 350);
+        assert_eq!((cell.min.x, cell.min.y), (625.0, 496.0), "格矩形左上角");
+        assert_eq!((cell.width(), cell.height()), (48.0, 32.0), "格矩形 48×32");
+
+        // ① **外扩量 = 宽 / 2 = 2**（取 0 时下面每条断言都会红）
+        let r = hover_outline_rect(&view, l.viewport, 350, 350);
+        assert_eq!((r.min.x, r.min.y), (623.0, 494.0), "左上角必须外扩 2px");
+        assert_eq!((r.right(), r.bottom()), (675.0, 530.0), "右下角同样外扩 2px");
+
+        // ② 四条边的**像素跨度**（`border_w` / `border_strips` 都是「内贴四块」的同一套几何）：
+        //    左 `623..626` / 右 `671..674` / 上 `494..497` / 下 `526..529`
+        let s = crate::canvas_overlay::border_strips(r, m::CELL_HOVER_STROKE);
+        assert_eq!((s[0].min.y, s[0].max.y), (494.0, 498.0), "上边 y494..497");
+        assert_eq!((s[1].min.y, s[1].max.y), (526.0, 530.0), "下边 y526..529");
+        assert_eq!((s[2].min.x, s[2].max.x), (623.0, 627.0), "左边 x623..626");
+        assert_eq!((s[3].min.x, s[3].max.x), (671.0, 675.0), "右边 x671..674");
+        // ③ 宽度仍是 4（`expand` 只挪位置、不加粗）
+        assert_eq!(
+            [s[0].height(), s[1].height(), s[2].width(), s[3].width()],
+            [m::CELL_HOVER_STROKE; 4],
+            "四条边宽度都必须是 CELL_HOVER_STROKE"
+        );
+        // ④ 描边包围盒 = 格矩形 **±2，不多不少**。
+        //    这是「不压到相邻格」的准确判据：居中笔画**必然**把外半画到格矩形之外
+        //    （上游 `Pen` 同样如此），所以能验的只有「超出量恰好 = w/2」。
+        assert_eq!((cell.min.x - r.min.x, cell.min.y - r.min.y), (2.0, 2.0));
+        assert_eq!((r.right() - cell.right(), r.bottom() - cell.bottom()), (2.0, 2.0));
     }
 
     /// 没打开地图时不该崩（空态只画一句提示），且不应有悬停高亮。
