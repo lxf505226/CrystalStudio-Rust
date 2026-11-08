@@ -257,7 +257,7 @@ pub(crate) enum PlanMode {
 
 // ───────────────────── A-011：落位**检查**（只读诊断） ─────────────────────
 
-/// 落位受阻的原因（上游 `MapViewport.StampRendering.cs:81` 的 `StampBlockReason`）。
+/// 落位受阻的原因（上游 `_upstream/CrystalStudio/MapViewport.StampRendering.cs:81` 的 `StampBlockReason`）。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StampBlockReason {
     /// 落到地图外（上游 `MapBoundary`）：琥珀 `#F5AE32`。
@@ -311,7 +311,7 @@ impl StampPlacementCheck {
 /// | 图内且 `fr_img & 0x7FFF != 0` | 收集 [`StampBlockReason::OccupiedObject`] | **整枚拒绝**（`PlacedStamps.cs:62-63`） |
 /// | 空格表 / 超过 [`STAMP_MAX_CELLS`] / 坐标重复 / 未开图 | 写 [`Self::error`] | 同样拒绝（早期闸门） |
 ///
-/// 上游对照：`MapViewport.StampRendering.cs:45-56`（`GetStampPreviewPlacement` 缓存
+/// 上游对照：`_upstream/CrystalStudio/MapViewport.StampRendering.cs:45-56`（`GetStampPreviewPlacement` 缓存
 /// `Document.CheckStampPlacement(...)` 的结果）+ `:58-109`（据 `Allowed` 与
 /// `BlockedCells` 画半透明内容与红/琥珀诊断格）。
 ///

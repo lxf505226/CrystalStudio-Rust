@@ -185,7 +185,7 @@ impl Tool {
     /// 本工具**吃不吃笔刷尺寸**（官方口径：铅笔与填充恒为单格，其余用 `BrushSize`）。
     /// 来源：`edit.rs:452-454`。
     ///
-    /// 真值 `MapViewport.cs:473`：
+    /// 真值 `_upstream/CrystalStudio/MapViewport.cs:498`：
     /// `int size = Tool is EditorTool.Pencil or EditorTool.Bucket ? 1 : BrushSize;`
     /// —— 注意这是**落笔**的尺寸；填充工具的点选永远是 1 格（它填的是连通块，不是方块）。
     pub const fn uses_brush_size(self) -> bool {
@@ -274,10 +274,10 @@ pub fn paint(
             }
             // ③ 写图号：**只替换低 15 位，最高位按字段语义裁定**。
             //
-            //    真值：`CrystalStudio/CrystalStudio/MapViewport.cs:480`
+            //    真值：`_upstream/CrystalStudio/MapViewport.cs:505`
             //    `c.BackImage = (c.BackImage & 0x60000000) | image`（画地表保留碰撞位）；
-            //    `:520` 填充同款；`:546` 清除选区 `c.BackImage &= 0x60000000`（只留碰撞位）。
-            //    C# 内存模型里 `0x60000000` = 低/高两位阻挡（`:23`），
+            //    `:520` 填充同款；`:598` 清除选区 `c.BackImage &= 0x60000000`（只留碰撞位）。
+            //    C# 内存模型里 `0x60000000` = 低/高两位阻挡（`:24`），
             //    `LegacyMapReader.cs:147-159` 把它们从 `.map` 的
             //    `bk_img & 0x8000` / `frimage & 0x8000` 翻上来
             //    ⇒ 我们文件级等价位 = `bk_img` / `fr_img` 的 `bit15`。
@@ -303,7 +303,7 @@ pub fn paint(
             //       磁盘上是 14 B 的 off 8/9（`mir2-map/src/cell.rs:352-353`），C# 读进
             //       `franimationframe`/`franimationtick`（`LegacyMapReader.cs:245-246`，
             //       只在有前景时赋给 `Foreground`，`:259-260`）⇒ 清它等于把前景动画抹掉，
-            //       而上游 `MapViewport.cs:592`（另一副本 `:597`）的中层分支一个字节都不碰 `Foreground`。
+            //       而上游 `_upstream/CrystalStudio/MapViewport.cs:598`的中层分支一个字节都不碰 `Foreground`。
             //    ② `Mir3Wemade`/`Mir3Shanda`/`CrystalCs` 里真正的中层动画是**另外两个字节**
             //       （`LegacyMapReader.cs:418`/`:486`/`:641` ⇒ `mir2-format::Cell.mid_ani_frame`/
             //       `mid_ani_tick`），**编辑视图不承载**（`convert.rs` 的 `LOST_IN_VIEW` 第 6/7 条）
@@ -317,7 +317,7 @@ pub fn paint(
             } else {
                 // 图号层：只清图号，**保留最高位**（否则橡皮变成"顺手把墙拆了"）。`edit.rs:1480-1483`
                 //
-                // ⚠ 中层动画同样**不在这里清**：上游 `MapViewport.cs:592` 的 erase 与画图走同一个
+                // ⚠ 中层动画同样**不在这里清**：上游 `_upstream/CrystalStudio/MapViewport.cs:598` 的 erase 与画图走同一个
                 // `case MapLayer.Middle`（`MiddleImage = 0` 且 `MiddleFrames/Tick = 0`），但本 crate 的
                 // `ani_frame`/`ani_tick` 是**前景**动画字节（`LegacyMapReader.cs:245-246`/`:259-260`），
                 // 中层动画另在不承载的 `mid_ani_*` 里 —— 见 `Tool::Brush` 分支 ④ 与

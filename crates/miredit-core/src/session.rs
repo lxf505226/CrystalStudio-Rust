@@ -14,13 +14,13 @@
 //!
 //! # 二、N×N 由这里展开（`paint` 只吃一格）
 //!
-//! 形状 = **居中方形**（官方 `MapViewport.cs:476-478` 的双层循环
+//! 形状 = **居中方形**（官方 `_upstream/CrystalStudio/MapViewport.cs:498-501` 的双层循环
 //! `for iy in -radius..=radius { for ix in -radius..=radius { … if (!Document.Contains(sx, sy)) continue; } }`；
 //! 官方工具提示 `CentredBrushFootprintAndtoResize_55DDE2E3` 也写的是「以中心定位笔刷范围」）。
 //! 边缘裁剪 = **逐格跳过越界格**（与官方 `continue` 同一判据），不是"把方块整体挪回界内"。
 //!
 //! ⚠ **与官方的一处差异（有意，已记档）**：官方地表层的 `step = 2`
-//! （`MapViewport.cs:474-475`：`int step = Layer == MapLayer.Ground ? 2 : 1; if (step == 2) { x &= ~1; y &= ~1; }`，
+//! （`_upstream/CrystalStudio/MapViewport.cs:499-500`：`int step = Layer == MapLayer.Ground ? 2 : 1; if (step == 2) { x &= ~1; y &= ~1; }`，
 //! 即它的地表按 2×2 对齐落笔）；本 crate 的 `paint()` 对三层都是**逐格**写，
 //! 所以这里 `step = 1`。理由：笔刷必须与既有落笔语义（以及 `mir2-map` 的逐格字节）一致，
 //! 否则同一格会出现"笔刷写得到、填充写不到"的两套网格（`edit.rs:806-811` 原话）。
@@ -33,8 +33,8 @@
 //!
 //! # 三之二、吸管在地表层按 2×2 对齐（与上游一致）
 //!
-//! 上游 `CrystalStudio/MapViewport.cs:405`：`if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`
-//! —— `PickTile` 在读格（`:406`）之前先把地表点击吸附到偶偶格。地表格按 2×2 图块拼贴，
+//! 上游 `_upstream/CrystalStudio/MapViewport.cs:406`：`if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`
+//! —— `PickTile` 在读格（`:407`）之前先把地表点击吸附到偶偶格。地表格按 2×2 图块拼贴，
 //! 奇格通常 `bk_img == 0`，不吸附就会把空图号吸成笔刷（随后落笔把可见地表写成 0）。
 //! 本 crate 的 [`EditSession::pick_anchor`] 逐条复刻这一行，只作用于两条取笔刷入口；
 //! [`EditSession::pick_cell`]（读整格信息）与 `fill` 的对齐各自独立成条，互不串味。
@@ -122,7 +122,7 @@ pub struct EditSession {
     stamps: HashMap<String, Vec<StampCellInput>>,
     /// **矩形选区 + 剪贴板**（2026-11-05 新增，P0-4）。
     ///
-    /// 单独装成一个 [`SelectionState`]，与 C# 的 `MapEditorState`（`MapViewport.cs:147`/`:152`
+    /// 单独装成一个 [`SelectionState`]，与 C# 的 `MapEditorState`（`_upstream/CrystalStudio/MapViewport.cs:147`/`:152`
     /// 把 `Selection` 与 `History` **并列**存取）同构：**选区不进撤销栈、也不置脏** ——
     /// 它只是"用户框了哪一块"这个 UI 状态，改它不产生任何字节变化。
     sel: SelectionState,
@@ -540,7 +540,7 @@ impl EditSession {
     /// 在当前拖动里把工具作用到**以 `(x, y)` 为中心的 N×N**；返回真的改了几格。
     /// 来源：`edit.rs:926-937`。
     ///
-    /// 这是**画笔 / 橡皮**的落笔入口（官方 `MapViewport.cs:473-482`）：
+    /// 这是**画笔 / 橡皮**的落笔入口（官方 `_upstream/CrystalStudio/MapViewport.cs:472-482`）：
     /// 尺寸只对这两个工具生效，铅笔与填充恒为 1 格（[`Tool::uses_brush_size`]）。
     /// 吸管/未接线工具**不吃尺寸**，直接落到单格（它们本来就不改地图）。
     pub fn touch_footprint(&mut self, x: u16, y: u16) -> usize {
@@ -611,7 +611,7 @@ impl EditSession {
     ///
     /// **拒绝时地图一个字节都没动**，且 [`FillOutcome::note`] 一定给得出原因。
     pub fn fill(&mut self, x: u16, y: u16) -> FillOutcome {
-        // ① 层闸门（官方 MapViewport.cs:488-492：只支持地表 / 中层 / 低高位阻挡）
+        // ① 层闸门（官方 `_upstream/CrystalStudio/MapViewport.cs:514-518`：只支持地表 / 中层 / 低高位阻挡）
         if !matches!(
             self.layer,
             EditLayer::Ground | EditLayer::Middle | EditLayer::LowCollision | EditLayer::HighCollision
@@ -917,21 +917,21 @@ impl EditSession {
 
     // ── 矩形选区 / 剪贴板（2026-11-05 新增，审计 P0-4） ──
 
-    /// 当前矩形选区（`None` = 没有选区）。来源：`MapViewport.cs:102`（`Rect? Selection`）。
+    /// 当前矩形选区（`None` = 没有选区）。来源：`_upstream/CrystalStudio/MapViewport.cs:106`（`Rect? Selection`）。
     ///
     /// 选区是 **UI 状态**：它不改地图、不进撤销栈、不动脏标记
-    /// （C# 把 `Selection` 与 `History` **并列**存进 `MapEditorState`，`MapViewport.cs:147`/`:152`）。
+    /// （C# 把 `Selection` 与 `History` **并列**存进 `MapEditorState`，`_upstream/CrystalStudio/MapViewport.cs:147`/`:152`）。
     pub fn selection(&self) -> Option<Selection> {
         self.sel.sel
     }
 
-    /// 设选区（**越界裁剪**；返回裁剪后是否非空）。来源：`MapViewport.cs:390`、`:399`、`:400`。
+    /// 设选区（**越界裁剪**；返回裁剪后是否非空）。来源：`_upstream/CrystalStudio/MapViewport.cs:399`、`:422`、`:423`。
     ///
     /// 裁剪判据全在 [`Selection::clamp_to`]（单一实现）。本方法只做三件事：
     /// ① 裁剪；② 整块在图外 ⇒ **取消选区**并给中文原因；③ 成功 ⇒ 清掉上一次的拒绝提示。
     ///
-    /// 复刻的两条 C# 不变量：起点必须图内（`:390` `if (!Document.Contains(x, y)) return false;`）、
-    /// 终点夹到 `0..=Width-1`（`:399` `Math.Clamp`）⇒ **存下来的选区永远整块在图内**，
+    /// 复刻的两条 C# 不变量：起点必须图内（`:399` `if (!Document.Contains(x, y)) return false;`）、
+    /// 终点夹到 `0..=Width-1`（`:422` `Math.Clamp`）⇒ **存下来的选区永远整块在图内**，
     /// 后面所有迭代都不必再判越界。
     pub fn set_selection(&mut self, sel: Selection) -> bool {
         let (w, h) = self.doc.size();
@@ -953,7 +953,7 @@ impl EditSession {
         }
     }
 
-    /// 取消选区（= C# 的 `Deselect()`）。来源：`MapViewport.cs:103-108`。
+    /// 取消选区（= C# 的 `Deselect()`）。来源：`_upstream/CrystalStudio/MapViewport.cs:107-112`。
     ///
     /// **不清剪贴板**：剪贴板是独立的一份快照（C# 的 `copiedRegion` 也不随 `Deselect` 清空，
     /// `RegionCopy.cs:96`、`:114`）。
@@ -1127,13 +1127,13 @@ impl EditSession {
     /// **删除选区内容**（三族按层清，**整次 = 一步撤销**）；返回真的改了几格。
     ///
     /// 来源：`RegionCopy.cs:45-69` 的 `CutSource` —— 逐族判据、保留 `bit15`、库号字节写 0，
-    /// 逐条落点见 `selection.rs` 模块文档 §二（含与 `MapViewport.cs:546` `ClearSelection`
+    /// 逐条落点见 `selection.rs` 模块文档 §二（含与 `_upstream/CrystalStudio/MapViewport.cs:598` `ClearSelection`
     /// 的**有意差异**：那边不清库号字节，本仓统一按 `CutSource` 清）。
     ///
     /// 没有选区 / 选区内三族图号全 0 ⇒ 返回 0 并给中文原因，**地图一个字节不动**。
     /// 回执只出**一句**（成功回执或"没有可清的内容"，二者互斥，不拼接）。
     ///
-    /// ⚠ **不按可见性**（传 `[true; 3]`）：它的 C# 对照是 `MapViewport.cs:546` 的 `ClearSelection`
+    /// ⚠ **不按可见性**（传 `[true; 3]`）：它的 C# 对照是 `_upstream/CrystalStudio/MapViewport.cs:598` 的 `ClearSelection`
     /// （那边既不判可见性、也不清库号字节；本仓只按 `CutSource` 清库号，见模块文档 §二）。
     /// 按可见性清的只有 [`Self::cut_selection`]（`RegionCopy.cs:108` 的 `CutSource` 支）。
     pub fn delete_selection(&mut self) -> usize {
@@ -1193,11 +1193,11 @@ impl EditSession {
 
     /// 用**当前笔刷**填满选区（**整次 = 一步撤销**）；返回真的改了几格。
     ///
-    /// 来源：`MapViewport.cs:540` 的 `FillSelection`（逐格调 `Apply`）。
+    /// 来源：`_upstream/CrystalStudio/MapViewport.cs:566` 的 `FillSelection`（逐格调 `Apply`）。
     ///
     /// # 地表步长：本 crate 取 **step=1（严格填满选区）**
     ///
-    /// C# 的 `Apply` 对地表带 `step = 2` 且 `x &= ~1; y &= ~1`（`:474-475`）⇒
+    /// C# 的 `Apply` 对地表带 `step = 2` 且 `x &= ~1; y &= ~1`（`:499-500`）⇒
     /// 3×3 选区在奇数原点会**溢出到选区外**（覆盖 4×4）。本 crate 不学这条：
     /// ① 溢出违背用户预期；② 与本 crate 既有笔刷口径一致（`session.rs:22-26` 已记档）。
     /// 代价是地表奇格写进去不显示（渲染只铺偶偶格，`miredit-render/src/compose.rs:107-116`）——
@@ -1313,7 +1313,7 @@ impl EditSession {
     // - `pick_cell`：读整格三族的原始信息，**不吸附**（没有"再画回去"的语义）；
     // - `pick_at` / `pick_at_from`：取成笔刷，地表按 2×2 对齐到偶偶格（`pick_anchor`）。
     //
-    // ⚠ **层门控比上游宽，是既有的能力差异，不在本单收紧**：上游 `MapViewport.cs:404`
+    // ⚠ **层门控比上游宽，是既有的能力差异，不在本单收紧**：上游 `_upstream/CrystalStudio/MapViewport.cs:405`
     // 只允许 `Ground` / `Middle`（其余层 `PickTile` 直接 `return false`）；
     // 本 crate 允许地表 / 中层 / 物件 / 低位阻挡 / 高位阻挡五层吸取
     // （`brush_from_cell` 用 `layer.pick_family()` / `layer.img_of()`，五层都取得到内容）。
@@ -1334,7 +1334,7 @@ impl EditSession {
 
     /// **批量改三格属性**：光照 / 门索引 / 门偏移（R12-F1）。
     ///
-    /// 口径 = 上游 `MapViewport.cs:579-597`（`ApplyMetadata`），逐条：
+    /// 口径 = 上游 `_upstream/CrystalStudio/MapViewport.cs:579-597`（`ApplyMetadata`），逐条：
     ///
     /// | 规则 | 上游出处 | 本方法的做法 |
     /// |---|---|---|
@@ -1462,11 +1462,11 @@ impl EditSession {
     ///
     /// # 依据（逐字对应上游）
     ///
-    /// `CrystalStudio/MapViewport.cs:402-414` 的 `PickTile`：
-    /// - `:404` 先过 `Document.Contains` 与 `Layer is not (Ground or Middle)`；
-    /// - **`:405` `if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`** ← 本条实现的判据；
-    /// - `:406` `var cell = Document.Get(x, y);`（对齐**之后**才读格）；
-    /// - `:408` 地表取 `(cell.BackImage & 0x1FFFFFFF) - 1`。
+    /// `_upstream/CrystalStudio/MapViewport.cs:403-415` 的 `PickTile`：
+    /// - `:405` 先过 `Document.Contains` 与 `Layer is not (Ground or Middle)`；
+    /// - **`:406` `if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`** ← 本条实现的判据；
+    /// - `:407` `var cell = Document.Get(x, y);`（对齐**之后**才读格）；
+    /// - `:409` 地表取 `(cell.BackImage & 0x1FFFFFFF) - 1`。
     ///
     /// 为什么必须吸附：地表格在编辑器里按 2×2 图块拼贴，一张可见图块只落在偶偶格上，
     /// 奇格通常 `bk_img == 0`（或只有 bit15）。不吸附就会把 `img = 0` 吸成笔刷，
@@ -1475,7 +1475,7 @@ impl EditSession {
     ///
     /// # 与填充那一侧是同一条判据
     ///
-    /// [`crate::fill::align_start`]（`fill.rs:129-135`，来源 `MapViewport.cs:496-499`）按
+    /// [`crate::fill::align_start`]（`fill.rs:129-135`，来源 `_upstream/CrystalStudio/MapViewport.cs:522-523`）按
     /// `step_of(layer) == 2` 判定、用的也是 `x & !1`。两处必须给出**同一张网格**，
     /// 否则会出现"吸管吸偶格、填充从奇格起"的两套网格（`session_tests.rs` 里有对拍用例）。
     fn pick_anchor(&self, x: u16, y: u16) -> (u16, u16) {
@@ -1537,7 +1537,7 @@ impl EditSession {
     ///
     /// 语义全在 [`crate::resize`]：边界四边**偶数对齐**（上游 `AlignSelection`）、
     /// 整次裁剪 = **一步撤销**；尺寸没变（选区已经覆盖整图）⇒ **什么都不做、不入栈**
-    /// （上游 `MapViewport.Crop.cs:22` 的同一条早退）。
+    /// （上游 `_upstream/CrystalStudio/MapViewport.Crop.cs:20` 的同一条早退）。
     ///
     /// 落地后**清掉选区**：旧坐标在新图里含义全变了（上游 `RefreshAfterResize` →
     /// `SetDocument` 同样把 `Selection` 置空）。

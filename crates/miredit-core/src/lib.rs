@@ -39,16 +39,16 @@
 //!
 //! | # | 语义 | 判据落点 | 来源 |
 //! |---|---|---|---|
-//! | 1 | **`bit15` 保留矩阵**：地表 `bk_img` 保留、物体 `fr_img` 保留、中层 `mid_img` 不保留；笔刷自身也掩掉 `bit15` | [`EditLayer::img_of_has_collision_bit`] / [`paint`] | `edit.rs:1462-1468`；`MapViewport.cs:480`/`:520`/`:546`；`mir2-map/src/cell.rs:205-212`；`TMap.cpp:339` |
+//! | 1 | **`bit15` 保留矩阵**：地表 `bk_img` 保留、物体 `fr_img` 保留、中层 `mid_img` 不保留；笔刷自身也掩掉 `bit15` | [`EditLayer::img_of_has_collision_bit`] / [`paint`] | `edit.rs:1462-1468`；`_upstream/CrystalStudio/MapViewport.cs:505`/`:520`/`:546`；`mir2-map/src/cell.rs:205-212`；`TMap.cpp:339` |
 //! | 2 | **橡皮**：图号层 `cur & 0x8000`（保留阻挡位）；阻挡层 `cur & !0x8000` | [`paint`] | `edit.rs:1475-1483` |
 //! | 3 | **阻挡层画笔**：`cur \| 0x8000`，**只动 `bit15`** | [`paint`] | `edit.rs:1413-1416` |
 //! | 4 | **族 / 层一致性**：笔刷族与当前层不匹配 ⇒ 拒绝（不写）；图库笔刷在阻挡层 ⇒ 拒绝 | [`paint`] → [`PaintOutcome`] | `edit.rs:1404-1432` |
-//! | 5 | **填充**：地表 `step=2` 并对齐偶偶格；匹配键 `(库号, 图号 & 0x7FFF)`；四邻 BFS；上限 `200_000` 格且**超限一格不写**；整次填充 = 撤销一步 | [`fill`] / [`EditSession::fill`] | `edit.rs:1036-1206`；`MapViewport.cs:485-539` |
+//! | 5 | **填充**：地表 `step=2` 并对齐偶偶格；匹配键 `(库号, 图号 & 0x7FFF)`；四邻 BFS；上限 `200_000` 格且**超限一格不写**；整次填充 = 撤销一步 | [`fill`] / [`EditSession::fill`] | `edit.rs:1036-1206`；`_upstream/CrystalStudio/MapViewport.cs:510-564` |
 //! | 6 | **撤销**：整格快照；一次拖动/填充 = 一步；撤销后 `to_bytes()` 与操作前**逐字节相等** | [`undo`] / [`UndoStack`] | `edit.rs:554-579`、`:1288-1323` |
 //! | 7 | **保存**：`tmp → write_all → sync_all → 读回逐字节核对 → rename → 尽力 fsync 父目录`；目录 fsync 失败**不改结论**，只报告 | [`save`] | `save.rs:1-330` |
 //! | 8 | **格式能力闸门**（新增）：`ground_paint_supported=false`（Type5）⇒ 地表层落笔**明确拒绝**并给中文原因；writer 不写的库号字节 ⇒ 还原成改前值并说明 | [`EditSession::touch`] / [`EditSession::fill`] | `mir2-format/src/model.rs:430-440`、`:419-461` |
 //! | 9 | **印章放置**（新增）：锚点 + 相对偏移（可负）；出界**逐格跳过**并计数、全出界 ⇒ 拒绝；三族图号 + 库号字节；`bit15` 矩阵复用 [`paint`]；整次放置 = **一步撤销** | [`EditSession::place_stamp`] / [`stamp`] | `CrystalStudio/PlacedStamps.cs:80`、`:87-98`、`:114-121`；`mir2-stamp/src/stamp.rs:22-32` |
-//! | 10 | **矩形选区 + 剪贴板**（新增）：选区是**闭区间**（C# `Rect` 半开 + 构造时 `+1`，两者等价）；越界**入口裁剪一次**；复制**整块都抓**（含空格）；删除/剪切**三族按层清 + 库号字节写 0**（取 `CutSource` 口径）；粘贴**先按源奇偶重算锚点**（`Anchor`，负锚点整块拒绝）再**复用 `plan_stamp`**（逐格越界跳过 + Type5 闸门 + 保留目标 `bit15`）；**整次操作 = 一步撤销**；选区/剪贴板**不进撤销栈、不置脏** | [`EditSession::copy_selection`] / [`selection`] | `MapViewport.cs:102`、`:115`、`:390`、`:399-400`、`:540`、`:546`；`RegionCopy.cs:17`、`:21-27`、`:45-69`、`:70-91`、`:121-122`、`:101-110` |
+//! | 10 | **矩形选区 + 剪贴板**（新增）：选区是**闭区间**（C# `Rect` 半开 + 构造时 `+1`，两者等价）；越界**入口裁剪一次**；复制**整块都抓**（含空格）；删除/剪切**三族按层清 + 库号字节写 0**（取 `CutSource` 口径）；粘贴**先按源奇偶重算锚点**（`Anchor`，负锚点整块拒绝）再**复用 `plan_stamp`**（逐格越界跳过 + Type5 闸门 + 保留目标 `bit15`）；**整次操作 = 一步撤销**；选区/剪贴板**不进撤销栈、不置脏** | [`EditSession::copy_selection`] / [`selection`] | `_upstream/CrystalStudio/MapViewport.cs:106`、`:119`、`:399`、`:422-423`、`:566`、`:598`；`RegionCopy.cs:17`、`:21-27`、`:45-69`、`:70-91`、`:121-122`、`:101-110` |
 //! | 11 | **`.X` → 格表**（新增）：三族图号一律 `& 0x7FFF`；三族库号超出 `0..=255` **报错不截断**（消息含「第 N 格 / 地表\|中层\|物体 / 值」）；`door`/`door_offset`/`light`/`ani_frame`/`ani_tick` 与 5 个「视图装不下」的动画字段**全部照搬真值** | [`cells_from_stamp`] / [`stamp_convert`] | `mir2-stamp/src/cell.rs`（v2 格体偏移表）；`CrystalStudio/README.md:205-207` |
 //! | 12 | **五层计数**（新增）：官方掩码 = C# **归一化内存表示**（legacy `bit15`→29/30、Mir3 `flag` bit0/1、u32 族磁盘 bit29/30）；单格 **O(1) 增量**、整块换视图后**必须** `rebuild_layer_counts()`；**照抄磁盘 bit29/30 会得到几乎全 0 的假计数**（40 张实测 39 张全 0） | [`layer_counts`] / [`Document::write_view_cell`] | `Document.LayerCounts.cs:5-25@acfbbf8a`；`LegacyMapReader.cs:149-150`、`:160-161`、`:438-439`、`:496-497`、`:545-546@acfbbf8a` |
 //!
@@ -65,7 +65,7 @@
 //! | [`fill`] | 填充匹配键 + 四邻 BFS + `step=2` + 上限 + **先收块后动笔** | `edit.rs:1490-1610`、`:1036-1206` |
 //! | [`stamp`] | 印章放置：逐格越界裁剪 + 三族写字段 + Type5 闸门 + **先算后写** | `CrystalStudio/PlacedStamps.cs:52-121`（新增） |
 //! | [`stamp_convert`] | `.X` 印章 → [`StampCellInput`]：三族图号掩 `0x7FFF` + 库号越界即错 + 12 个附加字段照搬 | `mir2-stamp/src/cell.rs`（2026-11-05 新增） |
-//! | [`selection`] | 矩形选区 + 剪贴板：闭区间语义 + 越界裁剪 + 清空计划 + 复制快照 | `MapViewport.cs:102-546`、`RegionCopy.cs:1-133`（新增） |
+//! | [`selection`] | 矩形选区 + 剪贴板：闭区间语义 + 越界裁剪 + 清空计划 + 复制快照 | `_upstream/CrystalStudio/MapViewport.cs:106-598`、`RegionCopy.cs:1-133`（新增） |
 //! | [`undo`] | 撤销栈（整格快照、一次拖动/填充 = 一步、上限 100） | `edit.rs:554-579`、`:851-960`、`:1288-1323` |
 //! | [`session`] | `EditSession`：文档 + 工具 + 笔刷 + 层 + 尺寸 + 撤销栈（N×N 在这里展开） | `edit.rs:581-1324` |
 //! | [`save`] | 原子保存 + 目录 fsync 分类 | `save.rs:1-330` |

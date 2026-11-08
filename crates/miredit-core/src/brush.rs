@@ -209,7 +209,7 @@ pub struct Brush {
     /// 这一位是"阻挡层要不要拒绝"的判据：图库笔刷（`from == None`）在阻挡层被拒，
     /// 地图吸来的笔刷（`from == Some`）允许落笔（`edit.rs:1404-1412`、`:1619-1627`）。
     ///
-    /// ⚠ 记的是**锚点**、不是鼠标点到的格：地表层按 2×2 对齐（`MapViewport.cs:405`
+    /// ⚠ 记的是**锚点**、不是鼠标点到的格：地表层按 2×2 对齐（`_upstream/CrystalStudio/MapViewport.cs:406`
     /// `if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`）⇒ 点奇格时这里存的是它左边/上边
     /// 那个偶格（`EditSession::pick_anchor`）。读方**只能**用它判 `Some`/`None`，
     /// 别拿它当"用户点在哪"（那是 UI 的事）。
@@ -301,7 +301,7 @@ pub const BRUSH_DEFAULT: usize = 3;
 /// 把任意尺寸夹进「3..=31 的奇数」—— **唯一的规范化入口**。来源：`metrics.rs:186-199`。
 ///
 /// 先夹范围再抬奇数（`| 1` 的等价写法），于是 `0/1/2` → 3、`32/40` → 31、`4` → 5、`8` → 9。
-/// 与 `MapViewport.cs:27` 的 `Math.Clamp(value | 1, 3, 31)` 等价
+/// 与 `_upstream/CrystalStudio/MapViewport.cs:28` 的 `Math.Clamp(value | 1, 3, 31)` 等价
 /// （差别只在"先夹后抬"与"先抬后夹"在边界上的次序，两处都夹到 3..31 的奇数集合内）。
 pub const fn clamp_brush_size(n: usize) -> usize {
     let v = if n < BRUSH_MIN { BRUSH_MIN } else { n };
@@ -320,7 +320,7 @@ pub const fn clamp_brush_size(n: usize) -> usize {
 
 /// 以 `(x, y)` 为中心的 **N×N 落笔格**（已按地图边界裁剪）。来源：`edit.rs:812-827`。
 ///
-/// 形状 = **居中方形**（官方 `MapViewport.cs:476-478` 的双层循环
+/// 形状 = **居中方形**（官方 `_upstream/CrystalStudio/MapViewport.cs:498-501` 的双层循环
 /// `for iy in -radius..=radius { for ix in -radius..=radius { … if (!Document.Contains(sx, sy)) continue; } }`；
 /// 官方工具提示 `CentredBrushFootprintAndtoResize_55DDE2E3` 也写的是「以中心定位笔刷范围」）。
 /// 边缘裁剪 = **逐格跳过越界格**（与官方 `continue` 同一判据），不是"把方块整体挪回界内"。

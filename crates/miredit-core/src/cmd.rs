@@ -21,13 +21,13 @@
 //! | [`Command::Fill`] | [`EditSession::fill`] | `edit.rs:1036-1206` |
 //! | [`Command::PlaceStamp`] | [`EditSession::place_stamp_by_id`] | `CrystalStudio/PlacedStamps.cs:114-121`（逐格 `MergeStamp` + 一步撤销）；越界/格式闸门见 [`crate::stamp`] 模块文档 |
 //! | [`Command::Pick`] | [`EditSession::pick_at`] | `edit.rs:1234-1252` |
-//! | [`Command::SetSelection`] | [`EditSession::set_selection`] | `MapViewport.cs:390`、`:399-400`（越界裁剪） |
-//! | [`Command::ClearSelection`] | [`EditSession::clear_selection`] | `MapViewport.cs:103-108`（`Deselect`，**不清剪贴板**） |
+//! | [`Command::SetSelection`] | [`EditSession::set_selection`] | `_upstream/CrystalStudio/MapViewport.cs:399`、`:422-423`（越界裁剪） |
+//! | [`Command::ClearSelection`] | [`EditSession::clear_selection`] | `_upstream/CrystalStudio/MapViewport.cs:107-112`（`Deselect`，**不清剪贴板**） |
 //! | [`Command::CopySelection`] | [`EditSession::copy_selection`] | `RegionCopy.cs:101`、`:21-27`（整块都抓，含空格） |
 //! | [`Command::CutSelection`] | [`EditSession::cut_selection`] | `RegionCopy.cs:102`、`:108`、`:45-69`（复制 + 清空，一步撤销） |
 //! | [`Command::PasteSelection`] | [`EditSession::paste_clipboard`] | `RegionCopy.cs:72-91`（复用 `stamp::plan_stamp`；逐格越界跳过）；`:70` 锚点按源奇偶重算、负锚点整块拒绝 |
 //! | [`Command::DeleteSelection`] | [`EditSession::delete_selection`] | `RegionCopy.cs:45-69`（三族按层清 + 库号写 0） |
-//! | [`Command::FillSelection`] | [`EditSession::fill_selection`] | `MapViewport.cs:540`（地表取 `step=1`，见 `selection.rs` §五） |
+//! | [`Command::FillSelection`] | [`EditSession::fill_selection`] | `_upstream/CrystalStudio/MapViewport.cs:566`（地表取 `step=1`，见 `selection.rs` §五） |
 //! | [`Command::Undo`] / [`Command::Redo`] | [`EditSession::undo`] / [`EditSession::redo`] | `edit.rs:1289-1323`（**一次一步**，与 GUI 的 `--edit-undo N` 循环等价） |
 //! | [`Command::Save`] | [`crate::save_session`] | `save.rs:289-330` |
 //!
@@ -153,8 +153,8 @@ pub enum Command {
     },
     /// **设矩形选区**（闭区间；越界会被裁剪到图内）。
     ///
-    /// 语义来源：`CrystalStudio/MapViewport.cs:390`（起点必须图内）、`:399`（终点 `Math.Clamp`）、
-    /// `:400`（宽高 = 端点差 + 1）。裁到全空 ⇒ 选区被取消，`changed == 0` + 中文原因。
+    /// 语义来源：`_upstream/CrystalStudio/MapViewport.cs:399`（起点必须图内）、`:422`（终点 `Math.Clamp`）、
+    /// `:423`（宽高 = 端点差 + 1）。裁到全空 ⇒ 选区被取消，`changed == 0` + 中文原因。
     ///
     /// ⚠ 选区是 **UI 状态**：这条命令**不改地图、不置脏、不产生撤销步**
     /// （C# 把 `Selection` 与 `History` 并列存，`:147`/`:152`）。
@@ -173,7 +173,7 @@ pub enum Command {
     /// `area` 是**闭区间**格坐标 `(x0, y0, x1, y1)`，越界会被夹到图内（语义见
     /// [`crate::clamp_area`]）；`None` = **这一字段不动**（上游 `ApplyMetadata` 的 `byte?`）。
     ///
-    /// 三条硬口径（`MapViewport.cs:579-597`）：
+    /// 三条硬口径（`_upstream/CrystalStudio/MapViewport.cs:579-597`）：
     /// ① 三个都 `None` ⇒ **一格不动、不开撤销步**；② **只写给了的字段**，值没变的格跳过；
     /// ③ 整批 = **一步撤销**，`changed` = 真正改动的格数。
     ///
@@ -189,7 +189,7 @@ pub enum Command {
         /// 闭区间区域 `(x0, y0, x1, y1)`。
         area: (u16, u16, u16, u16),
     },
-    /// **取消选区**（`Deselect()`，`MapViewport.cs:103-108`）。**不清剪贴板**。
+    /// **取消选区**（`Deselect()`，`_upstream/CrystalStudio/MapViewport.cs:107-112`）。**不清剪贴板**。
     ClearSelection,
     /// **复制选区进剪贴板**（整块都抓，含空格）。来源：`RegionCopy.cs:101`、`:21-27`。
     ///
@@ -218,7 +218,7 @@ pub enum Command {
     /// **删除选区内容**（三族按层清 + 库号字节写 0，**整次 = 一步撤销**）。
     /// 来源：`RegionCopy.cs:45-69`（`CutSource` 口径，见 `selection.rs` 模块文档 §二）。
     DeleteSelection,
-    /// **用当前笔刷填满选区**（**整次 = 一步撤销**）。来源：`MapViewport.cs:540`。
+    /// **用当前笔刷填满选区**（**整次 = 一步撤销**）。来源：`_upstream/CrystalStudio/MapViewport.cs:566`。
     ///
     /// 地表取 `step=1`（严格填满选区），与 C# 的 `step=2` 有意不同 ——
     /// 理由与代价见 `selection.rs` 模块文档 §五。
@@ -1005,7 +1005,7 @@ mod tests {
     // 夹具口径（`testutil.rs:28-29`）：每格 `door_index = 7`（off6）、`light = 9`（off11），
     // `door_offset` 保持 0（off7）。所以"值相同跳过"这一类用例可以直接拿 9/7/0 去撞。
 
-    /// **只写给了的字段 + 整批一步撤销**（上游 `MapViewport.cs:590-593`）。
+    /// **只写给了的字段 + 整批一步撤销**（上游 `_upstream/CrystalStudio/MapViewport.cs:590-593`）。
     #[test]
     fn 改属性只写给了的字段且一步撤销() {
         let mut ed = 会话(4, 4, CellFormat::Old12);
@@ -1038,7 +1038,7 @@ mod tests {
         assert!(!ed.dirty());
     }
 
-    /// **三个都没给 ⇒ 一格不动、不开撤销步**（上游 `MapViewport.cs:582` 的早退）。
+    /// **三个都没给 ⇒ 一格不动、不开撤销步**（上游 `_upstream/CrystalStudio/MapViewport.cs:582` 的早退）。
     #[test]
     fn 改属性三个都空不开撤销步() {
         let mut ed = 会话(4, 4, CellFormat::New14);

@@ -663,7 +663,7 @@ fn 门5_选区裁剪与粘贴越界跳过() {
     let mut ed = EditSession::load(&p).expect("打开合成图");
     let 原字节 = std::fs::read(&p).expect("读回");
 
-    // ① 选区越界 ⇒ 裁剪（`MapViewport.cs:399` 的 Math.Clamp）
+    // ① 选区越界 ⇒ 裁剪（`_upstream/CrystalStudio/MapViewport.cs:422` 的 Math.Clamp）
     assert!(ed.set_selection(Selection::new(6, 6, 99, 99)), "裁剪后仍有格 ⇒ 非空");
     assert_eq!(
         ed.selection(),
@@ -737,7 +737,7 @@ fn 门5_选区裁剪与粘贴越界跳过() {
 
 /// **门 6**：选 3×3 → `fill_selection` ⇒ 9 格全变成笔刷值，且**一步撤销**。
 ///
-/// 地表取 **step=1**（严格填满选区），与 C# `MapViewport.cs:540` + `:474-475` 的
+/// 地表取 **step=1**（严格填满选区），与 C# `_upstream/CrystalStudio/MapViewport.cs:566` + `:499-500` 的
 /// `step=2` 有意不同 —— 理由见 `selection.rs` 模块文档 §五。
 #[test]
 fn 门6_填充选区9格() {
@@ -1339,7 +1339,7 @@ fn 附_剪切回执不出假话() {
 
 /// 选区/剪贴板是 **UI 状态**：**不置脏、不产生撤销步、不动一个字节**。
 ///
-/// 来源：`MapViewport.cs:147`/`:152`（`Selection` 与 `History` **并列**存进 `MapEditorState`）。
+/// 来源：`_upstream/CrystalStudio/MapViewport.cs:147`/`:152`（`Selection` 与 `History` **并列**存进 `MapEditorState`）。
 /// 这条是给 web 那路"看到 `dirty:true` 就以为选区置脏了"的误判钉一个反例。
 #[test]
 fn 附_选区操作不置脏不产生撤销步() {

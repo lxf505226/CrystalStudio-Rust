@@ -2,8 +2,8 @@
 //!
 //! 上游契约：
 //! * 对话框与「只写改过的字段」：`CrystalStudio/MainWindow.axaml.cs:740-786`（`OpenCellProperties`）；
-//! * 选区共同值：`MapViewport.cs:567-578`（`CommonMetadata`）；
-//! * 批量落笔：`MapViewport.cs:579-597`（`ApplyMetadata`）。
+//! * 选区共同值：`_upstream/CrystalStudio/MapViewport.cs:567-578`（`CommonMetadata`）；
+//! * 批量落笔：`_upstream/CrystalStudio/MapViewport.cs:579-597`（`ApplyMetadata`）。
 //!
 //! 本模块**只有纯函数**（不碰会话、不碰 IO），GUI / web / core 三端共用同一份口径：
 //!
@@ -28,7 +28,7 @@ pub type Area = (u16, u16, u16, u16);
 ///
 /// # 口径
 ///
-/// 上游 `MapViewport.cs:585-586` 用
+/// 上游 `_upstream/CrystalStudio/MapViewport.cs:585-586` 用
 /// `for (y = Math.Max(0, (int)area.Y); y < Math.Min(Document.Height, area.Bottom); y++)`
 /// 做**开区间**裁剪；本仓闭区间 ⇒ 等价的写法是「坐标各自 `min(尺寸-1)`，再判空」。
 ///

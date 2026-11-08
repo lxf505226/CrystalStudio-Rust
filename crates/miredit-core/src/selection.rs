@@ -1,20 +1,20 @@
 //! 矩形选区 + 剪贴板：**复制 / 剪切 / 粘贴 / 删除 / 填充选区**（9 个功能点共用一套选区结构）。
 //!
 //! 真值全部来自 CrystalStudio 的两个文件：
-//! `CrystalStudio/CrystalStudio/MapViewport.cs`（选区本体 + 清空 + 填充选区）与
-//! `CrystalStudio/CrystalStudio/RegionCopy.cs`（复制 / 剪切 / 粘贴）。
+//! `_upstream/CrystalStudio/MapViewport.cs`（选区本体 + 清空 + 填充选区）与
+//! `_upstream/CrystalStudio/RegionCopy.cs`（复制 / 剪切 / 粘贴）。
 //!
 //! # 一、选区的坐标系与边界语义（**逐条带行号**）
 //!
 //! | # | 事实 | 源码 | 本 crate 的落地 |
 //! |---|---|---|---|
-//! | 1 | 选区是**可空的** `Rect?`；`null` = 没有选区 | `MapViewport.cs:102`（`public Rect? Selection { get; private set; }`）、`:107`（`Selection = null`） | `Option<Selection>`；[`crate::EditSession::selection`] |
-//! | 2 | 选区**只在拖拽时产生**：起点必须图内，终点**夹到图内** | `:390`（`if (!Document.Contains(x, y)) return false;`）、`:399`（`Math.Clamp(x, 0, Document.Width - 1)`） | [`Selection::clamp_to`] 复刻这条不变量 ⇒ 存下来的选区**永远整块在图内** |
-//! | 3 | 存的是 `(左, 上, 宽, 高)`，且宽高 = 端点差 **+1** | `:400`（`new(Math.Min(ax,bx), Math.Min(ay,by), Math.Abs(bx-ax)+1, Math.Abs(by-ay)+1)`） | `x1 = x0 + 宽 - 1` ⇒ 格集合是**闭区间** |
-//! | 4 | **`Right` / `Bottom` 不含端点**（半开） | `:115`（`x >= area.Left && x < area.Right && y >= area.Top && y < area.Bottom`）；`:540`/`:543`/`:546` 三个循环全是 `y < r.Bottom` / `x < r.Right` | 闭区间 `[x0..x1]` 与它**等价**：`x1 = Right - 1`；[`Selection::iter`] 用 `x0..=x1` |
+//! | 1 | 选区是**可空的** `Rect?`；`null` = 没有选区 | `_upstream/CrystalStudio/MapViewport.cs:106`（`public Rect? Selection { get; private set; }`）、`:111`（`Selection = null`） | `Option<Selection>`；[`crate::EditSession::selection`] |
+//! | 2 | 选区**只在拖拽时产生**：起点必须图内，终点**夹到图内** | `:399`（`if (!Document.Contains(x, y)) return false;`）、`:422`（`Math.Clamp(x, 0, Document.Width - 1)`） | [`Selection::clamp_to`] 复刻这条不变量 ⇒ 存下来的选区**永远整块在图内** |
+//! | 3 | 存的是 `(左, 上, 宽, 高)`，且宽高 = 端点差 **+1** | `:423`（`new(Math.Min(ax,bx), Math.Min(ay,by), Math.Abs(bx-ax)+1, Math.Abs(by-ay)+1)`） | `x1 = x0 + 宽 - 1` ⇒ 格集合是**闭区间** |
+//! | 4 | **`Right` / `Bottom` 不含端点**（半开） | `:119`（`x >= area.Left && x < area.Right && y >= area.Top && y < area.Bottom`）；`:566`/`:598` 两处双层循环全是 `y < r.Bottom` / `x < r.Right` | 闭区间 `[x0..x1]` 与它**等价**：`x1 = Right - 1`；[`Selection::iter`] 用 `x0..=x1` |
 //! | 5 | 选区**不进撤销栈**、**不置脏** | `:147`/`:152`（选区随 `MapEditorState` 一起存取，与 `History` **并列**而不是被它管） | 选区/剪贴板是 UI 状态：`SetSelection` 等命令 `changed = 0` 且不动 `dirty` |
-//! | 6 | 取消选区 = 置 `null` | `:103-108`（`Deselect()`） | [`crate::EditSession::clear_selection`] |
-//! | 7 | 选区工具是 `M` 键；**选区外按下 = 先取消选区** | `MainWindow.axaml.cs:861`（`Key.M => EditorTool.Select`）、`MapViewport.cs:389`（`if (!SelectionContains(x, y)) Deselect();`） | UI 层的事，本 crate 只提供 `set_selection` / `clear_selection` |
+//! | 6 | 取消选区 = 置 `null` | `:107-112`（`Deselect()`） | [`crate::EditSession::clear_selection`] |
+//! | 7 | 选区工具是 `M` 键；**选区外按下 = 先取消选区** | `MainWindow.axaml.cs:861`（`Key.M => EditorTool.Select`）、`_upstream/CrystalStudio/MapViewport.cs:398`（`if (!SelectionContains(x, y)) Deselect();`） | UI 层的事，本 crate 只提供 `set_selection` / `clear_selection` |
 //!
 //! ⚠ **与派单描述的一处措辞差异（以源码为准）**：派单写「闭区间；与 C# 的 `Rect` 语义对齐」。
 //! 更精确的说法是：C# 的 `Rect` 是**半开**（`Right`/`Bottom` 不含端点，第 4 条），
@@ -27,18 +27,18 @@
 //!
 //! | 函数 | 清哪几层 | 清库号字节 | 源码 |
 //! |---|---|---|---|
-//! | `ClearSelection`（`Delete` 键走它） | **只清当前层** | **不清** | `MapViewport.cs:546`（`case MapLayer.Ground: c.BackImage &= 0x60000000; break;` …）、`MainWindow.axaml.cs:873` |
+//! | `ClearSelection`（`Delete` 键走它） | **只清当前层** | **不清** | `_upstream/CrystalStudio/MapViewport.cs:598`（`case MapLayer.Ground: c.BackImage &= 0x60000000; break;` …）、`MainWindow.axaml.cs:873` |
 //! | `CutSource`（剪切） | **三族一起清** | **清**（`BackLibrary = 0` / `MiddleLibrary = 0`） | `RegionCopy.cs:45-69`，`:54`、`:59`、`:63` |
 //!
 //! **本仓统一取 `CutSource` 口径**（删除与剪切行为一致）—— 2026-11-05 裁定：
 //! `img == 0` 时库号字节没有任何意义（渲染只看 `img`），留着就是脏数据；
 //! 两个命令语义相同（都是"清掉选中格的内容"）却行为不同，是历史包袱不是设计。
-//! ⇒ **这是有意偏离 `MapViewport.cs:546`**（不清库号），已登记，不是漏改。
+//! ⇒ **这是有意偏离 `_upstream/CrystalStudio/MapViewport.cs:598`**（不清库号），已登记，不是漏改。
 //!
 //! ⚠ **一处例外（2026-11-05 新增）：可见性闸门**。`CutSource` 的三个 `if` 都带层开关
 //! （`RegionCopy.cs:52` 的 `if (ground && …)`、`:57` 的 `if (middle && …)`、`:61` 的 `if (objects && …)`）
 //! ⇒ **剪切只清可见层**（[`crate::EditSession::cut_selection`] 传当前可见性）；
-//! 而删除键的 C# 对照是 `MapViewport.cs:546` 的 `ClearSelection`（不判可见性）
+//! 而删除键的 C# 对照是 `_upstream/CrystalStudio/MapViewport.cs:598` 的 `ClearSelection`（不判可见性）
 //! ⇒ [`crate::EditSession::delete_selection`] 传 `[true; 3]`，仍三族全清。
 //!
 //! 逐族落到本 crate 的 16 位字段（`bk_img`/`mid_img`/`fr_img` 的字段归属见 `layer.rs:240-246`）：
@@ -57,7 +57,7 @@
 //!    `bit15`（等价推导见 `paint.rs:275-283`：C# `0x60000000` ↔ 文件级 `bit15`）
 //!    ⇒ 等价判据是 `& 0x7FFF`。
 //! 2. **保留 `bit15`**：`bk_img &= 0x8000` / `fr_img &= 0x8000` 就是 C# 的 `& 0x60000000`
-//!    （`MapViewport.cs:546` 的地表分支、`RegionCopy.cs:54`）—— 清内容不清阻挡位。
+//!    （`_upstream/CrystalStudio/MapViewport.cs:598` 的地表分支、`RegionCopy.cs:54`）—— 清内容不清阻挡位。
 //!    中层没有阻挡位（`layer.rs:257-265`）⇒ 直接置 0。
 //! 3. **不动 `ani_frame` / `ani_tick` / `door_index` / `door_offset` / `light` / `tail`**：
 //!    - `RegionCopy.cs:59` 确实清了 `MiddleFrames`/`MiddleTick`，但那两个字节在 **14 B 档**里
@@ -85,7 +85,7 @@
 //!      `:352-353`）= C# 的 `franimationframe`/`franimationtick`（`LegacyMapReader.cs:245-246` 读、
 //!      `:259-260` 只在有前景时赋给 `Foreground`）⇒ **前景动画**；`stamp.rs:99-100` 是同一口径
 //!      （`.X` 的 `foreground.frames/tick` → `StampCellInput.ani_frame`，与本字段同名不同义）。
-//!      上游 `MapViewport.cs:592` 的中层分支**一个字节都不碰** `Foreground`，只清
+//!      上游 `_upstream/CrystalStudio/MapViewport.cs:598` 的中层分支**一个字节都不碰** `Foreground`，只清
 //!      `MiddleFrames`/`MiddleTick`。
 //!    - **语料佐证**（2026-11-06 实测 `E:\GodM2\GodotClient\maps` 的 53 张 14 B 图 / 2,219,118 格）：
 //!      `ani_*` 非 0 的 997 格里 **978 格（98.1%）同时有前景**；「前景为 0、`mid_img != 0`、
@@ -95,15 +95,16 @@
 //!    - **行号订正**（文件增长漂移，本单实测两份上游副本）：`LegacyMapReader.cs:243-244` → `:245-246`、
 //!      `:257-258` → `:259-260`；`Document.cs:63` → `:71`；`mir2-map/src/cell.rs:32-33` → `:309-311`
 //!      （字段）／`:352-353`（解析）；本模块与 `paint.rs` 多处引的 `MapViewport.cs:546`（地表分支，
-//!      实为 `ClearSelection` 而不是 `BucketFill`）→ **`:592`**（598 行取证副本）／`:597`
-//!      （`_upstream` 的 603 行副本，审计单用的就是这套新编号）。
+//!      实为 `ClearSelection` 而不是 `BucketFill`）→ **`:598`**
+//!      （`_upstream/CrystalStudio/MapViewport.cs`，本地快照 604 行）。旧记「`:592`（598 行副本）／`:597`（603 行副本）」已过期：
+//!      本地 `_upstream` 只有一份，`ClearSelection` 在 `:598`。
 //! 5. **已知缺口（未修，单列）**：`Mir3Wemade`/`Mir3Shanda`/`CrystalCs` 的中层动画在 C# 里**有真值**，
 //!    但落在 `mir2-format::Cell.mid_ani_frame`/`mid_ani_tick`，**编辑视图不承载**
 //!    （`convert.rs:261-262` 的 `LOST_IN_VIEW` 第 6/7 条）⇒ 清中层时**清不到它**。要清得先给视图加
 //!    这两个字段（`mir2-map` 的 `Cell` + `convert.rs` 的 `FIELD_MAP`），属**跨 crate 变更**。
 //!    对唯二 `editable` 的 `Shanda14`/`Old12` **没有可观测差异**（上游那边恒 0）。
 //! 6. **`ClearSelection` 的「无条件清」 vs `CutSource` 的「有内容才清」**（2026-11-06 补记）：
-//!    - 上游 `MapViewport.cs:592` 的中层分支是 `c.MiddleImage = 0; c.MiddleFrames = 0;
+//!    - 上游 `_upstream/CrystalStudio/MapViewport.cs:598` 的中层分支是 `c.MiddleImage = 0; c.MiddleFrames = 0;
 //!      c.MiddleTick = 0;`，**不看** `MiddleImage != 0`，而且逐格 `History.Record`
 //!      ⇒ **空选区删一次也留下一步「什么都没变」的撤销**；
 //!    - `RegionCopy.cs:57` 则是 `if (middle && s.Cell.MiddleImage != 0)`（**有内容才清**）。
@@ -190,9 +191,9 @@
 //!
 //! # 五、`FillSelection` 的地表步长（**有意与 C# 不同**）
 //!
-//! C# `MapViewport.cs:540` 的 `FillSelection` 是"对矩形里每一格调一次 `Apply`"，
+//! C# `_upstream/CrystalStudio/MapViewport.cs:566` 的 `FillSelection` 是"对矩形里每一格调一次 `Apply`"，
 //! 而 `Apply` 的地表分支带 `int step = Layer == MapLayer.Ground ? 2 : 1; if (step == 2) { x &= ~1; y &= ~1; }`
-//! （`:474-475`）⇒ **3×3 选区在奇数原点会被对齐到偶偶格、覆盖 4×4，溢出到选区外**。
+//! （`:499-500`）⇒ **3×3 选区在奇数原点会被对齐到偶偶格、覆盖 4×4，溢出到选区外**。
 //!
 //! 本 crate 取 **step=1（严格填满选区）**，理由两条：
 //! 1. 溢出选区违背用户预期（选 3×3 却改了 4×4，撤销里也是 16 格）；
@@ -213,7 +214,7 @@ use crate::undo::Change;
 /// 一个**矩形选区**：闭区间 `[x0..=x1] × [y0..=y1]`（格坐标）。
 ///
 /// 边界语义见模块文档 §一：C# 存的是半开的 `Rect`（`Right`/`Bottom` 不含端点），
-/// 但构造时已把「端点差 +1」写进宽高（`MapViewport.cs:400`）⇒ 格集合就是闭区间，
+/// 但构造时已把「端点差 +1」写进宽高（`_upstream/CrystalStudio/MapViewport.cs:423`）⇒ 格集合就是闭区间，
 /// 本结构直接存两端点，两种写法等价。
 ///
 /// ⚠ 字段是 `pub` 的（网页层要能直接拼一个发过来），所以**不保证** `x0 <= x1`：
@@ -255,7 +256,7 @@ impl Selection {
         }
     }
 
-    /// 宽（列数，≥ 1）。C# 侧等价于 `Rect.Width`（`MapViewport.cs:400` 的 `|bx-ax|+1`）。
+    /// 宽（列数，≥ 1）。C# 侧等价于 `Rect.Width`（`_upstream/CrystalStudio/MapViewport.cs:423` 的 `|bx-ax|+1`）。
     pub const fn width(self) -> u16 {
         let (a, b) = self.xs();
         // `b - a + 1` 最大 65536（a=0, b=65535）⇒ 用 u32 算再收窄，避免 u16 溢出
@@ -273,7 +274,7 @@ impl Selection {
         self.width() as u64 * self.height() as u64
     }
 
-    /// 该格在不在选区内。判据逐字对齐 `MapViewport.cs:115` 的 `SelectionContains`
+    /// 该格在不在选区内。判据逐字对齐 `_upstream/CrystalStudio/MapViewport.cs:119` 的 `SelectionContains`
     /// （那边是半开：`x >= Left && x < Right`；这边闭区间：`x0 <= x <= x1`，等价）。
     pub const fn contains(self, x: u16, y: u16) -> bool {
         let (ax, bx) = self.xs();
@@ -283,8 +284,8 @@ impl Selection {
 
     /// **裁剪到地图内**（`w`/`h` = 地图宽高）；整块都在图外 ⇒ `None`。
     ///
-    /// 复刻 C# 的两条不变量（模块文档 §一 第 2 条）：`MapViewport.cs:390` 要求起点在图内、
-    /// `:399` 把终点 `Math.Clamp` 到 `0..=Width-1` ⇒ 官方存下来的选区**永远整块在图内**。
+    /// 复刻 C# 的两条不变量（模块文档 §一 第 2 条）：`_upstream/CrystalStudio/MapViewport.cs:399` 要求起点在图内、
+    /// `:422` 把终点 `Math.Clamp` 到 `0..=Width-1` ⇒ 官方存下来的选区**永远整块在图内**。
     /// 本 crate 在**入口处**裁剪一次，后续所有迭代都不必再判越界。
     ///
     /// 由于 `u16` 没有负数，"整块在图外"只可能发生在右/下侧（`x0 >= w` 或 `y0 >= h`）。
@@ -308,7 +309,7 @@ impl Selection {
 
     /// 按**行优先**遍历选区里的每一格（`y` 外层、`x` 内层）。
     ///
-    /// 顺序对齐 C# 的两处双层循环：`MapViewport.cs:540`/`:546` 的
+    /// 顺序对齐 C# 的两处双层循环：`_upstream/CrystalStudio/MapViewport.cs:566`/`:598` 的
     /// `for (int y = …; y < r.Bottom; y++) for (int x = …; x < r.Right; x++)`
     /// 与 `RegionCopy.cs:22` 的 `for dy … for dx`。撤销步里的格序也因此稳定可复现。
     pub fn iter(self) -> impl Iterator<Item = (u16, u16)> {
@@ -600,7 +601,7 @@ pub(crate) struct ClearPlan {
 /// ⚠ `vis` 的两个调用口径不同（都不是随手给的）：
 /// - [`crate::EditSession::cut_selection`] 传**当前可见性** —— 它对应 `CutSource`，按层清；
 /// - [`crate::EditSession::delete_selection`] 传 `[true; 3]` —— 它的 C# 对照是
-///   `MapViewport.cs:546` 的 `ClearSelection`（**不按可见性**），本 crate 已登记为"三族一起清"。
+///   `_upstream/CrystalStudio/MapViewport.cs:598` 的 `ClearSelection`（**不按可见性**），本 crate 已登记为"三族一起清"。
 ///
 /// 库号字节的**格式闸门**：writer 不写该字节的格式（`writes_layer_lib_byte` 为假）⇒
 /// 视图里也不许置 0，否则会出现"视图显示 0、文件还是旧值、重开又变回来"的假象
@@ -695,7 +696,7 @@ mod tests {
     use crate::testutil::造图;
     use mir2_map::{CellFormat, Map};
 
-    /// 3×3 选区的宽/高/格数/包含判定/遍历顺序 —— 逐条对 `MapViewport.cs:115`、`:400`。
+    /// 3×3 选区的宽/高/格数/包含判定/遍历顺序 —— 逐条对 `_upstream/CrystalStudio/MapViewport.cs:119`、`:423`。
     #[test]
     fn 选区闭区间语义() {
         let s = Selection::new(2, 3, 4, 5);
@@ -710,7 +711,7 @@ mod tests {
         for (x, y) in [(1, 3), (5, 3), (2, 2), (2, 6)] {
             assert!(!s.contains(x, y), "({x},{y}) 不该在选区内");
         }
-        // 行优先：y 外层、x 内层（`MapViewport.cs:540` 的循环顺序）
+        // 行优先：y 外层、x 内层（`_upstream/CrystalStudio/MapViewport.cs:566` 的循环顺序）
         let 格: Vec<(u16, u16)> = s.iter().collect();
         assert_eq!(格.len(), 9);
         assert_eq!(格[0], (2, 3), "第一格是左上角");
@@ -742,7 +743,7 @@ mod tests {
         assert!(s.contains(2, 3) && s.contains(5, 5));
     }
 
-    /// **越界裁剪**：复刻 `MapViewport.cs:399` 的 `Math.Clamp`；整块在图外 ⇒ `None`。
+    /// **越界裁剪**：复刻 `_upstream/CrystalStudio/MapViewport.cs:422` 的 `Math.Clamp`；整块在图外 ⇒ `None`。
     #[test]
     fn 越界裁剪到图内() {
         // 右下越界 ⇒ 裁到 (2,3)..(4,4)

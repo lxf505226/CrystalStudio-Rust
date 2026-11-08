@@ -20,9 +20,9 @@
 //!
 //! | 层 | 字段 | 保留 `bit15` | 依据 |
 //! |---|---|---|---|
-//! | 地表 [`EditLayer::Ground`] | `bk_img` | **是**（低阻挡） | `mir2-map/src/cell.rs:205-212` `Cell::is_walkable`；客户端 `client/reference_full/Classes/map/TMap.cpp:339` `CanWalk`；C# `MapViewport.cs:480` |
+//! | 地表 [`EditLayer::Ground`] | `bk_img` | **是**（低阻挡） | `mir2-map/src/cell.rs:205-212` `Cell::is_walkable`；客户端 `client/reference_full/Classes/map/TMap.cpp:339` `CanWalk`；C# `_upstream/CrystalStudio/MapViewport.cs:505` |
 //! | 物体 [`EditLayer::Front`] | `fr_img` | **是**（高阻挡） | 同上 + C# `LegacyMapReader.cs:158-159`、`MainWindow.axaml.cs:220`、`NativeCoastSupport.cs:161` |
-//! | 中层 [`EditLayer::Middle`] | `mid_img` | **否**（纯图号） | C# `Document.cs:12` 的 `MiddleImage` 是纯 `ushort`；`MapViewport.cs:480`/`:525` 直接赋 `image`、`:546` 清 0；且不参与 `is_walkable` |
+//! | 中层 [`EditLayer::Middle`] | `mid_img` | **否**（纯图号） | C# `Document.cs:12` 的 `MiddleImage` 是纯 `ushort`；`_upstream/CrystalStudio/MapViewport.cs:505`/`:551` 直接赋 `image`、`:598` 清 0；且不参与 `is_walkable` |
 //!
 //! 写图号的统一公式（`edit.rs:1462-1468`）：
 //!
@@ -33,7 +33,7 @@
 //! 其中"笔刷自身也掩掉 `bit15`"是同一句里的 `v & 0x7FFF`：吸管从带阻挡的格取下来的
 //! `Brush::img` 含 `bit15`，若原样 `|` 进去就等于把源格的阻挡"贴"到目标格上（反向拆墙/筑墙）。
 //!
-//! ⚠ **绝不用 C# 的 `0x20000000` / `0x40000000`**（`MapViewport.cs:23` 的
+//! ⚠ **绝不用 C# 的 `0x20000000` / `0x40000000`**（`_upstream/CrystalStudio/MapViewport.cs:24` 的
 //! `ActiveCollisionMask`）：那是它内存模型的私有位，写进 `.map` 我们客户端读不懂
 //! （`edit.rs:125-126` 同款警告）。
 //!

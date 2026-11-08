@@ -24,7 +24,7 @@ fn 缺省状态() {
 
 /// 吸管取到图号与库号（整 16 位含阻挡位）。来源：`edit.rs:2138-2155`。
 ///
-/// ⚠ 取的是**偶偶格** `(2,2)`：地表层按 2×2 对齐（`MapViewport.cs:405`），
+/// ⚠ 取的是**偶偶格** `(2,2)`：地表层按 2×2 对齐（`_upstream/CrystalStudio/MapViewport.cs:406`），
 /// 奇格会被吸附到偶格再读（吸附本身见 `地表吸管吸附到偶格`）。
 #[test]
 fn 吸管取到图号与库号() {
@@ -71,9 +71,9 @@ fn 十二字节档吸管不知道库号() {
 
 /// **地表吸管吸附到偶偶格**（审计线 R8/E2）。
 ///
-/// 上游原文 `CrystalStudio/MapViewport.cs:402-414` 的 `PickTile`：
-/// `:404` 越界/层门控 → **`:405` `if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`**
-/// → `:406` `Document.Get(x, y)` → `:408` 读 `(BackImage & 0x1FFFFFFF) - 1`。
+/// 上游原文 `_upstream/CrystalStudio/MapViewport.cs:403-415` 的 `PickTile`：
+/// `:405` 越界/层门控 → **`:406` `if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`**
+/// → `:407` `Document.Get(x, y)` → `:409` 读 `(BackImage & 0x1FFFFFFF) - 1`。
 /// 地表格按 2×2 图块拼贴，可见图块只在偶偶格上，奇格通常是`bk_img == 0`。
 ///
 /// 合成 2×2（`Old12`）：偶格 `(0,0).bk_img = 7`、奇格 `(1,0).bk_img = 0`。三条取笔刷路径
@@ -138,7 +138,7 @@ fn 中层吸管不吸附() {
 
 /// 吸管锚点与填充起点**同一条判据**（防"两套网格"漂移）。
 ///
-/// 取笔刷要吸附（`MapViewport.cs:405`），填充起点也要对齐（`:499`，本 crate 的
+/// 取笔刷要吸附（`_upstream/CrystalStudio/MapViewport.cs:406`），填充起点也要对齐（`:522-523`，本 crate 的
 /// [`crate::fill::align_start`]）；两处必须给出同一张网格，否则会出现
 /// "吸管吸偶格、填充从奇格起"的两套网格（`session.rs` 模块文档 §二 记的教训）。
 #[test]
@@ -357,7 +357,7 @@ fn 填充只填同号连通块() {
             }
         }
         // 造一支"图号 1、库号 3"的地表笔刷：临时改一格吸走，稍后再改回去。
-        // ⚠ 必须改在**偶偶格**上：地表吸管按 2×2 对齐（`MapViewport.cs:405`），
+        // ⚠ 必须改在**偶偶格**上：地表吸管按 2×2 对齐（`_upstream/CrystalStudio/MapViewport.cs:406`），
         // 取 `(9,9)` 会吸附到 `(8,8)` —— 改奇的 `(9,9)` 吸到的会是 `(8,8)` 的旧值。
         let i88 = crate::document::index_of(map, 8, 8).unwrap();
         map.cells[i88].bk_img = 1;
@@ -396,7 +396,7 @@ fn 填充撤销一步逐字节还原() {
             c.tiles = 3;
         }
         // 造一支与整张图不同的地表笔刷。⚠ 改在**偶偶格**上：地表吸管按 2×2 对齐
-        // （`MapViewport.cs:405`），点 `(9,9)` 会吸附到 `(8,8)`，所以特殊值要留在锚点上。
+        // （`_upstream/CrystalStudio/MapViewport.cs:406`），点 `(9,9)` 会吸附到 `(8,8)`，所以特殊值要留在锚点上。
         let i88 = crate::document::index_of(map, 8, 8).unwrap();
         map.cells[i88].bk_img = 1;
     }

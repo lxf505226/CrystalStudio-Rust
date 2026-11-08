@@ -76,7 +76,7 @@
 //! | 物件图号 | `front.Image & 0x7FFF` | [`objects_image`]：Wemade2010 先 `^xor`；Mir3 先 `+1`（`csharp_image`） |
 //! | 开门帧 | `image != 0 && (Door & 0x7F) != 0 ⇒ image + DoorOffset` | [`open_door_image`] |
 //! | 可走（Type0/2/3/4/7） | `BackImage & 0x60000000 == 0`（装载期把 bk 的 bit15 折成 `0x20000000`、fr 的折成 `0x40000000`） | `bk_img & 0x8000 == 0 && fr_img & 0x8000 == 0`（= 视图 [`mir2_map::Cell::is_walkable`]，与上游聚合两位等价） |
-//! | 可走（`CrystalCs`） | 29/30 位是**持久化的碰撞位**（`CellCodec.Write` 整字写盘、`MapViewport.cs:505/546` 涂图号时保留 `& 0x60000000`）；装载期另把**前景** `bit15` 折成 `0x40000000`（仅 `ver > 1`） | `csharp_back_mark(bk_img, fr_img, ver) & 0x6000_0000 == 0`（`bit15` 只算图号，**不判阻挡**） |
+//! | 可走（`CrystalCs`） | 29/30 位是**持久化的碰撞位**（`CellCodec.Write` 整字写盘、`_upstream/CrystalStudio/MapViewport.cs:505/546` 涂图号时保留 `& 0x60000000`）；装载期另把**前景** `bit15` 折成 `0x40000000`（仅 `ver > 1`） | `csharp_back_mark(bk_img, fr_img, ver) & 0x6000_0000 == 0`（`bit15` 只算图号，**不判阻挡**） |
 //! | 可走（Mir3） | `flag&1==1` 才背景可走、`flag&2==2` 才前景可走（`LegacyMapReader.cs:436-437/494-495`） | `flag & 1 == 1 && flag & 2 == 2`（视图没有 `flag`，只能用 raw） |
 //!
 //! ## 有意差异 / 已知不精确（不静默）
@@ -718,7 +718,7 @@ fn walkable(format: FormatId, cell: &RawCell, k: 头部) -> bool {
         }
         // CrystalCs 的阻挡位是**持久化的** `bit29/bit30`，不是 `bit15`：
         // `CellCodec.Write` 把 `BackImage` 整字写盘（`_upstream/CrystalStudio/Document.cs:116`），
-        // 涂地板时也只替换低 29 位、原样保留 `& 0x60000000`（`MapViewport.cs:505/546`），
+        // 涂地板时也只替换低 29 位、原样保留 `& 0x60000000`（`_upstream/CrystalStudio/MapViewport.cs:505/546`），
         // 而 `bit15` 只是图号高位 ⇒ 判据必须是 `BackImage & 0x60000000`（`MapCheck.cs:100`）。
         // 装载期还会按 `ver > 1` 把**前景** `bit15` 折成 `0x40000000`（`:598`/`:625`），
         // 用 `csharp_back_mark` 一并算上 ⇒ 与 C# 内存里的 `BackImage` 逐位一致。

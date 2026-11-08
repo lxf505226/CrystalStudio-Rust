@@ -3,18 +3,18 @@
 //! 抽取自 `miredit-gui/src/edit.rs:1004-1213`（`EditSession::fill` 的算法部分）与
 //! `edit.rs:1490-1610`（`FillOutcome` / `fill_key` / `neighbours`）。
 //!
-//! # 一、判据全部照官方 `CrystalStudio/MapViewport.cs:485-539` 的 `BucketFill`
+//! # 一、判据全部照官方 `_upstream/CrystalStudio/MapViewport.cs:510-564` 的 `BucketFill`
 //!
 //! | 环节 | 官方源码 | 本 crate |
 //! |---|---|---|
-//! | 支持哪些层 | `:488` `if (!collision && Layer is not (Ground or Middle))` ⇒ 报 `"Fill works on ground tiles, middle tiles (smtiles), and low/high collisions"` 并 `return 0` | 物体层 ⇒ [`FillOutcome::UnsupportedLayer`]（一格不写） |
-//! | 越界 | `:493` `!Document.Contains(x, y)` ⇒ `return 0` | [`FillOutcome::OutOfMap`] |
-//! | **匹配什么** | `:498-499` `FillValue(c) = collision ? (0, c.BackImage & ActiveCollisionMask)` / `Layer == Ground ? (c.BackLibrary, c.BackImage & 0x1FFFFFFF)` / `(c.MiddleLibrary, c.MiddleImage)` | 见 [`fill_key`]：地表 = `(btTiles, bk_img & 0x7FFF)`、中层 = `(btsmTiles, mid_img)`、阻挡 = 「该位是否已置」 |
-//! | 已是目标值 | `:501` `if (source == (…Library, image)) return 0;` | [`FillOutcome::AlreadyFilled`]（不产生步骤） |
-//! | 扩散 | `:502-508` `Queue` + `HashSet<int> visited`（键 = `cy * Width + cx`），四邻 | 同样的 BFS + `visited`（用 `Vec<bool>`，键 = `cx * h + cy`，与 `Map::cells` 同序） |
-//! | **步长** | `:496-497` `int step = Layer == MapLayer.Ground ? 2 : 1; if (step == 2) { x &= ~1; y &= ~1; }` | **地表 step=2**（对齐到偶偶格、邻居 ±2）；中层/阻挡 step=1 |
-//! | 四邻 | `:531-532` `±step` 的**上下左右四格**（不含斜角） | 同样四邻 |
-//! | 撤销 | `:510` `History.Begin()` … `:534` `History.Commit()` —— **整次填充只一步** | 会话把整批变更一次压成一步（[`crate::UndoStack::commit`]） |
+//! | 支持哪些层 | `:514` `if (!collision && Layer is not (Ground or Middle))` ⇒ 报 `"Fill works on ground tiles, middle tiles (smtiles), and low/high collisions"` 并 `return 0` | 物体层 ⇒ [`FillOutcome::UnsupportedLayer`]（一格不写） |
+//! | 越界 | `:519` `!Document.Contains(x, y)` ⇒ `return 0` | [`FillOutcome::OutOfMap`] |
+//! | **匹配什么** | `:524-525` `FillValue(c) = collision ? (0, c.BackImage & ActiveCollisionMask)` / `Layer == Ground ? (c.BackLibrary, c.BackImage & 0x1FFFFFFF)` / `(c.MiddleLibrary, c.MiddleImage)` | 见 [`fill_key`]：地表 = `(btTiles, bk_img & 0x7FFF)`、中层 = `(btsmTiles, mid_img)`、阻挡 = 「该位是否已置」 |
+//! | 已是目标值 | `:527` `if (source == (…Library, image)) return 0;` | [`FillOutcome::AlreadyFilled`]（不产生步骤） |
+//! | 扩散 | `:528-534` `Queue` + `HashSet<int> visited`（键 = `cy * Width + cx`），四邻 | 同样的 BFS + `visited`（用 `Vec<bool>`，键 = `cx * h + cy`，与 `Map::cells` 同序） |
+//! | **步长** | `:522-523` `int step = Layer == MapLayer.Ground ? 2 : 1; if (step == 2) { x &= ~1; y &= ~1; }` | **地表 step=2**（对齐到偶偶格、邻居 ±2）；中层/阻挡 step=1 |
+//! | 四邻 | `:557-558` `±step` 的**上下左右四格**（不含斜角） | 同样四邻 |
+//! | 撤销 | `:536` `History.Begin()` … `:560` `History.Commit()` —— **整次填充只一步** | 会话把整批变更一次压成一步（[`crate::UndoStack::commit`]） |
 //!
 //! # 二、地表为什么要 `step=2`（两处独立证据）
 //!
@@ -34,7 +34,7 @@
 //!
 //! 1. **上限保护**：官方没有上限，本 crate 单次最多 [`FILL_MAX_CELLS`] 格，超过 ⇒
 //!    [`FillOutcome::TooLarge`] 且**一格不写**（先把连通块收齐再动笔，见下）。
-//! 2. **计的是"真改了几格"**：官方 `:530` 的 `count++` 数的是**出队格数**；
+//! 2. **计的是"真改了几格"**：官方 `:556` 的 `count++` 数的是**出队格数**；
 //!    本 crate 数的是 `Step.changes.len()`（值真的变了的格）。两者只在"块内已有目标值"时不同
 //!    （例如地表块里 `bit15` 不一致而笔刷不带 `bit15`），此时前者会让"填充 N 格"
 //!    与 `Ctrl+Z` 能还原的格数对不上 —— 取后者（`edit.rs:1026-1029`）。
@@ -47,8 +47,8 @@
 //!
 //! # 五、阻挡层只**置位**，不清位
 //!
-//! 官方 `:516` 是 `c.BackImage |= ActiveCollisionMask`（只有 `|=`，没有 `&=`），
-//! 且 `:501` 的早退保证"点已置位的块"直接返回 0。所以「填充阻挡层」的语义是
+//! 官方 `:542` 是 `c.BackImage |= ActiveCollisionMask`（只有 `|=`，没有 `&=`），
+//! 且 `:527` 的早退保证"点已置位的块"直接返回 0。所以「填充阻挡层」的语义是
 //! **把连通的可走区域整块设为不可走**；要清位请用橡皮（阻挡层是 `& !0x8000`）。
 
 use std::collections::VecDeque;
@@ -61,7 +61,7 @@ use crate::layer::{COLLISION_BIT, EditLayer, SPRITE_MAX};
 /// 单次填充的**格数上限 200,000**（防呆：不让一次误点把整张图吞进撤销栈）。
 ///
 /// 来源：`miredit-gui/src/metrics.rs:203-211`（任务书 §三.2 指定的硬上限；官方 C# 无此保护
-/// —— `MapViewport.cs:485-539` 的 `BucketFill` 直接 BFS 到底，`visited` 只防重复不防规模）。
+/// —— `_upstream/CrystalStudio/MapViewport.cs:510-564` 的 `BucketFill` 直接 BFS 到底，`visited` 只防重复不防规模）。
 /// 超过即**报错且一格不写**。
 ///
 /// 量级参照：700×700 = 490,000 格 ⇒ 一张"全图同图号"的极端图必被拦住；
@@ -83,7 +83,7 @@ pub enum FillKey {
 
 /// 填充的匹配键计算。来源：`edit.rs:1559-1571`。
 ///
-/// # 官方原文（`CrystalStudio/MapViewport.cs:498-499`）
+/// # 官方原文（`_upstream/CrystalStudio/MapViewport.cs:524-525`）
 ///
 /// ```csharp
 /// (int Library, int Image) FillValue(Cell c) => collision ? (0, c.BackImage & ActiveCollisionMask) : Layer == MapLayer.Ground
@@ -93,7 +93,7 @@ pub enum FillKey {
 /// 逐条落到本 crate 的 16 位字段上：
 ///
 /// 1. **地表**：`(btTiles, bk_img & 0x7FFF)`。官方的 `& 0x1FFFFFFF` 把 `0x60000000`
-///    （它内存模型里的**低位/高位阻挡位**，`MapViewport.cs:23`）**掩掉了** ⇒
+///    （它内存模型里的**低位/高位阻挡位**，`_upstream/CrystalStudio/MapViewport.cs:24`）**掩掉了** ⇒
 ///    **碰撞位不参与匹配**。本 crate 的碰撞位是 `bk_img` 的 `bit15`（[`COLLISION_BIT`]）
 ///    ⇒ 掩 `0x7FFF`，语义一一对应。
 /// 2. **中层**：`(btsmTiles, mid_img)` —— 官方 `(MiddleLibrary, MiddleImage)` **不做掩码**，
@@ -117,7 +117,7 @@ pub fn fill_key(layer: EditLayer, c: &Cell) -> FillKey {
     }
 }
 
-/// 该层的**网格步长**：地表 2、其余 1。来源：`edit.rs:1059`（官方 `MapViewport.cs:496-497`）。
+/// 该层的**网格步长**：地表 2、其余 1。来源：`edit.rs:1059`（官方 `_upstream/CrystalStudio/MapViewport.cs:522-523`）。
 pub const fn step_of(layer: EditLayer) -> u16 {
     if matches!(layer, EditLayer::Ground) {
         2
@@ -138,7 +138,7 @@ pub const fn align_start(layer: EditLayer, x: u16, y: u16) -> (u16, u16) {
 
 /// `(x, y)` 的**上下左右四邻**，步长 `step`。来源：`edit.rs:1590-1610`。
 ///
-/// 官方 `MapViewport.cs:531-532` 只入队这四格，**不含斜角**。
+/// 官方 `_upstream/CrystalStudio/MapViewport.cs:557-558` 只入队这四格，**不含斜角**。
 /// `step = 2` 时只走偶偶格（地表层）；`step = 1` 是逐格。
 fn neighbours(x: u16, y: u16, w: u16, h: u16, step: u16) -> impl Iterator<Item = (u16, u16)> {
     let mut out: [(u16, u16); 4] = [(0, 0); 4];
@@ -172,7 +172,7 @@ pub enum RegionOutcome {
         /// 已扫到的格数（在上限处截断）。
         cells: usize,
     },
-    /// 起点在地图外（官方 `MapViewport.cs:493`）。
+    /// 起点在地图外（官方 `_upstream/CrystalStudio/MapViewport.cs:519`）。
     OutOfMap {
         /// 对齐后的 X。
         x: u16,
@@ -237,13 +237,13 @@ pub fn collect_region(map: &Map, layer: EditLayer, x: u16, y: u16) -> RegionOutc
 pub enum FillOutcome {
     /// 真的填了这么多格（整次填充 = 撤销栈里的**一步**）。
     Filled(usize),
-    /// 目标格已经是要填的值（官方 `MapViewport.cs:501` 的早退），没有产生步骤。
+    /// 目标格已经是要填的值（官方 `_upstream/CrystalStudio/MapViewport.cs:527` 的早退），没有产生步骤。
     AlreadyFilled,
-    /// 拒绝：本层不支持填充（官方 `:488-492`，只有地表/中层/低高位阻挡）。
+    /// 拒绝：本层不支持填充（官方 `:514-518`，只有地表/中层/低高位阻挡）。
     UnsupportedLayer,
     /// 拒绝：图号层没有笔刷（不知道填成哪一号图）。
     NoBrush,
-    /// 拒绝：点击格在地图外（官方 `:493`）。
+    /// 拒绝：点击格在地图外（官方 `:519`）。
     OutOfMap,
     /// 拒绝：笔刷族与当前层不一致（沿用 [`crate::PaintOutcome::LayerMismatch`] 的语义；
     /// 阻挡层收到图库笔刷也归到这一类，见 `edit.rs:1102-1110`）。

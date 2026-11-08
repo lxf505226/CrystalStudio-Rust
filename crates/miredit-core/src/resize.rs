@@ -8,7 +8,7 @@
 //! | 裁剪内容 | `MapDocument.Crop`（`:5-24`）：只搬 `Inside` 的格，坐标减 `(left, top)` | [`Document::replace_resized`] 的 `off=(left,top)` 分支 |
 //! | 扩边前置 | `MapDimensions.CanExpand`（`MapDimensions.cs:23-31`）：四向 ≥0、**全偶数**、不能全 0；新尺寸单边 ≤32767 且格数 ≤16,000,000 | [`expand_target`] |
 //! | 扩边内容 | `MapDocument.Expand`（`Document.Expand.cs:5-14`）：新图 `W+L+R × H+T+B`，旧格搬到 `(+left, +top)`，四周留空 | [`Document::replace_resized`] 的 `off=(-left,-top)` 分支 |
-//! | 尺寸没变的裁剪 | `if (cropped.Width == Width && cropped.Height == Height) return false;`（`MapViewport.Crop.cs:22`） | [`crate::EditSession::crop_to`] 同样早退：**不入撤销栈、不置脏** |
+//! | 尺寸没变的裁剪 | `if (cropped.Width == Width && cropped.Height == Height) return false;`（`_upstream/CrystalStudio/MapViewport.Crop.cs:20`） | [`crate::EditSession::crop_to`] 同样早退：**不入撤销栈、不置脏** |
 //! | 撤销 | `History.Resize`：压一条**整档快照**（`PushUndo(new([], null, state, Capture(document)))`） | [`crate::UndoStack`] 的 `StepKind::Resize`（整档 `RawMap` + `view`，可撤销**也可重做**） |
 //!
 //! # 支持范围（7 档；两档**显式拒绝**，不猜）
