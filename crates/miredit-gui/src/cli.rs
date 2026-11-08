@@ -1412,11 +1412,20 @@ mod tests {
         );
         let parts: Vec<&str> = ver.split('.').collect();
         assert_eq!(parts.len(), 3, "必须是三段 SemVer：{ver}");
+        // 2026-11-08 用户拍板新版本号方案：`<年>.<月>.<日>` + 可选 `+<字母>`
+        // （同日多次发布用 `+a` / `+b` 区分；`2026.11.08a` 形态被 cargo 拒绝，
+        //  所以 `Cargo.toml` 里写 `2026.11.8+a`、tag 写 `v2026.11.08a`）。
+        // ⇒ 前两段必须是纯十进制；第三段的**数字部分**必须是十进制，`+` 之后允许字母。
+        for (i, name) in ["第一段", "第二段"].iter().enumerate() {
+            assert!(
+                !parts[i].is_empty() && parts[i].chars().all(|c| c.is_ascii_digit()),
+                "{name}必须是十进制数字：{ver}"
+            );
+        }
+        let third_base = parts[2].split('+').next().unwrap_or("");
         assert!(
-            parts
-                .iter()
-                .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit())),
-            "三段都必须是十进制数字：{ver}"
+            !third_base.is_empty() && third_base.chars().all(|c| c.is_ascii_digit()),
+            "第三段的数字部分必须是十进制数字（`+` 之后允许构建元数据字母）：{ver}"
         );
 
         let c = p(&["--version"]);

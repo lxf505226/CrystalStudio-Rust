@@ -231,34 +231,69 @@ fn palette_json() -> PathBuf {
     }
 }
 
-/// 等后台装载完成（最多 `secs` 秒）；超时返回 `false`（**不无限等**）。
-fn wait_ready(panel: &mut StampPanel, secs: u64) -> bool {
-    let t0 = std::time::Instant::now();
-    while t0.elapsed().as_secs() < secs {
-        if panel.poll() && panel.is_ready() {
-            return true;
+/// 等后台装载结束：**事件驱动 + 迭代次数上限**（判据不看墙钟）。
+///
+/// 判据是 [`StampPanel::is_loading`] —— 它为假 ⇔ 装载线程已经在 channel 上给出
+/// `Ready` / `Failed`（一次真实事件）。所以机器再慢也只是多轮询几次，不会因为
+/// 「时间到了」就把真实数据用例放过去；`轮询上限` 只兜「装载线程真的卡死」这一种情况。
+///
+/// 返回 `(是否就绪, 实际轮询次数)`：次数只用于失败时的诊断，**不参与判据**。
+fn wait_ready(panel: &mut StampPanel, 轮询上限: u32) -> (bool, u32) {
+    let mut 轮询 = 0u32;
+    while panel.is_loading() && 轮询 < 轮询上限 {
+        // 每轮都收一次；`poll()` 的返回值只表示「这一帧状态变没变」，不是判据
+        panel.poll();
+        轮询 += 1;
+        if panel.is_loading() {
+            // 只有还在装载时才让出 CPU（已结束就不再多睡这 5 ms）
+            std::thread::sleep(std::time::Duration::from_millis(5));
         }
-        if panel.is_ready() {
-            return true;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(10));
     }
-    panel.is_ready()
+    (panel.is_ready(), 轮询)
 }
 
-/// 造一个已装载的面板；目录不在 ⇒ 打印原因并返回 `None`（调用方 `return`）。
+/// 造一个已装载的面板。
+///
+/// 三种结局，**只有「目录不在」允许静默跳过**：
+/// 1. `palette.json` 不在 ⇒ 打印原因并返回 `None`（公开仓 / PR 机器上本来就没素材）；
+/// 2. 目录在、装载线程给出 `Failed` ⇒ **`panic!`**（索引存在却读不了是真缺陷）；
+/// 3. 目录在、轮询用满仍停在 `Loading` ⇒ **`panic!`**（等待超时绝不能退化成「跳过」，
+///    否则那 6 个真实数据用例会在负载重时集体静默消失 = 假绿）。
 fn ready_panel(tag: &str) -> Option<StampPanel> {
     let path = palette_json();
     if !path.is_file() {
         eprintln!("[跳过 {tag}] 本机没有 {}（真实数据用例需要它）", path.display());
         return None;
     }
-    let mut panel = StampPanel::with_path(path);
-    if !wait_ready(&mut panel, 30) {
-        eprintln!("[跳过 {tag}] 目录 30 s 内没装载完");
+    let mut panel = StampPanel::with_path(path.clone());
+    // 5 ms/轮 ⇒ 20_000 轮 ≈ 100 s：比原来那 30 s 宽 3 倍多，而判据仍是事件不是时间
+    let 轮询上限: u32 = 20_000;
+    let t0 = std::time::Instant::now(); // **仅诊断**用，不参与判据
+    let (就绪, 轮询) = wait_ready(&mut panel, 轮询上限);
+    if 就绪 {
+        return Some(panel);
+    }
+    let 提示 = panel.note(false).unwrap_or_else(|| "<面板没有提示>".to_owned());
+    if panel.is_loading() {
+        // ① 等待超时：**红**，不能变成「跳过」
+        panic!(
+            "[{tag}] 等待装载超时：已轮询 {轮询}/{轮询上限} 次（{:.1} s）仍停在 Loading；\
+             面板提示：{提示}；is_loading={}；路径 {}",
+            t0.elapsed().as_secs_f64(),
+            panel.is_loading(),
+            path.display()
+        );
+    }
+    // ② 不在 Loading 又没 Ready ⇒ 装载线程给了 Failed
+    if !path.is_file() {
+        // 索引在装载期间被删/挪走 ⇒ 仍然只是「本机没有素材」
+        eprintln!("[跳过 {tag}] {} 在装载期间消失（真实数据用例需要它）", path.display());
         return None;
     }
-    Some(panel)
+    panic!(
+        "[{tag}] 索引在但装载失败（**不是跳过**）：面板提示：{提示}；路径 {}",
+        path.display()
+    );
 }
 
 /// **19 个 kind 的中文名 + 条数**与 `kind_labels.rs` 的实测读数逐条对齐。
