@@ -6,6 +6,8 @@
 
 上游参照：[`fluttergo/CrystalStudio`](https://github.com/fluttergo/CrystalStudio)，本仓对齐的上游基线提交为 `901dbe2f`。2026-11-06 复核上游 HEAD `f84566b`：新增模块化地图生成/分割/连接能力（模块族），未改 `.map` 格式/保存字节；本版**未跟进模块族**。
 
+> **在线预览**：[http://dayz.dpdns.org/](http://dayz.dpdns.org/) —— 网页版部署在飞牛 NAS 上（容器 `crystalstudio/miredit`），经 Cloudflare 反代对外。**当前在线版本以 `/api/health` 返回的 `version` 为准**；该实例**未挂载游戏素材卷**，所以地图能开、但画布不出精灵（`/api/tiles` 如实 503，不伪造像素）。要看完整效果请按 [`DEPLOY.md`](DEPLOY.md) 在本地起服务并设好素材根。
+
 ## 一、能力
 
 | 项 | 内容 |
@@ -147,6 +149,7 @@ cargo run -p miredit-gui --release -- --map /path/to/some.map
 | [docs/README.md](docs/README.md) | 文档索引 |
 | [web/README.md](web/README.md) | 网页版接口契约（端点 / 错误码 / WebSocket / 前端行为） |
 | [docker/README.md](docker/README.md) | 容器部署说明 |
+| [DEPLOY.md](DEPLOY.md) | **部署指南**：源码构建 / Release 预编译 / Docker / NAS 四条路径 |
 | [layout/README-crystalstudio-ui.md](layout/README-crystalstudio-ui.md) | 上游界面真值数据（`crystalstudio-ui.json` / `crystalstudio-strings.json`）的口径 |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献流程 |
 
