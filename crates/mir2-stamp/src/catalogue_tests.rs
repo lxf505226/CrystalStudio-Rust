@@ -238,7 +238,7 @@ fn 未登记文件_实测11个() {
     assert_eq!(
         unlisted.len(),
         11,
-        "基线 11 个未登记（2026-11-04 实测，与 CrystalStudio/README.md:160 一致）；\
+        "基线 11 个未登记（2026-11-04 实测，与 _upstream/README.md:241 一致）；\
          目录新增 .X 后请同步基线。实测清单：{unlisted:?}"
     );
     assert_eq!(

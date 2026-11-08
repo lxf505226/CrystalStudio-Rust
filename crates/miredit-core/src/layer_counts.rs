@@ -571,7 +571,7 @@ mod tests {
         assert_eq!(
             cell_mask_ext(&raw, &only, ctx, 0, 0),
             MASK_HIGH_COLLISION,
-            "Heroes34 只有 bit15 的前景也算高位阻挡（LegacyMapReader.cs:535/548-551）"
+            "Heroes34 只有 bit15 的前景也算高位阻挡（LegacyMapReader.cs:541/548-551）"
         );
         // 地表：u32 的高位段也算图号（bit16..28），但 bit15 不算
         let u32_bk = 字节(0x0001_0000, 0, 0, 0, 0);

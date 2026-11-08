@@ -85,7 +85,7 @@
 //!
 //! ⚠ **订正一句旧表述**：本模块 2026-11-05 早先版本写「这个偏移在当前数据链路上**不可得**」。
 //! 按 `deliverables/取证-帧偏移数据可得性-2026-11-05.md` §1.4 实测，**数据一直都在**：
-//! 解析层 `FrameInfo.px/py` 早就读出来了（`wil_decoder.rs:40-58@412fe3e8`），
+//! 解析层 `FrameInfo.px/py` 早就读出来了（`vendor/wil2atlas/src/wil_decoder.rs:40-58`），
 //! 图集 meta 也早就在写 `anchor`（`meta.rs:27@412fe3e8`），只有 `mir2_assets::Frame`
 //! 没暴露 ⇒ 准确说法是「**当前 API 未暴露**」，不是「数据链路上不可得」。现已补上。
 //!
