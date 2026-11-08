@@ -6,8 +6,8 @@
 //! - `<dataRoot>/Objects/**/*.X`（9,170 个，全部 v2）；
 //!   （`<dataRoot>` 是开发机上的 CrystalStudio 数据根，由 `MIR2_STAMP_PALETTE` / 挂载决定，
 //!   公开仓不内置该路径）
-//! - CrystalStudio 的读取口径：`CrystalStudio/StampCategories.cs`（`Read` 在 `:20-38`、
-//!   `Resolve` 在 `:40-46`、`Groups` 在 `:61-67`、`Matches` 在 `:69-72`）。
+//! - CrystalStudio 的读取口径：`_upstream/CrystalStudio/StampCategories.cs`（`Read` 在 `:24-42`、
+//!   `Resolve` 在 `:44-50`、`Groups` 在 `:65-71`、`Matches` 在 `:73-76`）。
 //!
 //! # 一、索引口径（**每条都可在验收里复算**）
 //!
@@ -21,20 +21,20 @@
 //! 4. `by_kind` / `by_region` / `by_region_group` 的**查询键与索引键都做 `to_lowercase()`**
 //!    ⇒ `Building` ≡ `building`；返回顺序 = palette.json 顺序；返回的是**引用**，不复制条目。
 //! 5. `by_region` 只匹配 JSON 的 `regions`，`by_region_group` 只匹配 `regionGroups` ——
-//!    **两个字段分开查**。CrystalStudio 的 Region 页签是两者并集（`StampCategories.cs:63`
+//!    **两个字段分开查**。CrystalStudio 的 Region 页签是两者并集（`StampCategories.cs:67`
 //!    `Regions.Concat(RegionGroups).Distinct()`），GUI 若要同口径请自行合并两次查询结果；
 //!    本库不隐式并集，避免「`by_region` 到底匹配了哪个字段」说不清。
 //! 6. [`StampCatalog::search`] 只匹配 **`id` 与 `name`** 的子串（大小写不敏感，`str::to_lowercase`）。
 //!    **不匹配** `file` / `kind` / `subtype` / `regions` / `tags` —— 那是 CrystalStudio
-//!    `StampCategories.Matches`（`:69-72`）的更宽口径，本库**不照抄**，免得 GUI 搜索框的行为
+//!    `StampCategories.Matches`（`:73-76`）的更宽口径，本库**不照抄**，免得 GUI 搜索框的行为
 //!    被隐式放大到「搜类型名也能搜出东西」。要宽口径请自己组合 `by_kind` 等接口。
 //!    空串/纯空白 `needle` **返回空**（不返回全量），防止空搜索框把 9,159 条一次画出来。
 //! 7. **路径口径照抄 CrystalStudio**：`dataRoot` = `palette.json` 的**父目录的父目录**
-//!    （`StampCategories.cs:25` 的 `Path.GetDirectoryName(Path.GetDirectoryName(...))`），
-//!    `objectRoot` / `previewRoot` 相对 `dataRoot` 解析（`:26`）。
+//!    （`StampCategories.cs:29` 的 `Path.GetDirectoryName(Path.GetDirectoryName(...))`），
+//!    `objectRoot` / `previewRoot` 相对 `dataRoot` 解析（`:30`）。
 //!    ⇒ 真实布局：`dataRoot = <CrystalStudio 数据根>`，`objectRoot = <dataRoot>/Objects`，
 //!    `previewRoot = <dataRoot>/catalogue`，条目路径 = `objectRoot` + `file`（`file` 形如 `mir/mir_00000.X`）。
-//! 8. **逃逸护栏比 C# 更严**：C# 的 `Resolve`（`:40-46`）用 `StartsWith` 判前缀，允许
+//! 8. **逃逸护栏比 C# 更严**：C# 的 `Resolve`（`:44-50`）用 `StartsWith` 判前缀，允许
 //!    `a/../b` 这种「绕一圈仍落在根内」的写法；本库**直接拒绝任何 `..` / 绝对路径 / 盘符**，
 //!    因为合法的 catalogue 里不该出现 `..`（宁可 `None` 也不给越界路径）。
 //! 9. [`StampCatalog::unlisted`] = `Objects/` 下**真实存在、但 palette.json 没登记**的 `.X`，
@@ -97,7 +97,7 @@
 //! | `objects[]` 原始条数 / `len()` / 跳过 | 9,159 / 9,159 / 0（重复 id 0） |
 //! | `file` 命中 / 缺失 | 9,159 / 0 |
 //! | `Objects/` 扫到 `.X` | 9,170（mir 9,159 + StoneTemplate 8 + InsectTemplate 2 + WallEntrances 1） |
-//! | `unlisted()` | **11**（与 `CrystalStudio/README.md:160` 的「11 个未登记」一致） |
+//! | `unlisted()` | **11**（与 `_upstream/README.md:241` 的「11 个未登记」一致） |
 //! | 不同 `kind` 数 / 前 5 | 19 / Terrain 1,695 · Cliff 1,434 · Wall 1,152 · Rock 943 · Debris 759 |
 //! | `by_kind("Building")` / `by_kind("Tree")` | 271 / 323 |
 //! | `by_region("Province")` | 720（`regionGroups` 里没有任何 `Province`） |
@@ -124,7 +124,7 @@ use serde::Deserialize;
 
 use crate::stamp::Stamp;
 
-/// 本库认的 `schemaVersion`（CrystalStudio `StampCategories.cs:27` 的 `SchemaVersion != 1` 判据）。
+/// 本库认的 `schemaVersion`（`_upstream/CrystalStudio/StampCategories.cs:31` 的 `SchemaVersion != 1` 判据）。
 const SUPPORTED_SCHEMA_VERSION: u64 = 1;
 
 /// 跳过/缺失样例最多留几条（够定位问题，又不至于把 9,000 条全塞进统计里）。
@@ -203,7 +203,7 @@ struct RawEntry {
 /// palette.json `objects[]` 里的一条登记项（字段与 JSON **一一对应**，只改了 `type`→`kind` 这个名字）。
 ///
 /// 刻意**没有**带 `directionStatus` 与 `previewComplete`：本库只承载「查询索引」需要的字段，
-/// 这两个是 CrystalStudio 的展示/统计辅助位（`StampCategories.cs:10` 的 `DirectionStatus` /
+/// 这两个是 CrystalStudio 的展示/统计辅助位（`_upstream/CrystalStudio/StampCategories.cs:10` 的 `DirectionStatus` /
 /// `PreviewComplete`），GUI 真要用再加，避免现在凭空定语义。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StampEntry {
@@ -405,7 +405,7 @@ impl StampCatalog {
     /// # 参数
     ///
     /// `palette_json` 指向 `catalogue/palette.json`（相对/绝对均可；内部先
-    /// `std::path::absolute` 再取「父目录的父目录」当 `dataRoot`，与 `StampCategories.cs:25` 同口径）。
+    /// `std::path::absolute` 再取「父目录的父目录」当 `dataRoot`，与 `_upstream/CrystalStudio/StampCategories.cs:29` 同口径）。
     ///
     /// # 错误
     ///
@@ -413,7 +413,7 @@ impl StampCatalog {
     /// `objects` 为空 —— **一律 `Err`**。
     /// 单条 entry 损坏**不会**让整份失败，而是跳过并计入 [`CatalogStats`]（见模块文档 §二）。
     pub fn load(palette_json: &Path) -> Result<StampCatalog, CatalogError> {
-        // —— 绝对化 + 定位 dataRoot（`StampCategories.cs:25` 的两跳父目录）——
+        // —— 绝对化 + 定位 dataRoot（`_upstream/CrystalStudio/StampCategories.cs:29` 的两跳父目录）——
         let palette_abs = std::path::absolute(palette_json).map_err(|e| {
             CatalogError::PaletteMalformed {
                 path: palette_json.to_path_buf(),
@@ -785,7 +785,7 @@ fn push_sample(samples: &mut Vec<String>, text: String) {
 
 /// 把 `relative` 拼到 `root` 下，**拒绝任何逃逸**：绝对路径、盘符、`..`、根前缀一律 `None`。
 ///
-/// 比 C# `StampCategories.Resolve`（`:40-46`，用 `StartsWith` 判前缀）**更严**：
+/// 比 C# `_upstream/CrystalStudio/StampCategories.cs` 的 `Resolve`（`:44-50`，用 `StartsWith` 判前缀）**更严**：
 /// C# 允许 `a/../b` 这种绕一圈仍落在根内的写法，本库直接拒绝（合法 catalogue 里不该有 `..`）。
 fn join_within(root: &Path, relative: &str) -> Option<PathBuf> {
     let rel = Path::new(relative);

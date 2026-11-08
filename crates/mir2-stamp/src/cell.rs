@@ -82,9 +82,9 @@
 //!
 //! `BackImage` 的高位（`0x60000000` / `0x1FFFFFFF` 掩码）与前景 `Image` 的 `0x8000` 位
 //! 在 CrystalStudio 里被大量分支当作「阻挡 / 归属 / 变体」标记使用
-//! （例：`NativeCoastSupport.cs:161`、`RiverBridgeWalkSupport.cs:31`、`StampIdentifier.cs:84`），
-//! `CrystalStudio/README.md:205-207` 也把 `0x20000000`/`0x40000000` 解释为低/高阻挡、
-//! 前景取 `Image & 0x7FFF`。但那是**编辑器约定**，不是文件格式约束。
+//! （例：`_upstream/CrystalStudio/` 的 `NativeCoastSupport.cs:159`、`RiverBridgeWalkSupport.cs:31`、
+//! `StampIdentifier.cs:84`），`_upstream/README.md:287-288` 也把 `0x20000000`/`0x40000000`
+//! 解释为低/高阻挡、前景取 `Image & 0x7FFF`。但那是**编辑器约定**，不是文件格式约束。
 //! 本库一个位都不碰、也不做任何归一化。
 
 use crate::error::StampError;

@@ -66,7 +66,7 @@ fn 读真实目录(用例: &str) -> Option<StampCatalog> {
 
 /// 临时 `dataRoot`：`<tmp>/catalogue/palette.json` + `<tmp>/Objects/`。
 ///
-/// 布局必须与真实资源同构，因为 `StampCatalog::load` 按 `StampCategories.cs:25`
+/// 布局必须与真实资源同构，因为 `StampCatalog::load` 按 `_upstream/CrystalStudio/StampCategories.cs:29`
 /// 取「palette.json 父目录的父目录」当 `dataRoot`。
 struct 临时根 {
     /// `<tmp>/mir2_stamp_cat_<pid>_<标签>`。

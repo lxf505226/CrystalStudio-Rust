@@ -10,8 +10,8 @@
 //!    索引口径与「缺失 / 损坏怎么算」写在该模块文档里（**逐条可复算**）。
 //!
 //! 真值来源：上游 CrystalStudio 的 `_upstream/CrystalStudio/Document.cs`（**只读参照，未改动**；
-//! 对齐基线提交见根 `README.md`，本仓不内置它的本地路径）。
-//! 全部行号均指该文件；`ForegroundImages.cs` 的行号单独标注。
+//! 对齐基线提交见根 `README.md`）。全部行号均指该文件；`ForegroundImages.cs` 的行号单独标注。
+//! ⚠ README 类引用指**快照根** `_upstream/README.md`（442 行 / 41,705 B，SHA256 与 `master@a78affdf` 逐字节相同）。
 //!
 //! # 一、文件级字节布局（`CellCodec.SaveStamp`，`_upstream/CrystalStudio/Document.cs:173-183`）
 //!
@@ -63,7 +63,7 @@
 //!
 //! 本仓文档里流传的「每格 29 字节（无前景）/ 35 字节（有前景）」**与实现一致**：
 //! 29 = 上述 `0..29`（含 `X`/`Y` 各 4 字节），35 = 29 + 6（前景块）。
-//! 真值原文见 `CrystalStudio/README.md:187-201`（字段表）与 `:211-215`
+//! 真值原文见 `_upstream/README.md:268-282`（字段表）与 `:292-295`
 //! （范例 `mir_00000.X`：`7 + 25 × 29 + 8 × 6 = 780` 字节）。
 //! 本库实测该文件 = **780 字节、25 格、8 格带前景**，与 README 范例**逐项吻合**。
 //!
@@ -88,9 +88,9 @@
 //! # 五、位语义：只保存，不解释
 //!
 //! `BackImage` 高位（`0x60000000` / `0x1FFFFFFF`）与前景 `Image` 的 `0x8000` 位
-//! 在编辑器里被当标记位用（`NativeCoastSupport.cs:161`、`RiverBridgeWalkSupport.cs:31`、
-//! `StampIdentifier.cs:84` 等）；CrystalStudio 自带说明 `CrystalStudio/README.md:205-207`
-//! 也把它们解释为「低 29 位是图号、`0x20000000`/`0x40000000` 是低/高阻挡、前景取 `Image & 0x7FFF`」。
+//! 在编辑器里被当标记位用（`_upstream/CrystalStudio/` 的 `NativeCoastSupport.cs:159`、
+//! `RiverBridgeWalkSupport.cs:31`、`StampIdentifier.cs:84` 等）；CrystalStudio 自带说明
+//! `_upstream/README.md:287-288` 也把它们解释为「低 29 位是图号、`0x20000000`/`0x40000000` 是低/高阻挡、前景取 `Image & 0x7FFF`」。
 //! **但那是编辑器的约定，不是文件格式的约束** —— 位怎么用完全由业务决定。
 //! 本库一个位都不碰、不做任何归一化、不因 `image == 0` 就把前景判成「没有」
 //! （`ForegroundImages.Count` 的定义是 `Value is null ? 0 : 1`，见 `ForegroundImages.cs:13`）。
@@ -118,7 +118,7 @@
 //!
 //! - `palette.json` 5,092,886 B / **9,159** 条 `objects[]`，**0 条损坏、0 条跳过**；
 //! - 9,159 条 `file` **全部**能在 `Objects/` 下找到（缺失 0）；
-//! - `Objects/` 实有 9,170 个 `.X` ⇒ **11 个未登记**（与 `CrystalStudio/README.md:160` 一致）；
+//! - `Objects/` 实有 9,170 个 `.X` ⇒ **11 个未登记**（与 `_upstream/README.md:241` 一致）；
 //! - 不同 `kind` 19 个（前 5：Terrain 1,695 / Cliff 1,434 / Wall 1,152 / Rock 943 / Debris 759）；
 //! - `load()` release **48 ~ 83 ms**（5 次实测，页缓存已命中；冷/热拉不开差距的原因见模块文档），
 //!   `search()` 单次 **0.070 ms**（1,000 次最小值）。
