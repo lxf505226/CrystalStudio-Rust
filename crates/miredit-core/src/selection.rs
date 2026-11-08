@@ -14,7 +14,7 @@
 //! | 4 | **`Right` / `Bottom` 不含端点**（半开） | `:119`（`x >= area.Left && x < area.Right && y >= area.Top && y < area.Bottom`）；`:566`/`:598` 两处双层循环全是 `y < r.Bottom` / `x < r.Right` | 闭区间 `[x0..x1]` 与它**等价**：`x1 = Right - 1`；[`Selection::iter`] 用 `x0..=x1` |
 //! | 5 | 选区**不进撤销栈**、**不置脏** | `:147`/`:152`（选区随 `MapEditorState` 一起存取，与 `History` **并列**而不是被它管） | 选区/剪贴板是 UI 状态：`SetSelection` 等命令 `changed = 0` 且不动 `dirty` |
 //! | 6 | 取消选区 = 置 `null` | `:107-112`（`Deselect()`） | [`crate::EditSession::clear_selection`] |
-//! | 7 | 选区工具是 `M` 键；**选区外按下 = 先取消选区** | `MainWindow.axaml.cs:861`（`Key.M => EditorTool.Select`）、`_upstream/CrystalStudio/MapViewport.cs:398`（`if (!SelectionContains(x, y)) Deselect();`） | UI 层的事，本 crate 只提供 `set_selection` / `clear_selection` |
+//! | 7 | 选区工具是 `M` 键；**选区外按下 = 先取消选区** | `MainWindow.axaml.cs:989`（`Key.M => EditorTool.Select`）、`_upstream/CrystalStudio/MapViewport.cs:398`（`if (!SelectionContains(x, y)) Deselect();`） | UI 层的事，本 crate 只提供 `set_selection` / `clear_selection` |
 //!
 //! ⚠ **与派单描述的一处措辞差异（以源码为准）**：派单写「闭区间；与 C# 的 `Rect` 语义对齐」。
 //! 更精确的说法是：C# 的 `Rect` 是**半开**（`Right`/`Bottom` 不含端点，第 4 条），
@@ -62,8 +62,8 @@
 //! 3. **不动 `ani_frame` / `ani_tick` / `door_index` / `door_offset` / `light` / `tail`**：
 //!    - `RegionCopy.cs:59` 确实清了 `MiddleFrames`/`MiddleTick`，但那两个字节在 **14 B 档**里
 //!      CrystalStudio 读进了 `FrontAnimationFrame`/`FrontAnimationTick`
-//!      （`LegacyMapReader.cs:243-244` 读、`:257-258` 只在有前景时赋值），
-//!      `MiddleAnimationFrame` 恒 0（`Document.cs:19-20` 定义、`:63` 从 `s.MiddleAnimationFrame` 抄）
+//!      （`LegacyMapReader.cs:245-246` 读、`:259-260` 只在有前景时赋值），
+//!      `MiddleAnimationFrame` 恒 0（`Document.cs:19-20` 定义、`:71` 从 `s.MiddleAnimationFrame` 抄）
 //!      ⇒ **C# 在 14 B 图上没有可清的中层动画**；本 crate 的 `ani_frame`/`ani_tick` 就是那两个字节
 //!      （`mir2-map/src/cell.rs:309-311`（字段）／`:352-353`（解析）的 14 B 布局偏移 8/9；原写 `:32-33`／`:232-233`，订正见下方第 4 条），照 C# 的实际行为**不清**。
 //!    - `RegionCopy.cs:55` 清了地表的 `TileAnimation`/`TileOffset`/`TileFrames`，那是 **36 B 档**的扩展字节

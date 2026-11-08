@@ -9,7 +9,7 @@
 //!
 //! | 面板条目 | 取值 | 出处 |
 //! |---|---|---|
-//! | 阻挡 低 | `bk_img & 0x8000 != 0` | `mir2_map::Cell::is_walkable`（`mir2-map/src/cell.rs:181-188`）|
+//! | 阻挡 低 | `bk_img & 0x8000 != 0` | `mir2_map::Cell::is_walkable`（`mir2-map/src/cell.rs:330-332`）|
 //! | 阻挡 高 | `fr_img & 0x8000 != 0` | 同上 |
 //! | 地表 图号/库号 | `bk_img & 0x7FFF` / `btTiles`（`Cell::tiles`） | `miredit-render/src/compose.rs:13`（1-based 帧号，取图 `(img&0x7FFF)-1`）|
 //! | 中层 图号/库号 | `mid_img & 0x7FFF` / `btsmTiles`（`Cell::sm_tiles`） | 同上 `:13`（帧号表：1-based、取图 `(img & 0x7FFF) - 1`）|
@@ -35,7 +35,7 @@
 //! `map_loader.gd:203-208`（`get_front_lib_index` = off10）、
 //! `mir2-assets/src/lib_paths.rs:15`（`Surface ← btArea`）、
 //! C# `_upstream/CrystalStudio/LegacyMapReader.cs:298` + `_upstream/CrystalStudio/Assets.cs:363,365`（`frindex = off + 120` = Objects 家族）。
-//! 命名源头在 `mir2-map/src/cell.rs:168-169`（那个 crate 本单不许改），所以**只在 gui 侧改显示名**。
+//! 命名源头在 `mir2-map/src/cell.rs:312-313`（那个 crate 本单不许改），所以**只在 gui 侧改显示名**。
 //! `.map` 里没有第三个动画字段（off8/9/10 已被上面的表列全），故「图块动画」如实只留两行。
 //!
 //! ## 取不到的字段怎么办

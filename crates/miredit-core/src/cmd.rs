@@ -52,7 +52,7 @@
 //! 工具名猜错**一个字段都不写**（工具只决定"下一次落笔按哪条分支"），
 //! 它只是"这次调用没生效" ⇒ 走 `Ok(Outcome { changed: 0, note })`，
 //! 调用方还能同时拿到 `dirty` / `can_undo` / `can_redo` 三个状态。
-//! 这也是**不加 `CoreError` 变体**的原因：`miredit-web/src/error.rs:117-128`
+//! 这也是**不加 `CoreError` 变体**的原因：`miredit-web/src/error.rs:134-143`
 //! 对 `CoreError` 做了穷尽 match，新变体会让那个 crate 编译不过（本单不许改它）。
 
 use crate::brush::LibRef;
