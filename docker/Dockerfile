@@ -136,9 +136,18 @@ COPY --from=build /src/target/release/miredit-web /usr/local/bin/miredit-web
 COPY web/ /app/web/
 
 # gen_tiles.py 是开发期生成瓦片夹具的脚本，镜像里不需要 Python
+#
+# ⚠ **必须显式 chmod a+rX**（2026-11-08 实测踩到）：
+# `COPY` 会**原样保留源文件权限**，而某些宿主文件系统（如飞牛 fnOS 的 `trimafs`）
+# 上 `git clone` 出来的目录/文件权限是 `0000`。此时只 `chown` 不改权限 ⇒ 容器内
+# 仍是 `----------`，服务进程（`USER 10001:10001`，非 root）读不到 `index.html`
+# ⇒ **`GET /` 返回 404**（`/api/*` 不受影响，因为它们不读这个目录）。
+# 实测现象：`docker exec -u 10001:10001 miredit cat /app/web/index.html` ⇒ `Permission denied`。
+# `a+rX` 给文件加读、给目录加"可进入"，且不动可执行位（X 只对目录和已可执行的文件生效）。
 RUN rm -f /app/web/tiles/gen_tiles.py \
  && chmod +x /usr/local/bin/miredit-web \
- && chown -R miredit:miredit /app/web
+ && chown -R miredit:miredit /app/web \
+ && chmod -R a+rX /app/web
 
 WORKDIR /app
 
