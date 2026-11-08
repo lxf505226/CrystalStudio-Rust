@@ -2,7 +2,7 @@
 //!
 //! 1. **合成口径**：地表/中层左上角锚定、物件底边锚定、层序 地表→中层→物件、
 //!    层内**行优先**（`dy` 外 / `dx` 内，A-010 口径）、图号 `0` 不画、缺帧计入 `missing` 且**不画占位**；
-//! 2. **真实印章**：`CrystalStudio/Objects/mir/mir_00000.X`（25 格 / 包围盒 `(-1,-2,4,3)`）
+//! 2. **真实印章**：`_upstream/Objects/mir/mir_00000.X`（25 格 / 包围盒 `(-1,-2,4,3)`）
 //!    用 `mir2_stamp::Stamp::parse` 读出来适配成 [`PositionedCell`] 再渲染：
 //!    原始尺寸、`content` 包围盒、`cells_drawn`、`missing`、**确定性**；
 //! 3. **缩略图**：`box_px = Some((46,46))` ⇒ `≤ 46×46`、四角 alpha=0、缩小用非 Nearest 滤镜；

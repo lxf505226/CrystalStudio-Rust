@@ -26,7 +26,7 @@
 //! ```
 //!
 //! 规则的出处：`miredit-core/src/paint.rs` 的 `Tool::Brush` 分支（= `edit.rs:1462-1468`）
-//! + `CrystalStudio/PlacedStamps.cs:90-92` 的「图号 0 ⇒ 该族不写」。
+//! + `_upstream/CrystalStudio/PlacedStamps.cs:90-92` 的「图号 0 ⇒ 该族不写」。
 //!
 //! ⚠ `0.map` 是 **12 B/格**：**没有** `btTiles`/`btsmTiles` 两个库号字节（那两个只在
 //! 14/36 B 档），**但 `btArea`（off10）在 12 B 档是有位置的** ⇒ 门 2 的 ⑤b 段直接验

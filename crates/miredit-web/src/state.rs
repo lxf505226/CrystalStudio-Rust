@@ -215,7 +215,7 @@ impl AppState {
 
         // ④ 印章目录索引（只记路径，首次 /api/stamps 时才读，避免拖慢启动）
         //
-        // **不猜** `CrystalStudio/catalogue/palette.json`：没什么可服务的就不服务，
+        // **不猜** `_upstream/catalogue/palette.json`：没什么可服务的就不服务，
         // `/api/stamps` 如实 503 并在文案里点名该变量。
         let palette_json = env_string("MIREDIT_PALETTE_JSON")
             .map(PathBuf::from)

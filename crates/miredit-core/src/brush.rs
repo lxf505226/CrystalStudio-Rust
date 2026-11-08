@@ -285,7 +285,7 @@ pub fn pick_cell_of(map: &Map, x: u16, y: u16) -> Option<PickedCell> {
 
 /// 笔刷尺寸的下限 / 上限 / 步进 —— **与官方滑块逐字一致**。
 ///
-/// 来源：`miredit-gui/src/metrics.rs:175-177`，真值 `CrystalStudio/MainWindow.axaml:6`
+/// 来源：`miredit-gui/src/metrics.rs:175-177`，真值 `_upstream/CrystalStudio/MainWindow.axaml:6`
 /// （`Minimum="3" Maximum="31" Value="3" TickFrequency="2" IsSnapToTickEnabled="True"`）
 /// ⇒ 3 / 5 / … / 31 共 15 档，**只有奇数**。
 /// 键盘 `[` / `]` 各走 **2**：`MainWindow.axaml.cs:871`

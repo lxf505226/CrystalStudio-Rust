@@ -64,7 +64,7 @@ pub const TOOL_UNWIRED: &str = "未接线";
 pub const TOOL_BRUSH_IDX: usize = 0;
 /// 填充在工具图标表里的下标（JSON `tag_value = "Bucket"`，官方快捷键 `F`）。
 ///
-/// 真值：`CrystalStudio/MainWindow.axaml:11` 的第三个工具按钮 `Tag="Bucket"`；
+/// 真值：`_upstream/CrystalStudio/MainWindow.axaml:11` 的第三个工具按钮 `Tag="Bucket"`；
 /// 快捷键 `MainWindow.axaml.cs:861` `Key.F => EditorTool.Bucket`。
 pub const TOOL_BUCKET_IDX: usize = 2;
 /// 橡皮在工具图标表里的下标（MDL2 码位 U+E75C 的等效自绘）。

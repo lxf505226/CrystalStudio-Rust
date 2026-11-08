@@ -16,7 +16,7 @@
 //! 5. `search()` 三次查询的计数与前 3 个 id + 单次耗时（1,000 次取最小/平均）；
 //! 6. `resolve()` 5 个样本与**直接 `Stamp::parse`** 的逐项对照。
 //!
-//! ⚠ 本探针**只读** `CrystalStudio/`，不写任何文件。
+//! ⚠ 本探针**只读** `_upstream/CrystalStudio/`，不写任何文件。
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;

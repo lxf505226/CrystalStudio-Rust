@@ -16,7 +16,7 @@
 //! （等比 + 居中 + 不透明黑底 + 最近邻，见 [`crate::preview_raster`]）。`resize_to` 仍被
 //! `overview` 的 mip 预缩与 `compare_blocks` 诊断使用，**没有**被替换。原文保留作历史引用。
 //!
-//! # 一、官方口径（`@acfbbf8a` 回源订正，2026-11-06）
+//! # 一、官方口径（回源订正，2026-11-06）
 //!
 //! 官方尺寸口径见 `_upstream/CrystalStudio/MinimapExporter.cs` + `MinimapExportWindow.cs`：
 //!

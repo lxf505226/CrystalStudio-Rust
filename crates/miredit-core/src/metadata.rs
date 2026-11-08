@@ -1,7 +1,7 @@
 //! 单元格元数据（光照 / 门索引 / 门偏移）的**纯函数**口径（R12-F1）。
 //!
 //! 上游契约：
-//! * 对话框与「只写改过的字段」：`CrystalStudio/MainWindow.axaml.cs:740-786`（`OpenCellProperties`）；
+//! * 对话框与「只写改过的字段」：`_upstream/CrystalStudio/MainWindow.axaml.cs:740-786`（`OpenCellProperties`）；
 //! * 选区共同值：`_upstream/CrystalStudio/MapViewport.cs:567-578`（`CommonMetadata`）；
 //! * 批量落笔：`_upstream/CrystalStudio/MapViewport.cs:579-597`（`ApplyMetadata`）。
 //!

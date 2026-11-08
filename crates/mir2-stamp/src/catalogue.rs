@@ -1,7 +1,7 @@
 //! 印章**目录索引**：把 `catalogue/palette.json` 的分类记录与 `Objects/` 下的 `.X` 文件对起来，
 //! 产出「按分类 / 区域 / 名称查询 + 按 id 解析真实文件」的索引（GUI「印章」页签的数据底座）。
 //!
-//! 真值来源（**只读**，本模块不写 `CrystalStudio/` 任何文件）：
+//! 真值来源（**只读**，本模块不写 `_upstream/CrystalStudio/` 任何文件）：
 //! - `<dataRoot>/catalogue/palette.json`（5,092,886 B / 9,159 条 `objects[]`）；
 //! - `<dataRoot>/Objects/**/*.X`（9,170 个，全部 v2）；
 //!   （`<dataRoot>` 是开发机上的 CrystalStudio 数据根，由 `MIR2_STAMP_PALETTE` / 挂载决定，

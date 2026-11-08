@@ -10,7 +10,7 @@
 //!
 //! | # | 语义 | 判据落点 | 来源 |
 //! |---|---|---|---|
-//! | 1 | **锚点**：`(x,y)` 是原点，格落在 `(x+dx, y+dy)`，`dx/dy` 可为负 | [`plan_stamp`] 的 `sx/sy` | `mir2-stamp/src/stamp.rs:22-32`（`StampCell.x/y` 是**相对坐标、可负**）；`CrystalStudio/PlacedStamps.cs:119`（`int sx=x+s.X, sy=y+s.Y`） |
+//! | 1 | **锚点**：`(x,y)` 是原点，格落在 `(x+dx, y+dy)`，`dx/dy` 可为负 | [`plan_stamp`] 的 `sx/sy` | `mir2-stamp/src/stamp.rs:22-32`（`StampCell.x/y` 是**相对坐标、可负**）；`_upstream/CrystalStudio/PlacedStamps.cs:119`（`int sx=x+s.X, sy=y+s.Y`） |
 //! | 2 | **越界裁剪**：出界的格**逐格跳过**并计入 `skipped`；**全部出界** ⇒ 拒绝且一格不写 | [`plan_stamp`] 的 `skipped` / `PlaceOutcome::Refused` | `PlacedStamps.cs:80`（`if(sx<0\|\|sy<0\|\|sx>=Width\|\|sy>=Height){blocked.Add(…MapBoundary);continue;}` —— 逐格标 `MapBoundary` 后 `continue`） |
 //! | 3 | **写哪些字段**：三族图号 + 该层库号字节；**图号 0 = 该族没有内容 ⇒ 整族不写** | [`写一族`] | `PlacedStamps.cs:90-92`（`MergeStamp`：`if(a.BackImage!=0){…}` / `if(a.MiddleImage!=0){…}` / `if (a.Foreground is { } front) …`）；`Document.cs:31`（`Cell::Empty` 把「全 0」定义为空） |
 //! | 4 | **`bit15` 保留矩阵**：地表 `bk_img` 保留、物体 `fr_img` 保留、中层 `mid_img` 不保留 | **复用** [`crate::paint`]（不另写一份） | `miredit-core/src/paint.rs` 的 `Tool::Brush` 分支（`let new_img = if layer.img_of_has_collision_bit() { (cur & COLLISION_BIT) \| low15 } else { low15 }`），即 `miredit-gui/src/edit.rs:1462-1468` 的公式；矩阵定性见 `layer.rs` 模块文档第二节 |

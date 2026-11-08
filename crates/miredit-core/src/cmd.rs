@@ -19,7 +19,7 @@
 //! | [`Command::Paint`] | [`EditSession::paint_stroke_once`] | `edit.rs:977-982`（**吃笔刷尺寸**，按下即松开） |
 //! | [`Command::Stroke`] | [`EditSession::paint_stroke`] | `edit.rs:988-1002`（Bresenham 插值，整条轨迹一步） |
 //! | [`Command::Fill`] | [`EditSession::fill`] | `edit.rs:1036-1206` |
-//! | [`Command::PlaceStamp`] | [`EditSession::place_stamp_by_id`] | `CrystalStudio/PlacedStamps.cs:114-121`（逐格 `MergeStamp` + 一步撤销）；越界/格式闸门见 [`crate::stamp`] 模块文档 |
+//! | [`Command::PlaceStamp`] | [`EditSession::place_stamp_by_id`] | `_upstream/CrystalStudio/PlacedStamps.cs:114-121`（逐格 `MergeStamp` + 一步撤销）；越界/格式闸门见 [`crate::stamp`] 模块文档 |
 //! | [`Command::Pick`] | [`EditSession::pick_at`] | `edit.rs:1234-1252` |
 //! | [`Command::SetSelection`] | [`EditSession::set_selection`] | `_upstream/CrystalStudio/MapViewport.cs:399`、`:422-423`（越界裁剪） |
 //! | [`Command::ClearSelection`] | [`EditSession::clear_selection`] | `_upstream/CrystalStudio/MapViewport.cs:107-112`（`Deselect`，**不清剪贴板**） |
