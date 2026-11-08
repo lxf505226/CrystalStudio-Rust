@@ -13636,7 +13636,7 @@
         "Auto"
       ],
       "grid_columns": [],
-      "notes": "**代码建窗**（无 axaml）：窗口类与全部控件都在 ObjectExtractionWindow.cs 构造函数里 new 出来（:34-82），因此几何只能从源码常量读。Title/Width=1420/Height=900/MinWidth=1120/MinHeight=700 见 :37，WindowStartupLocation=CenterOwner。根 Grid Margin=16、RowSpacing=8、行 Auto,Auto,Auto,*,Auto 见 :40。⚠ 与旧 7 窗同样受 EditorWindow.Opened 的外框补偿影响（_upstream/CrystalStudio/EditorWindow.cs:36-40）：1420×900 是**外框**目标值，客户区会比它小；本窗同样会被替换 ComboBox 的 ItemTemplate（_upstream/CrystalStudio/EditorWindow.cs:32-33）。子节点 depth 从 2 起（根 Grid 本身不入树，与旧 7 窗口径一致）。",
+      "notes": "**代码建窗**（无 axaml）：窗口类与全部控件都在 ObjectExtractionWindow.cs 构造函数里 new 出来（:37-93），因此几何只能从源码常量读。Title/Width=1420/Height=900/MinWidth=1120/MinHeight=700 见 :43，WindowStartupLocation=CenterOwner。根 Grid Margin=16、RowSpacing=8、行 Auto,Auto,Auto,*,Auto 见 :46。⚠ 与旧 7 窗同样受 EditorWindow.Opened 的外框补偿影响（_upstream/CrystalStudio/EditorWindow.cs:36-40）：1420×900 是**外框**目标值，客户区会比它小；本窗同样会被替换 ComboBox 的 ItemTemplate（_upstream/CrystalStudio/EditorWindow.cs:32-33）。子节点 depth 从 2 起（根 Grid 本身不入树，与旧 7 窗口径一致）。",
       "children": [
         {
           "kind": "panel",
@@ -13669,7 +13669,7 @@
           "tag_value": null,
           "tooltip": null,
           "automation": null,
-          "notes": "顶部输入行：ColumnSpacing=8（:41）；Grid.SetColumn 依次 0..5（:42-46）",
+          "notes": "顶部输入行：ColumnSpacing=8（:47）；Grid.SetColumn 依次 0..5（:48-52）",
           "depth": 2,
           "children": [
             {
@@ -13696,7 +13696,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "ItemsSource = Current map / Current selection / Map directory，SelectedIndex=0，MinWidth=150（:10）；Name 在 :39 赋值。选项文字经 LocalText.ChoiceTemplate 翻译（_upstream/CrystalStudio/LocalText.cs:81）。",
+              "notes": "ItemsSource = Current map / Current selection / Map directory，SelectedIndex=0，MinWidth=150（:13）；Name 在 :45 赋值。选项文字经 LocalText.ChoiceTemplate 翻译（_upstream/CrystalStudio/LocalText.cs:81）。",
               "depth": 3,
               "children": [
                 {
@@ -13727,7 +13727,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "ItemsSource 里的裸字符串，渲染时按 ChoiceTemplate → LocalText.T(值) 翻译（:10）",
+                  "notes": "ItemsSource 里的裸字符串，渲染时按 ChoiceTemplate → LocalText.T(值) 翻译（:13）",
                   "depth": 4,
                   "children": []
                 },
@@ -13759,7 +13759,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "ItemsSource 里的裸字符串，渲染时按 ChoiceTemplate → LocalText.T(值) 翻译（:10）",
+                  "notes": "ItemsSource 里的裸字符串，渲染时按 ChoiceTemplate → LocalText.T(值) 翻译（:13）",
                   "depth": 4,
                   "children": []
                 },
@@ -13791,7 +13791,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "ItemsSource 里的裸字符串，渲染时按 ChoiceTemplate → LocalText.T(值) 翻译（:10）",
+                  "notes": "ItemsSource 里的裸字符串，渲染时按 ChoiceTemplate → LocalText.T(值) 翻译（:13）",
                   "depth": 4,
                   "children": []
                 }
@@ -13821,7 +13821,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "Watermark=LocalText.T(\"Map directory\")，MinWidth=180（:11）；Name 在 :39 赋值；初始 IsEnabled=false（:78），仅当 scope.SelectedIndex==2（Map directory）时可用（:78/:100）",
+              "notes": "Watermark=LocalText.T(\"Map directory\")，MinWidth=180（:14）；Name 在 :45 赋值；初始 IsEnabled=false（:89），仅当 scope.SelectedIndex==2（Map directory）时可用（:89/:111）",
               "depth": 3,
               "children": []
             },
@@ -13853,7 +13853,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "点击 ChooseFolder(directory)（:43），打开 OpenFolderDialog，标题 = LocalText.T(\"Choose Folder…\")（:87）",
+              "notes": "点击 ChooseFolder(directory)（:49），打开 OpenFolderDialog，标题 = LocalText.T(\"Choose Folder…\")（:98）",
               "depth": 3,
               "children": []
             },
@@ -13881,7 +13881,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "资源目录输入框：Watermark=LocalText.T(\"Resource folder\")，MinWidth=180（:12）；**代码里没有赋 Name**，构造后 resource.Text=resourceFolder（:38）",
+              "notes": "资源目录输入框：Watermark=LocalText.T(\"Resource folder\")，MinWidth=180（:15）；**代码里没有赋 Name**，构造后 resource.Text=resourceFolder（:44）",
               "depth": 3,
               "children": []
             },
@@ -13913,7 +13913,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "点击 ChooseFolder(resource)（:45）",
+              "notes": "点击 ChooseFolder(resource)（:51）",
               "depth": 3,
               "children": []
             },
@@ -13945,7 +13945,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "Name 在 :46 赋值；Click → ScanAsync()（:108）",
+              "notes": "Name 在 :52 赋值；Click → ScanAsync()（:157）",
               "depth": 3,
               "children": []
             }
@@ -13975,7 +13975,7 @@
           "tag_value": null,
           "tooltip": null,
           "automation": null,
-          "notes": "概要行：Spacing=5（:47）",
+          "notes": "概要行：Spacing=5（:53）",
           "depth": 2,
           "children": [
             {
@@ -14006,7 +14006,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "TextWrapping=Wrap（:47）",
+              "notes": "TextWrapping=Wrap（:53）",
               "depth": 4,
               "children": []
             },
@@ -14038,7 +14038,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "TextWrapping=Wrap（:16）；初值由构造函数末尾 UpdateState() 写入（:104）；扫描后改用 LocalText.Format(\"{0:N0} existing · {1:N0} new · {2:N0} duplicates · {3:N0} unreviewed · {4:N0} ready\")（key 0N0existing1N0new2N0duplicates3N0unreviewed4N0ready_DB54B78E，:104-106）",
+              "notes": "TextWrapping=Wrap（:19）；初值由构造函数末尾 UpdateState() 写入（:117）；扫描后改用 LocalText.Format(\"{0:N0} existing · {1:N0} new · {2:N0} duplicates · {3:N0} unreviewed · {4:N0} ready\")（key 0N0existing1N0new2N0duplicates3N0unreviewed4N0ready_DB54B78E，:117-119）",
               "depth": 4,
               "children": []
             },
@@ -14066,7 +14066,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "Height=4，Minimum=0，Maximum=100（:18）；扫描/保存期间 IsIndeterminate=true（:127/:144）",
+              "notes": "Height=4，Minimum=0，Maximum=100（:21）；扫描/保存期间 IsIndeterminate=true（:177/:196）",
               "depth": 4,
               "children": []
             }
@@ -14096,7 +14096,7 @@
           "tag_value": null,
           "tooltip": null,
           "automation": null,
-          "notes": "筛选行：Orientation=Horizontal，Spacing=8（:49）；undo/redo 在 :70 追加到本行末尾",
+          "notes": "筛选行：Orientation=Horizontal，Spacing=8（:55）；undo/redo 在 :81 追加到本行末尾",
           "depth": 2,
           "children": [
             {
@@ -14123,7 +14123,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "Watermark=LocalText.T(\"Search candidates or source\")，MinWidth=170（:13）；TextChanged → page=0 + RefreshCards（:75）",
+              "notes": "Watermark=LocalText.T(\"Search candidates or source\")，MinWidth=170（:16）；TextChanged → page=0 + RefreshCards（:86）",
               "depth": 3,
               "children": []
             },
@@ -14151,7 +14151,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "ItemsSource = 6 个筛选态，SelectedIndex=0，MinWidth=140（:14）；SelectionChanged → page=0 + RefreshCards（:75）",
+              "notes": "ItemsSource = 6 个筛选态，SelectedIndex=0，MinWidth=140（:17）；SelectionChanged → page=0 + RefreshCards（:86）",
               "depth": 3,
               "children": [
                 {
@@ -14182,7 +14182,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "选项文字经 ChoiceTemplate 翻译（:14）",
+                  "notes": "选项文字经 ChoiceTemplate 翻译（:17）",
                   "depth": 4,
                   "children": []
                 },
@@ -14214,7 +14214,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "选项文字经 ChoiceTemplate 翻译（:14）",
+                  "notes": "选项文字经 ChoiceTemplate 翻译（:17）",
                   "depth": 4,
                   "children": []
                 },
@@ -14246,7 +14246,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "选项文字经 ChoiceTemplate 翻译（:14）",
+                  "notes": "选项文字经 ChoiceTemplate 翻译（:17）",
                   "depth": 4,
                   "children": []
                 },
@@ -14278,7 +14278,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "选项文字经 ChoiceTemplate 翻译（:14）",
+                  "notes": "选项文字经 ChoiceTemplate 翻译（:17）",
                   "depth": 4,
                   "children": []
                 },
@@ -14310,7 +14310,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "选项文字经 ChoiceTemplate 翻译（:14）",
+                  "notes": "选项文字经 ChoiceTemplate 翻译（:17）",
                   "depth": 4,
                   "children": []
                 },
@@ -14342,7 +14342,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "选项文字经 ChoiceTemplate 翻译（:14）",
+                  "notes": "选项文字经 ChoiceTemplate 翻译（:17）",
                   "depth": 4,
                   "children": []
                 }
@@ -14376,7 +14376,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "Click → page-- + RefreshCards()（:50）；IsEnabled = page>0（:176）",
+              "notes": "Click → page-- + RefreshCards()（:56）；IsEnabled = page>0（:230）",
               "depth": 3,
               "children": []
             },
@@ -14404,7 +14404,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "VerticalAlignment=Center（:17）；运行期写 \"{页码} / {总页数}\"（:176，非本地化格式串）",
+              "notes": "VerticalAlignment=Center（:20）；运行期写 \"{页码} / {总页数}\"（:230，非本地化格式串）",
               "depth": 3,
               "children": []
             },
@@ -14436,7 +14436,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "Click → page++ + RefreshCards()（:50）；IsEnabled = page+1<pages（:176）",
+              "notes": "Click → page++ + RefreshCards()（:56）；IsEnabled = page+1<pages（:230）",
               "depth": 3,
               "children": []
             },
@@ -14468,7 +14468,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "加入 filters 而不是底部按钮条（:70，源码注释 :69）；IsEnabled = Review.CanUndo（:102）",
+              "notes": "加入 filters 而不是底部按钮条（:81，源码注释 :80）；IsEnabled = Review.CanUndo（:113）",
               "depth": 3,
               "children": []
             },
@@ -14500,7 +14500,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "同 undo（:70/:102）",
+              "notes": "同 undo（:81/:113）",
               "depth": 3,
               "children": []
             }
@@ -14534,7 +14534,7 @@
           "tag_value": null,
           "tooltip": null,
           "automation": null,
-          "notes": "主体三栏：ColumnSpacing=10（:52）。⚠ children 按列 0/1/2 排列，代码实际加入顺序为 categories → cards(后被 Remove) → detailScroll → left（:55/:59/:71）",
+          "notes": "主体三栏：ColumnSpacing=10（:58）。⚠ children 按列 0/1/2 排列，代码实际加入顺序为 categories → cards(后被 Remove) → detailScroll → left（:61/:65/:82）",
           "depth": 2,
           "children": [
             {
@@ -14561,7 +14561,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "TabStripPlacement=Left（:20）；Theme=ExtractionCategoryTabs（_upstream/CrystalStudio/EditorControls.axaml:114-120：左边框 BorderThickness=0,0,1,0、Margin=0,0,4,0、纵向滚动条 Auto）；ItemContainerTheme=CategoryTabItem（:53）；Name 在 :54 赋值；页签由 RefreshCategories() 生成（_upstream/CrystalStudio/ObjectExtractionWindow.cs:208）：TabItem.Header=TextBlock{ LocalText.T(分类) + \" (计数)\" }，初值仅 \"全部分类 (0)\"；页签主题 CategoryTabItem：MinHeight=34、Padding=6,7、Margin=0,1、FontSize=10（_upstream/CrystalStudio/EditorControls.axaml:121-133）",
+              "notes": "TabStripPlacement=Left（:23）；Theme=ExtractionCategoryTabs（_upstream/CrystalStudio/EditorControls.axaml:114-120：左边框 BorderThickness=0,0,1,0、Margin=0,0,4,0、纵向滚动条 Auto）；ItemContainerTheme=CategoryTabItem（:59）；Name 在 :60 赋值；页签由 RefreshCategories() 生成（_upstream/CrystalStudio/ObjectExtractionWindow.cs:208）：TabItem.Header=TextBlock{ LocalText.T(分类) + \" (计数)\" }，初值仅 \"全部分类 (0)\"；页签主题 CategoryTabItem：MinHeight=34、Padding=6,7、Margin=0,1、FontSize=10（_upstream/CrystalStudio/EditorControls.axaml:121-133）",
               "depth": 3,
               "children": []
             },
@@ -14592,7 +14592,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "cards 原先加入 body(col1)，随后 body.Children.Remove(cards) 再包进这个 left Grid（:71）",
+              "notes": "cards 原先加入 body(col1)，随后 body.Children.Remove(cards) 再包进这个 left Grid（:82）",
               "depth": 3,
               "children": [
                 {
@@ -14619,7 +14619,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "SelectionMode=Multiple，AutoScrollToSelectedItem=false（:19）；ItemContainerTheme=CategoryCard（:54）；ItemsPanel=WrapPanel（:56）；HorizontalScrollBarVisibility=Disabled（:57）；每页 48 张（PageSize，:33/:174）；初值 ItemsSource=null（无候选）",
+                  "notes": "SelectionMode=Multiple，AutoScrollToSelectedItem=false（:22）；ItemContainerTheme=CategoryCard（:60）；ItemsPanel=WrapPanel（:62）；HorizontalScrollBarVisibility=Disabled（:63）；每页 48 张（PageSize，:36/:228）；初值 ItemsSource=null（无候选）",
                   "depth": 4,
                   "children": [
                     {
@@ -14646,7 +14646,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "ItemTemplate（FuncDataTemplate，:58/:179-190）：Width=104，Spacing=4，Margin=3（:181）；ToolTip = c.Name + \"\\n\" + c.Description（:181）",
+                      "notes": "ItemTemplate（FuncDataTemplate，:64/:233-244）：Width=104，Spacing=4，Margin=3（:235）；ToolTip = c.Name + \"\\n\" + c.Description（:235）",
                       "depth": 4,
                       "children": [
                         {
@@ -14673,7 +14673,7 @@
                           "tag_value": null,
                           "tooltip": null,
                           "automation": null,
-                          "notes": "Height=80，Stretch=Uniform（:182）；缩略图由 StampPreview.Create(...,160,112) 生成（:202），仅在进入视口时按 2 路并发加载（previewSlots=new(2)，:24/:184-188）",
+                          "notes": "Height=80，Stretch=Uniform（:236）；缩略图由 StampPreview.Create(...,160,112) 生成（:256），仅在进入视口时按 2 路并发加载（previewSlots=new(2)，:27/:238-242）",
                           "depth": 5,
                           "children": []
                         },
@@ -14701,7 +14701,7 @@
                           "tag_value": null,
                           "tooltip": null,
                           "automation": null,
-                          "notes": "Text = (已确认则 \"✓ \") + c.Caption，FontSize=11，TextAlignment=Center，TextTrimming=CharacterEllipsis（:183）",
+                          "notes": "Text = (已确认则 \"✓ \") + c.Caption，FontSize=11，TextAlignment=Center，TextTrimming=CharacterEllipsis（:237）",
                           "depth": 5,
                           "children": []
                         }
@@ -14733,7 +14733,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "复核命令条：放在候选网格下方（:68/:71，源码注释 :69 说明底部一行留给扫描/保存进度）",
+                  "notes": "复核命令条：放在候选网格下方（:74/:82，源码注释 :80 说明底部一行留给扫描/保存进度）",
                   "depth": 4,
                   "children": [
                     {
@@ -14764,7 +14764,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": ":63-64",
+                      "notes": ":69-70",
                       "depth": 5,
                       "children": []
                     },
@@ -14796,7 +14796,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": ":65",
+                      "notes": ":71",
                       "depth": 5,
                       "children": []
                     },
@@ -14828,7 +14828,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": ":66",
+                      "notes": ":72",
                       "depth": 5,
                       "children": []
                     },
@@ -14860,7 +14860,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": ":67",
+                      "notes": ":73",
                       "depth": 5,
                       "children": []
                     }
@@ -14892,7 +14892,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "详情滚动容器：HorizontalScrollBarVisibility=Disabled（:59）",
+              "notes": "详情滚动容器：HorizontalScrollBarVisibility=Disabled（:65）",
               "depth": 3,
               "children": [
                 {
@@ -14919,7 +14919,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "Spacing=6（:21）；选中 0 项时只显示提示 TextBlock（:231）；IsEnabled 在扫描/保存期间置 false（:127/:144）",
+                  "notes": "Spacing=6（:24）；选中 0 项时只显示提示 TextBlock（:285）；IsEnabled 在扫描/保存期间置 false（:177/:196）",
                   "depth": 4,
                   "children": [
                     {
@@ -14946,7 +14946,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；Watermark=LocalText.T(\"Name (leave empty to retain)\")（:234）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；Watermark=LocalText.T(\"Name (leave empty to retain)\")（:289）",
                       "depth": 5,
                       "children": []
                     },
@@ -14974,7 +14974,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；Watermark=LocalText.T(\"Category\")（:235）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；Watermark=LocalText.T(\"Category\")（:290）",
                       "depth": 5,
                       "children": []
                     },
@@ -15006,7 +15006,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；IsChecked=c.IncludeBoundary（:236）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；IsChecked=c.IncludeBoundary（:291）",
                       "depth": 5,
                       "children": []
                     },
@@ -15038,7 +15038,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）（:237）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）（:292）",
                       "depth": 5,
                       "children": []
                     },
@@ -15066,7 +15066,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；Text=c.Description（候选描述，来自扫描结果，非 Strings.json 静态文案），TextWrapping=Wrap（:239）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；Text=c.Description（候选描述，来自扫描结果，非 Strings.json 静态文案），TextWrapping=Wrap（:294）",
                       "depth": 5,
                       "children": []
                     },
@@ -15097,7 +15097,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；ColumnSpacing=6（:240）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；ColumnSpacing=6（:295）",
                       "depth": 5,
                       "children": [
                         {
@@ -15124,7 +15124,7 @@
                           "tag_value": null,
                           "tooltip": null,
                           "automation": null,
-                          "notes": "运行时按选中项动态生成（ShowDetails，:228-270）（:242）",
+                          "notes": "运行时按选中项动态生成（ShowDetails，:282-326）（:297）",
                           "depth": 6,
                           "children": [
                             {
@@ -15155,7 +15155,7 @@
                               "tag_value": null,
                               "tooltip": null,
                               "automation": null,
-                              "notes": ":242",
+                              "notes": ":297",
                               "depth": 7,
                               "children": []
                             },
@@ -15183,7 +15183,7 @@
                               "tag_value": null,
                               "tooltip": null,
                               "automation": null,
-                              "notes": "自定义 Control（ExtractionPreview，:301-337）：Height=190（:241）；自绘底 RGB(24,28,34)（:317）；低阻挡填充 ARGB(65,255,90,180)、高阻挡 ARGB(65,70,155,255)（:323-324）；片段描边 1px，选中金色/未选草绿（:329）",
+                              "notes": "自定义 Control（ExtractionPreview，:357-393）：Height=190（:296）；自绘底 RGB(24,28,34)（:373）；低阻挡填充 ARGB(65,255,90,180)、高阻挡 ARGB(65,70,155,255)（:379-380）；片段描边 1px，选中金色/未选草绿（:385）",
                               "depth": 7,
                               "children": []
                             }
@@ -15213,7 +15213,7 @@
                           "tag_value": null,
                           "tooltip": null,
                           "automation": null,
-                          "notes": "运行时按选中项动态生成（ShowDetails，:228-270）（:243）",
+                          "notes": "运行时按选中项动态生成（ShowDetails，:282-326）（:298）",
                           "depth": 6,
                           "children": [
                             {
@@ -15244,7 +15244,7 @@
                               "tag_value": null,
                               "tooltip": null,
                               "automation": null,
-                              "notes": ":243",
+                              "notes": ":298",
                               "depth": 7,
                               "children": []
                             },
@@ -15272,7 +15272,7 @@
                               "tag_value": null,
                               "tooltip": null,
                               "automation": null,
-                              "notes": "同上，Height=190（:241）",
+                              "notes": "同上，Height=190（:296）",
                               "depth": 7,
                               "children": []
                             }
@@ -15304,7 +15304,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；Height=150，SelectionMode=Multiple（:245）；每行 Text = \"({X}, {Y})  {Library}/{Image&0x7FFF}  [Frames, Tick]\"（:246），FontSize=11（:247）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；Height=150，SelectionMode=Multiple（:300）；每行 Text = \"({X}, {Y})  {Library}/{Image&0x7FFF}  [Frames, Tick]\"（:301），FontSize=11（:303）",
                       "depth": 5,
                       "children": []
                     },
@@ -15332,7 +15332,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）（:251）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）（:307）",
                       "depth": 5,
                       "children": [
                         {
@@ -15363,7 +15363,7 @@
                           "tag_value": null,
                           "tooltip": null,
                           "automation": null,
-                          "notes": ":252",
+                          "notes": ":308",
                           "depth": 6,
                           "children": []
                         },
@@ -15395,7 +15395,7 @@
                           "tag_value": null,
                           "tooltip": null,
                           "automation": null,
-                          "notes": ":253",
+                          "notes": ":309",
                           "depth": 6,
                           "children": []
                         }
@@ -15429,7 +15429,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；TextWrapping=Wrap（:254）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；TextWrapping=Wrap（:310）",
                       "depth": 5,
                       "children": []
                     },
@@ -15457,7 +15457,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；MaxHeight=170（:266，上限不是定值）；内容为逐格 StackPanel：坐标 TextBlock(Width=90) + Low/High 两个 CheckBox（:260-262）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；MaxHeight=170（:322，上限不是定值）；内容为逐格 StackPanel：坐标 TextBlock(Width=90) + Low/High 两个 CheckBox（:316-318）",
                       "depth": 5,
                       "children": []
                     },
@@ -15489,7 +15489,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；FontWeight=SemiBold（:267）",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；FontWeight=SemiBold（:323）",
                       "depth": 5,
                       "children": []
                     },
@@ -15517,7 +15517,7 @@
                       "tag_value": null,
                       "tooltip": null,
                       "automation": null,
-                      "notes": "运行时按选中项动态生成（ShowDetails，:228-270）；Text = 逐条 \"{Source}  ({X}, {Y})\" + 跨选区时追加 LocalText.T(\"Selection boundary\")（:268），TextWrapping=Wrap",
+                      "notes": "运行时按选中项动态生成（ShowDetails，:282-326）；Text = 逐条 \"{Source}  ({X}, {Y})\" + 跨选区时追加 LocalText.T(\"Selection boundary\")（:324），TextWrapping=Wrap",
                       "depth": 5,
                       "children": []
                     }
@@ -15554,7 +15554,7 @@
           "tag_value": null,
           "tooltip": null,
           "automation": null,
-          "notes": "底部行：ColumnSpacing=12（:60）",
+          "notes": "底部行：ColumnSpacing=12（:66）",
           "depth": 2,
           "children": [
             {
@@ -15581,7 +15581,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "TextWrapping=Wrap（:15）；运行期写入扫描/保存进度与异常文本（:95/:131/:134/:137-138/:144/:148/:150-151）；扫描警告同时挂在 ToolTip（最多 30 条，:135）",
+              "notes": "TextWrapping=Wrap（:18）；运行期写入扫描/保存进度与异常文本（:106/:181/:186/:189-190/:196/:202/:204-205）；扫描警告同时挂在 ToolTip（最多 30 条，:187）",
               "depth": 3,
               "children": []
             },
@@ -15609,7 +15609,7 @@
               "tag_value": null,
               "tooltip": null,
               "automation": null,
-              "notes": "Spacing=6（:61）",
+              "notes": "Spacing=6（:67）",
               "depth": 3,
               "children": [
                 {
@@ -15640,7 +15640,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "Name 在 :73 赋值；IsEnabled=running（:101）；Click → operation.Cancel()（:72）",
+                  "notes": "Name 在 :84 赋值；IsEnabled=running（:112）；Click → operation.Cancel()（:83）",
                   "depth": 4,
                   "children": []
                 },
@@ -15672,7 +15672,7 @@
                   "tag_value": null,
                   "tooltip": null,
                   "automation": null,
-                  "notes": "Name 在 :72 赋值；Theme=PrimaryButton（:74，定义见 EditorControls.axaml）；IsEnabled = 非运行中且存在可导出候选（:101）",
+                  "notes": "Name 在 :83 赋值；Theme=PrimaryButton（:85，定义见 EditorControls.axaml）；IsEnabled = 非运行中且存在可导出候选（:112）",
                   "depth": 4,
                   "children": []
                 }
@@ -16016,11 +16016,11 @@
     "AssetList 每项宽度写死 78（_upstream/CrystalStudio/MainWindow.axaml:69），但列数由外层 WrapPanel 按面板宽度换行决定，实际行列不可静态确定。",
     "ComboBox 下拉层、ToolTip、ContextMenu 的尺寸由 Fluent 模板与内容决定，不在 XAML 里。",
     "Grid 星号行/列在含 Auto 轨道时的余量分配细节属 Avalonia 布局算法内部实现，本 JSON 只能给出轨道声明，不给最终像素。",
-    "第 8 窗 ObjectExtractionWindow 是**代码建窗**（ObjectExtractionWindow.cs，无 axaml）：所有宽度/高度只能读源码常量；ComboBox（ExtractionScope/state）、TextBox（directory/resource/search）、Button 都没有写死宽高，只给了 MinWidth（150/140/180/180/170，:10-14）和统一 Padding=9,5（:84）⇒ 这些节点的 rect.w 记为 null，实际宽度由 Fluent 模板 + 内容 + Grid 星号轨道共同决定，静态不可解。",
-    "第 8 窗的列宽 \"156,*,480\" 与行高 \"Auto,Auto,Auto,*,Auto\" 中，Auto 与星号轨道尺寸依赖字体度量与窗口客户区大小，静态不可解；只有 156/480 两列的**列宽**是写死的（:52），列内子节点仍未给出绝对 x（与旧 7 窗同一判据）。",
-    "第 8 窗详情面板（details）内容由 ShowDetails() 在选中候选时重建（:228-270），本 JSON 只记录其**固定几何**（Image/Preview/ListBox 的 Height、ScrollViewer 的 MaxHeight、FontSize），逐格碰撞行（每行坐标 TextBlock Width=90 + Low/High 复选框）的数量与总高取决于候选的格数，静态不可解。",
+    "第 8 窗 ObjectExtractionWindow 是**代码建窗**（ObjectExtractionWindow.cs，无 axaml）：所有宽度/高度只能读源码常量；ComboBox（ExtractionScope/state）、TextBox（directory/resource/search）、Button 都没有写死宽高，只给了 MinWidth（150/140/180/180/170，:13-17）和统一 Padding=9,5（:95）⇒ 这些节点的 rect.w 记为 null，实际宽度由 Fluent 模板 + 内容 + Grid 星号轨道共同决定，静态不可解。",
+    "第 8 窗的列宽 \"156,*,480\" 与行高 \"Auto,Auto,Auto,*,Auto\" 中，Auto 与星号轨道尺寸依赖字体度量与窗口客户区大小，静态不可解；只有 156/480 两列的**列宽**是写死的（:58），列内子节点仍未给出绝对 x（与旧 7 窗同一判据）。",
+    "第 8 窗详情面板（details）内容由 ShowDetails() 在选中候选时重建（:282-326），本 JSON 只记录其**固定几何**（Image/Preview/ListBox 的 Height、ScrollViewer 的 MaxHeight、FontSize），逐格碰撞行（每行坐标 TextBlock Width=90 + Low/High 复选框）的数量与总高取决于候选的格数，静态不可解。",
     "第 8 窗候选卡片（ItemTemplate）的换行位置依赖 WrapPanel 可用宽度与卡片 Width=104 + Margin=3 + ListBoxItem Margin=2/Padding=3，每页 48 张（PageSize）只是数据上限，不代表一屏显示数量；实际列数不可静态确定。",
-    "第 8 窗 TabControl（ExtractionCategories）的页签数量随扫描结果的分类动态生成（:157-163），初始只有 \"全部分类 (0)\"；页签文本形如「<分类名> (<计数>)」，计数部分非 Strings.json 文案。",
+    "第 8 窗 TabControl（ExtractionCategories）的页签数量随扫描结果的分类动态生成（:211-217），初始只有 \"全部分类 (0)\"；页签文本形如「<分类名> (<计数>)」，计数部分非 Strings.json 文案。",
     "文案表里存在 key 但**源码没有走本地化**的硬编码英文（上游缺口，本次取证发现）：_upstream/CrystalStudio/ObjectExtractionWindow.cs:163 抛 \"Choose a resource folder.\"、:174 抛 \"Select a map area first.\"、_upstream/CrystalStudio/MainWindow.ObjectExtraction.cs:12 MessageBox \"The stamp category catalogue was not found.\"、_upstream/CrystalStudio/CategoryPalette.cs:150 / _upstream/CrystalStudio/MainWindow.StampEditing.cs:100,149 同句 FileNotFoundException；这 4 句在 Strings.json 里都有对应 key（Choosearesourcefolder_B9E8BD69 / Selectamapareafirst_8FFB4C3B / Thestampcategorycataloguewasnotfound_88F1B573），但调用点未包 LocalText.T ⇒ 中文界面下仍显示英文。",
     "上游另有整批 MessageBox 文案**既没 key 也没走本地化**（Strings.json 里查不到）：\"Choose your Crystal library folder in Settings before exporting map artwork.\"（_upstream/CrystalStudio/MainWindow.MinimapExport.cs:11）、\"The copied region exceeds the stamp editor limit.\"（_upstream/CrystalStudio/MainWindow.StampEditing.cs:50）、\"Unable to open stamp\" / \"Unable to read categories\" / \"Enter a stamp name.\" / \"Save stamp failed\"（_upstream/CrystalStudio/MainWindow.StampEditing.cs:93,101,136,212）、\"The colour preference could not be saved: …\"（_upstream/CrystalStudio/ThemeService.Avalonia.cs:27）、\"Select Crystal Data or Map Folder\"（_upstream/CrystalStudio/SettingsWindow.cs:51）。这些不在 893 条之内。",
     "语言菜单是**运行期插入**的，不在 axaml 里：_upstream/CrystalStudio/MainWindow.Localization.cs:9-15 往 ViewMenu 末尾追加 Separator + MenuItem{Name=LanguageMenu, Header=LocalText.T(\"Language (restart required)\")}，子项固定为字面量「简体中文」/「English」（不翻译，:10-11）；切换只写 settings.json，重启才生效（:19-29）。",
