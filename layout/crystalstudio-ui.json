@@ -112,11 +112,11 @@
       "radius_md": "_upstream/CrystalStudio/EditorControls.axaml:37",
       "radius_row": "_upstream/CrystalStudio/EditorControls.axaml:70",
       "radius_lg": "_upstream/CrystalStudio/EditorControls.axaml:9",
-      "radius_xl": "_upstream/CrystalStudio/MainWindow.axaml:22",
+      "radius_xl": "_upstream/CrystalStudio/MainWindow.axaml:25",
       "icon_sm": "_upstream/CrystalStudio/EditorControls.axaml:37",
       "icon_md": "_upstream/CrystalStudio/MainWindow.axaml:9",
       "icon_lg": "_upstream/CrystalStudio/MainWindow.axaml:9",
-      "icon_wall": "_upstream/CrystalStudio/MainWindow.axaml:18",
+      "icon_wall": "_upstream/CrystalStudio/MainWindow.axaml:21",
       "icon_eye": "_upstream/CrystalStudio/EditorControls.axaml:79",
       "glyph_font_size": "_upstream/CrystalStudio/MainWindow.axaml:10",
       "glyph_mark_font_size": "_upstream/CrystalStudio/EditorControls.axaml:38",
@@ -133,18 +133,18 @@
       "toolbar_row": "_upstream/CrystalStudio/MainWindow.axaml:4",
       "statusbar_row": "_upstream/CrystalStudio/MainWindow.axaml:4",
       "titlebar_margin_x": "_upstream/CrystalStudio/MainWindow.axaml:5",
-      "statusbar_margin_x": "_upstream/CrystalStudio/MainWindow.axaml:71",
-      "right_panel_margin_x": "_upstream/CrystalStudio/MainWindow.axaml:24",
-      "right_panel_margin_y": "_upstream/CrystalStudio/MainWindow.axaml:24",
+      "statusbar_margin_x": "_upstream/CrystalStudio/MainWindow.axaml:84",
+      "right_panel_margin_x": "_upstream/CrystalStudio/MainWindow.axaml:27",
+      "right_panel_margin_y": "_upstream/CrystalStudio/MainWindow.axaml:27",
       "button_padding_x": "_upstream/CrystalStudio/EditorControls.axaml:6",
       "button_padding_y": "_upstream/CrystalStudio/EditorControls.axaml:6",
       "button_margin": "_upstream/CrystalStudio/EditorControls.axaml:7",
-      "textbox_padding_x": "_upstream/CrystalStudio/App.axaml:86",
-      "textbox_padding_y": "_upstream/CrystalStudio/App.axaml:86",
-      "textbox_margin": "_upstream/CrystalStudio/App.axaml:86",
-      "combo_min_height": "_upstream/CrystalStudio/App.axaml:87",
-      "combo_padding_left": "_upstream/CrystalStudio/App.axaml:87",
-      "combo_padding_right": "_upstream/CrystalStudio/App.axaml:87",
+      "textbox_padding_x": "_upstream/CrystalStudio/App.axaml:84",
+      "textbox_padding_y": "_upstream/CrystalStudio/App.axaml:84",
+      "textbox_margin": "_upstream/CrystalStudio/App.axaml:84",
+      "combo_min_height": "_upstream/CrystalStudio/App.axaml:85",
+      "combo_padding_left": "_upstream/CrystalStudio/App.axaml:85",
+      "combo_padding_right": "_upstream/CrystalStudio/App.axaml:85",
       "slider_height": "_upstream/CrystalStudio/EditorControls.axaml:92",
       "slider_track_height": "_upstream/CrystalStudio/EditorControls.axaml:94",
       "slider_thumb_width": "_upstream/CrystalStudio/EditorControls.axaml:97",
@@ -236,12 +236,12 @@
       "window_bg": {
         "resource": "Theme14171D",
         "hex": "#14171D",
-        "source": "_upstream/CrystalStudio/App.axaml:85"
+        "source": "_upstream/CrystalStudio/App.axaml:83"
       },
       "window_fg": {
         "resource": "ThemeE5E9F0",
         "hex": "#E5E9F0",
-        "source": "_upstream/CrystalStudio/App.axaml:85"
+        "source": "_upstream/CrystalStudio/App.axaml:83"
       },
       "panel_bg": {
         "resource": "Theme1C2028",
@@ -276,17 +276,17 @@
       "input_bg": {
         "resource": "Theme14181F",
         "hex": "#14181F",
-        "source": "_upstream/CrystalStudio/App.axaml:86"
+        "source": "_upstream/CrystalStudio/App.axaml:84"
       },
       "input_border": {
         "resource": "Theme353E4C",
         "hex": "#353E4C",
-        "source": "_upstream/CrystalStudio/App.axaml:86"
+        "source": "_upstream/CrystalStudio/App.axaml:84"
       },
       "combo_bg": {
         "resource": "Theme252C38",
         "hex": "#252C38",
-        "source": "_upstream/CrystalStudio/App.axaml:87"
+        "source": "_upstream/CrystalStudio/App.axaml:85"
       },
       "button_bg": {
         "resource": "Theme2A303B",
@@ -431,72 +431,72 @@
       "canvas_overlay_bg": {
         "resource": "ThemeED1C2028",
         "hex": "#ED1C2028",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:22"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:25"
       },
       "canvas_overlay_border": {
         "resource": "Theme3B4555",
         "hex": "#3B4555",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:22"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:25"
       },
       "statusbar_bg": {
         "resource": "Theme171B22",
         "hex": "#171B22",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:71"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:84"
       },
       "statusbar_fg": {
         "resource": "ThemeADB8C9",
         "hex": "#ADB8C9",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:71"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:84"
       },
       "status_dot_warn": {
         "resource": "ThemeD1AD77",
         "hex": "#D1AD77",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:71"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:84"
       },
       "progress_fg": {
         "resource": "Theme8CA1FF",
         "hex": "#8CA1FF",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:72"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:85"
       },
       "thumb_frame_bg": {
         "resource": "Theme151B24",
         "hex": "#151B24",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:66"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:69"
       },
       "asset_label_fg": {
         "resource": "ThemeB9C3D5",
         "hex": "#B9C3D5",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:66"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:69"
       },
       "empty_icon_fg": {
         "resource": "Theme61708C",
         "hex": "#61708C",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:67"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:80"
       },
       "card_bg": {
         "resource": "Theme242C39",
         "hex": "#242C39",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:69"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:82"
       },
       "card_border": {
         "resource": "Theme354155",
         "hex": "#354155",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:69"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:82"
       },
       "card_preview_bg": {
         "resource": "Theme171D27",
         "hex": "#171D27",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:69"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:82"
       },
       "stamp_hint_bg": {
         "resource": "Theme252C38",
         "hex": "#252C38",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:65"
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:68"
       },
       "preview_panel_bg": {
         "resource": "Theme252C38",
         "hex": "#252C38",
-        "source": "_upstream/CrystalStudio/ProvinceGeneratorWindow.axaml:31"
+        "source": "_upstream/CrystalStudio/ProvinceGeneratorWindow.axaml:46"
       },
       "dialog_list_bg": {
         "resource": "Theme151B24",
@@ -512,32 +512,32 @@
     "inline_colors": {
       "low_collision_dot": {
         "hex": "#F05569",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:49",
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:52",
         "desc": "低碰撞层标识色块 7×7 圆角 2"
       },
       "high_collision_dot": {
         "hex": "#41A5F5",
-        "source": "_upstream/CrystalStudio/MainWindow.axaml:55",
+        "source": "_upstream/CrystalStudio/MainWindow.axaml:58",
         "desc": "高碰撞层标识色块 7×7 圆角 2"
       },
       "dungeon_preview_bg": {
         "hex": "#20272D",
-        "source": "_upstream/CrystalStudio/TempleGeneratorWindow.axaml:28",
+        "source": "_upstream/CrystalStudio/TempleGeneratorWindow.axaml:36",
         "desc": "地牢预览面板底色（唯一未走资源的对话框底色）"
       },
       "settings_error_fg": {
         "hex": "#E49E97",
-        "source": "_upstream/CrystalStudio/SettingsWindow.cs:24",
+        "source": "_upstream/CrystalStudio/SettingsWindow.cs:49",
         "desc": "设置窗错误文字色 Color.FromRgb(228,158,151)"
       },
       "dock_drop_fill": {
         "hex": "#418498FF",
-        "source": "_upstream/CrystalStudio/DockWorkspace.cs:20",
+        "source": "_upstream/CrystalStudio/DockWorkspace.cs:23",
         "desc": "停靠落点预览填充 Color.FromArgb(65,132,152,255)"
       },
       "dock_drop_border": {
         "hex": "#8498FF",
-        "source": "_upstream/CrystalStudio/DockWorkspace.cs:20",
+        "source": "_upstream/CrystalStudio/DockWorkspace.cs:23",
         "desc": "停靠落点预览边框 Color.FromRgb(132,152,255)"
       }
     },
@@ -585,7 +585,7 @@
         30
       ],
       "grid_columns": [],
-      "notes": "根 Grid 只有 5 行、无列定义；grid_columns 取自 _upstream/CrystalStudio/MainWindow.axaml:7 的嵌套工作区 Grid（72/*/5/360）。⚠ 运行期 InitializeDocking()（_upstream/CrystalStudio/MainWindow.axaml.cs:267-391）把该嵌套 Grid 整体拆除，改由 DockWorkspace 接管，XAML 数字只是初始声明。",
+      "notes": "根 Grid 只有 5 行、无列定义；grid_columns 取自 _upstream/CrystalStudio/MainWindow.axaml:7 的嵌套工作区 Grid（72/*/5/360）。⚠ 运行期 InitializeDocking()（_upstream/CrystalStudio/MainWindow.axaml.cs:286-413）把该嵌套 Grid 整体拆除，改由 DockWorkspace 接管，XAML 数字只是初始声明。",
       "children": [
         {
           "kind": "panel",
@@ -15688,151 +15688,151 @@
       "file": "DockWorkspace.cs",
       "what": "停靠落点预览框（dropPreview）",
       "geometry": "BorderThickness=1，CornerRadius=3，填充 ARGB(65,132,152,255)，边框 RGB(132,152,255)",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:20"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:23"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "四个停靠区的默认厚度 dockSizes",
       "geometry": "Left=110，Right=360，Top=112，Bottom=160（单位 px）",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:23"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:26"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "每个面板的 Frame 外框",
       "geometry": "BorderThickness=0，背景 Theme1C2028，边框 Theme3B4555",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:32"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:35"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "工作区网格 3 行",
       "geometry": "Auto / 1*（星号）/ Auto",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:60"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:63"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "工作区网格 3 列",
       "geometry": "Auto / 1*（星号）/ Auto",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:63"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:66"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "面板标题栏（可拖动条）",
       "geometry": "Padding=(7,4,7,4)，背景 Theme3B4555，光标 SizeAll",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:85"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:99"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "面板标题文字",
       "geometry": "FontSize=11，前缀 \"\\u283F  \"（盲文点阵 ⠿ + 两空格），CharacterEllipsis 截断",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:88"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:102"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "拖到上/下边时抬高的最小区厚度",
       "geometry": "Palette→230，Cell Inspector→160，其它→112",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:144"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:160"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "浮动面板窗口默认尺寸",
       "geometry": "Width=380，Height=450，MinWidth=180，MinHeight=120，ShowInTaskbar=false",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:154"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:171"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "恢复浮动窗位置时钳制到屏幕工作区",
       "geometry": "X 最大 = 屏幕右边界-180，Y 最大 = 屏幕下边界-80",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:161"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:178"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "纵向分区每行的高度权重与下限",
       "geometry": "Row 权重=pane.Size(星号)；MinHeight：Tool Options=65，Palette=120，其它=85",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:200"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:236"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "横向分区每列的宽度权重与下限",
       "geometry": "Column 权重=pane.Size(星号)；MinWidth=100",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:201"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:237"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "面板之间的分隔条厚度",
       "geometry": "GridSplitter 行/列厚度=5，PreviousAndNext",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:204"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:240"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "整个停靠区的拖拽手柄（Thumb）",
       "geometry": "厚度 5（竖向宽 5 / 横向高 5），背景透明",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:212"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:253"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "拖拽整区时的尺寸钳制",
       "geometry": "竖向：宽 90 ~ max(90, 总宽×0.45)；横向：高 50 ~ max(50, 总高×0.40)",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:215"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:258"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "从布局文件恢复时的 DockSize 钳制",
       "geometry": "Clamp(DockSize, 50, 600)",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:259"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:302"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "还原浮动窗的最小有效尺寸",
       "geometry": "Width>=180 且 Height>=120 才还原为浮动窗",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:261"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:304"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "落点预览框最小尺寸",
       "geometry": "竖向：高 max(40, 目标面板高/2)；横向：宽 max(80, 目标面板宽/2)",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:314"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:357"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "贴边落点预览的上限",
       "geometry": "竖向：高 min(高,100)；横向：宽 min(宽,180)",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:315"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:358"
     },
     {
       "file": "DockWorkspace.cs",
       "what": "保存布局时浮动窗的缺省值",
       "geometry": "Width 缺省 380、Height 缺省 450，Version=2",
-      "line": "_upstream/CrystalStudio/DockWorkspace.cs:329"
+      "line": "_upstream/CrystalStudio/DockWorkspace.cs:372"
     },
     {
       "file": "SettingsWindow.cs",
       "what": "设置窗骨架",
       "geometry": "Width=660，SizeToContent=Height，CanResize=false，CenterOwner",
-      "line": "_upstream/CrystalStudio/SettingsWindow.cs:9"
+      "line": "_upstream/CrystalStudio/SettingsWindow.cs:17"
     },
     {
       "file": "SettingsWindow.cs",
       "what": "设置窗内容根 StackPanel",
       "geometry": "Margin=24",
-      "line": "_upstream/CrystalStudio/SettingsWindow.cs:11"
+      "line": "_upstream/CrystalStudio/SettingsWindow.cs:19"
     },
     {
       "file": "SettingsWindow.cs",
       "what": "设置窗标题文字",
       "geometry": "FontSize=21，Margin=(0,0,0,12)",
-      "line": "_upstream/CrystalStudio/SettingsWindow.cs:13"
+      "line": "_upstream/CrystalStudio/SettingsWindow.cs:27"
     },
     {
       "file": "SettingsWindow.cs",
       "what": "「Crystal Data / Map Folder」说明文字",
       "geometry": "Margin=(0,0,0,5)",
-      "line": "_upstream/CrystalStudio/SettingsWindow.cs:14"
+      "line": "_upstream/CrystalStudio/SettingsWindow.cs:28"
     },
     {
       "file": "SettingsWindow.cs",
       "what": "设置窗错误提示文字",
       "geometry": "Foreground=RGB(228,158,151)，TextWrapping=Wrap，Margin=(3,8,3,0)",
-      "line": "_upstream/CrystalStudio/SettingsWindow.cs:24"
+      "line": "_upstream/CrystalStudio/SettingsWindow.cs:49"
     },
     {
       "file": "StampCategoryPicker.cs",
@@ -15874,127 +15874,127 @@
       "file": "MainWindow.axaml.cs",
       "what": "资产面板（Palette）响应式切两列的阈值",
       "geometry": "宽>=540 或 (宽>=280 且 高<240) 或 (宽>=400 且 宽>高×1.7) → 两列",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:250"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:269"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "两列时左列约束",
       "geometry": "左列 MaxWidth=210，列宽比例 0.45 / 0.55",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:253"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:272"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "停靠化后根 Grid 的 48px 工具选项行",
       "geometry": "RowDefinitions[2].Height 置 0（该行内容被搬进停靠面板）",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:319"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:338"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "工具箱面板边距",
       "geometry": "ToolPanel.Margin=(5)",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:327"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:346"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "图层面板边距",
       "geometry": "Layers.Margin=(10,5,10,5)",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:333"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:355"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "小地图边距",
       "geometry": "MapMinimap.Margin=(10)",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:337"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:359"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "调色板面板边距",
       "geometry": "palette.Margin=(10)",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:341"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:363"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "当前资产卡边距",
       "geometry": "active.Margin=(10)",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:346"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:368"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "当前资产卡预览框高度",
       "geometry": "Height=double.NaN（改为自适应，原 XAML 为固定 42）",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:351"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:373"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "当前资产卡横排阈值",
       "geometry": "宽>=240 且 高<160 → 两列 0.6/0.4 且标题右移；否则单列",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:357"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:379"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "单元格检查器边距",
       "geometry": "inspector.Margin=(6)",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:368"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:390"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "检查器每行列宽与行距",
-      "geometry": "第 0 列宽=64，第 1 列 1*；行 Margin=(0,0,8,2) 见 :223",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:224"
+      "geometry": "第 0 列宽=64，第 1 列 1*；行 Margin=(0,0,8,2) 见 :242",
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:243"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "检查器数值文字",
       "geometry": "FontSize=11，LineHeight=14",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:227"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:246"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "运行期停靠工作区接管 XAML 骨架",
       "geometry": "new DockWorkspace(this, canvas, KeyDownHandler, defaultLayout: LoadDefaultLayout())，随后 Grid.SetRow(docking,3) 塞进根 Grid 第 4 行",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:323"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:342"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "Tools 面板（工具箱）",
       "geometry": "Dock.Left，高度权重 1；ToolPanel.Margin 改为 5；默认布局 Size=174、DockSize=156",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:329"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:351"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "Tool Options 面板（原 48px 工具选项条）",
       "geometry": "Dock.Left，高度权重 0.15；默认布局 Size=92、DockSize=156",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:331"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:353"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "Layers 面板（图层面板）",
       "geometry": "Add 时是 Dock.Right 权重 1.9；但 DefaultWorkspace.json 记 Side=0(Left)/Size=262/DockSize=156，Restore() 后实际停到左侧",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:335"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:357"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "Minimap 面板（代码 new MapMinimap）",
       "geometry": "Dock.Right，高度权重 1.2；Margin=10；默认布局 Size=220、DockSize=356",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:339"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:361"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "Palette 面板（CreatePaletteTabs 包出来的资产页签）",
       "geometry": "Dock.Right，高度权重 3；默认布局 Size=556、DockSize=356（右区总宽 356）",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:344"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:366"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "Active Asset 面板（当前资产卡）",
       "geometry": "Dock.Right，高度权重 0.9；Margin=10；默认布局 Size=189、DockSize=356",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:366"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:388"
     },
     {
       "file": "MainWindow.axaml.cs",
       "what": "Cell Inspector 面板（单元格检查器）",
       "geometry": "Add 时是 Dock.Bottom 权重 1；默认布局改到 Side=0(Left)、Size=400，实际停在左侧",
-      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:370"
+      "line": "_upstream/CrystalStudio/MainWindow.axaml.cs:392"
     }
   ],
   "unknowns": [
@@ -16005,7 +16005,7 @@
     "ResponsivePanel 自适应：算法已读全（列数=max(1,min(n,floor(width/ItemMinWidth)))，行高取该行 DesiredSize 最大值），但 DesiredSize 依赖字体度量，最终列宽/行高必须运行时算；ItemMinWidth 取值：ToolPanel=36、LayerList=160、Cell Highlights=160、InspectorDetails=245。",
     "EditorWindow.Opened 会用 FrameSize/ClientSize 反算并改写 Width/Height（_upstream/CrystalStudio/EditorWindow.cs:34-38）：把 Width/Height 减去「外框-客户区」的差值，使窗口外框最终等于 XAML 写的 1500×950，客户区比它略小；所以 XAML 数字是外框目标值，不是控件可用面积。",
     "PopupHeight.Fit(this) 在窗口 Opened 时重新拟合弹层高度（PopupHeight.Avalonia.cs），未逐行读完，弹层最终高度不可静态确定。",
-    "运行期主窗布局被整体替换：_upstream/CrystalStudio/MainWindow.axaml.cs:267-391 的 InitializeDocking() 拆除 XAML 的 72/*/5/360 工作区 Grid，改由 DockWorkspace 接管；真实面板尺寸来自内嵌 DefaultWorkspace.json（左区 DockSize=156：Tools 174 / Tool Options 92 / Layers 262 / Cell Inspector 400；右区 DockSize=356：Minimap 220 / Palette 556 / Active Asset 189），以及用户 profile/workspace.json 的覆盖值。注意 Layers、Cell Inspector 在代码里分别以 Dock.Right / Dock.Bottom 加入，却被默认布局改到 Left(0) —— 静态 XAML 数字不等于屏幕像素。",
+    "运行期主窗布局被整体替换：_upstream/CrystalStudio/MainWindow.axaml.cs:286-413 的 InitializeDocking() 拆除 XAML 的 72/*/5/360 工作区 Grid，改由 DockWorkspace 接管；真实面板尺寸来自内嵌 DefaultWorkspace.json（左区 DockSize=156：Tools 174 / Tool Options 92 / Layers 262 / Cell Inspector 400；右区 DockSize=356：Minimap 220 / Palette 556 / Active Asset 189），以及用户 profile/workspace.json 的覆盖值。注意 Layers、Cell Inspector 在代码里分别以 Dock.Right / Dock.Bottom 加入，却被默认布局改到 Left(0) —— 静态 XAML 数字不等于屏幕像素。",
     "主题色运行期被 ThemeService.ApplyPalette 重算（_upstream/CrystalStudio/ThemeService.Avalonia.cs:35-57）：所有 Theme* 键按亮度/蓝色偏移与系统 accent 混合，Accent 取系统强调色（缺省 RGB(132,152,255)），并动态生成 OnAccent / CanvasBackground / CanvasPaper / CanvasGrid；App.axaml 里的静态值是「深色基线」。",
     "OnAccent 资源在设计时不存在（只在 ThemeService:52 运行时创建），_upstream/CrystalStudio/EditorControls.axaml:18 的 PrimaryButton.Foreground 静态引用它，故 XAML 视图里该前景色不可知。",
     "所有 Auto/星号尺寸与文本度量依赖 Segoe UI 12px 的字体度量与 DPI 缩放，无法静态换算像素；中文标签回退到 Microsoft YaHei，宽度与拉丁字不同。",
@@ -16013,7 +16013,7 @@
     "窗口非客户区（标题栏、边框）高度由 OS 决定，不是 XAML 数字。",
     "对话框 WindowStartupLocation=CenterOwner 的实际屏幕坐标取决于 Owner 窗口位置。",
     "StackPanel/WrapPanel 内子元素的绝对 y 坐标是累计 DesiredSize 的结果，静态不可知（本 JSON 中这些节点的 x/y 为 null，最多只给 w/h）。",
-    "AssetList 每项宽度写死 78（_upstream/CrystalStudio/MainWindow.axaml:66），但列数由外层 WrapPanel 按面板宽度换行决定，实际行列不可静态确定。",
+    "AssetList 每项宽度写死 78（_upstream/CrystalStudio/MainWindow.axaml:69），但列数由外层 WrapPanel 按面板宽度换行决定，实际行列不可静态确定。",
     "ComboBox 下拉层、ToolTip、ContextMenu 的尺寸由 Fluent 模板与内容决定，不在 XAML 里。",
     "Grid 星号行/列在含 Auto 轨道时的余量分配细节属 Avalonia 布局算法内部实现，本 JSON 只能给出轨道声明，不给最终像素。",
     "第 8 窗 ObjectExtractionWindow 是**代码建窗**（ObjectExtractionWindow.cs，无 axaml）：所有宽度/高度只能读源码常量；ComboBox（ExtractionScope/state）、TextBox（directory/resource/search）、Button 都没有写死宽高，只给了 MinWidth（150/140/180/180/170，:10-14）和统一 Padding=9,5（:84）⇒ 这些节点的 rect.w 记为 null，实际宽度由 Fluent 模板 + 内容 + Grid 星号轨道共同决定，静态不可解。",
@@ -16021,8 +16021,8 @@
     "第 8 窗详情面板（details）内容由 ShowDetails() 在选中候选时重建（:228-270），本 JSON 只记录其**固定几何**（Image/Preview/ListBox 的 Height、ScrollViewer 的 MaxHeight、FontSize），逐格碰撞行（每行坐标 TextBlock Width=90 + Low/High 复选框）的数量与总高取决于候选的格数，静态不可解。",
     "第 8 窗候选卡片（ItemTemplate）的换行位置依赖 WrapPanel 可用宽度与卡片 Width=104 + Margin=3 + ListBoxItem Margin=2/Padding=3，每页 48 张（PageSize）只是数据上限，不代表一屏显示数量；实际列数不可静态确定。",
     "第 8 窗 TabControl（ExtractionCategories）的页签数量随扫描结果的分类动态生成（:157-163），初始只有 \"全部分类 (0)\"；页签文本形如「<分类名> (<计数>)」，计数部分非 Strings.json 文案。",
-    "文案表里存在 key 但**源码没有走本地化**的硬编码英文（上游缺口，本次取证发现）：_upstream/CrystalStudio/ObjectExtractionWindow.cs:113 抛 \"Choose a resource folder.\"、:124 抛 \"Select a map area first.\"、_upstream/CrystalStudio/MainWindow.ObjectExtraction.cs:12 MessageBox \"The stamp category catalogue was not found.\"、_upstream/CrystalStudio/CategoryPalette.cs:150 / _upstream/CrystalStudio/MainWindow.StampEditing.cs:95,143 同句 FileNotFoundException；这 4 句在 Strings.json 里都有对应 key（Choosearesourcefolder_B9E8BD69 / Selectamapareafirst_8FFB4C3B / Thestampcategorycataloguewasnotfound_88F1B573），但调用点未包 LocalText.T ⇒ 中文界面下仍显示英文。",
-    "上游另有整批 MessageBox 文案**既没 key 也没走本地化**（Strings.json 里查不到）：\"Choose your Crystal library folder in Settings before exporting map artwork.\"（_upstream/CrystalStudio/MainWindow.MinimapExport.cs:11）、\"The copied region exceeds the stamp editor limit.\"（_upstream/CrystalStudio/MainWindow.StampEditing.cs:45）、\"Unable to open stamp\" / \"Unable to read categories\" / \"Enter a stamp name.\" / \"Save stamp failed\"（_upstream/CrystalStudio/MainWindow.StampEditing.cs:88,96,131,202）、\"The colour preference could not be saved: …\"（_upstream/CrystalStudio/ThemeService.Avalonia.cs:27）、\"Select Crystal Data or Map Folder\"（_upstream/CrystalStudio/SettingsWindow.cs:51）。这些不在 893 条之内。",
+    "文案表里存在 key 但**源码没有走本地化**的硬编码英文（上游缺口，本次取证发现）：_upstream/CrystalStudio/ObjectExtractionWindow.cs:163 抛 \"Choose a resource folder.\"、:174 抛 \"Select a map area first.\"、_upstream/CrystalStudio/MainWindow.ObjectExtraction.cs:12 MessageBox \"The stamp category catalogue was not found.\"、_upstream/CrystalStudio/CategoryPalette.cs:150 / _upstream/CrystalStudio/MainWindow.StampEditing.cs:100,149 同句 FileNotFoundException；这 4 句在 Strings.json 里都有对应 key（Choosearesourcefolder_B9E8BD69 / Selectamapareafirst_8FFB4C3B / Thestampcategorycataloguewasnotfound_88F1B573），但调用点未包 LocalText.T ⇒ 中文界面下仍显示英文。",
+    "上游另有整批 MessageBox 文案**既没 key 也没走本地化**（Strings.json 里查不到）：\"Choose your Crystal library folder in Settings before exporting map artwork.\"（_upstream/CrystalStudio/MainWindow.MinimapExport.cs:11）、\"The copied region exceeds the stamp editor limit.\"（_upstream/CrystalStudio/MainWindow.StampEditing.cs:50）、\"Unable to open stamp\" / \"Unable to read categories\" / \"Enter a stamp name.\" / \"Save stamp failed\"（_upstream/CrystalStudio/MainWindow.StampEditing.cs:93,101,136,212）、\"The colour preference could not be saved: …\"（_upstream/CrystalStudio/ThemeService.Avalonia.cs:27）、\"Select Crystal Data or Map Folder\"（_upstream/CrystalStudio/SettingsWindow.cs:51）。这些不在 893 条之内。",
     "语言菜单是**运行期插入**的，不在 axaml 里：_upstream/CrystalStudio/MainWindow.Localization.cs:9-15 往 ViewMenu 末尾追加 Separator + MenuItem{Name=LanguageMenu, Header=LocalText.T(\"Language (restart required)\")}，子项固定为字面量「简体中文」/「English」（不翻译，:10-11）；切换只写 settings.json，重启才生效（:19-29）。",
     "旧 7 窗里 54 处 text 值在 Strings.json 中查不到 key，已按原样保留英文：① MDL2 字形 7 处（U+E70F/E75C/EF20/E8B9/E7C2/E8C8 等，图标字符不是文案）；② 纯符号/静态数字 12 处（\"−\" \"+\" \"×\" \"←\" \"→\" \"▦\" \"100%\" \"3×3\" \"—, —\" \"1\" \"2\" \"3\" \"%\"）；③ 纯绑定表达式 5 处（\"{Binding PinLabel}\" 等，运行时才有值）；④ **Run 拼接出的动态标签 30 处**（如 ProvinceGeneratorWindow \"Wider Border · {Binding ElementName=ForestSlider, …}\"）：静态前缀本身**有** key（例：WiderBorder_538E1AA9），但整串是\"文案 + 绑定表达式\"的拼接结果，在文案表里必然查不到 ⇒ 这些节点的 text 保留拼接后的英文原文，前缀 key 需回 axaml 逐条对照（本次未逐条落 key，见 unknowns 口径）。"
   ]

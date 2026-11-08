@@ -108,7 +108,7 @@
 | 表 | 条数 | 内容 |
 |---|---|---|
 | `theme.colors` | **71** | `App.axaml` 里 `SolidColorBrush` 的**资源键名 → 色值**原文（`Theme14171D`→`#14171D` … `ThemeED1C2028`→`#ED1C2028`，另有 `Panel`/`Muted`/`Accent`/`Line`） |
-| `theme.semantic` | **55** | 语义角色 → `{resource, hex, source}`，**每条带 `文件:行号`**（如 `window_bg` → `Theme14171D` `#14171D` @ `_upstream/CrystalStudio/App.axaml:85`） |
+| `theme.semantic` | **55** | 语义角色 → `{resource, hex, source}`，**每条带 `文件:行号`**（如 `window_bg` → `Theme14171D` `#14171D` @ `_upstream/CrystalStudio/App.axaml:83`） |
 | `theme.inline_colors` | **6** | 没走资源的写死颜色（低/高碰撞色块 `#F05569`/`#41A5F5`、地牢预览底 `#20272D`、设置窗错误红 `#E49E97`、停靠落点 `#418498FF`/`#8498FF`） |
 | `theme.runtime_computed_colors` | **5** | 运行期才算得出的键（`OnAccent`/`CanvasBackground`/`CanvasPaper`/`CanvasGrid`/`Accent`），给公式与行号 |
 
@@ -129,8 +129,8 @@
 | Width×Height | **1500×950** | `_upstream/CrystalStudio/MainWindow.axaml:1` |
 | MinWidth×MinHeight | **1100×720** | `_upstream/CrystalStudio/MainWindow.axaml:1` |
 | FontFamily | **Segoe UI**（单字体） | `_upstream/CrystalStudio/MainWindow.axaml:1` |
-| 样式回退链 | `Segoe UI, Microsoft YaHei, sans-serif` | `_upstream/CrystalStudio/App.axaml:85` |
-| FontSize | **12** | `_upstream/CrystalStudio/MainWindow.axaml:1` + `_upstream/CrystalStudio/App.axaml:85` |
+| 样式回退链 | `Segoe UI, Microsoft YaHei, sans-serif` | `_upstream/CrystalStudio/App.axaml:83` |
+| FontSize | **12** | `_upstream/CrystalStudio/MainWindow.axaml:1` + `_upstream/CrystalStudio/App.axaml:83` |
 | ThemeVariant | **Dark** | `_upstream/CrystalStudio/App.axaml:1` |
 | 背景/前景 | `Theme14171D` / `ThemeE5E9F0` | `_upstream/CrystalStudio/MainWindow.axaml:1` |
 | UseLayoutRounding | True | `_upstream/CrystalStudio/MainWindow.axaml:1` |
@@ -158,7 +158,7 @@
 | 2 | 5 | `GridSplitter`（`ResizeBehavior=PreviousAndNext`） | `W=5` |
 | 3 | 360 | Border → 右栏 Grid（`Margin="16,14"`，6 行：Layers / 资产头 / 资产区 / 分页 / 当前资产 / 检查器） | `W=360` |
 
-### 3.4 10 个工具按钮（`_upstream/CrystalStudio/MainWindow.axaml:9-19`）
+### 3.4 10 个工具按钮（`_upstream/CrystalStudio/MainWindow.axaml:9-22`）
 
 `ToolButton` 主题：`32×32`、`Margin=2`、`GroupName=EditorTools`、圆角 5；图标 Viewbox `16×16`，内部 Canvas `24×24`（缩放比 0.667）。
 **墙体工具是唯一例外：Viewbox `18×18`。**
@@ -197,9 +197,9 @@
 | 1 | "解析出的窗口数 = **9**" | 9 个 axaml 里只有 **7 个窗口**：`App.axaml` 根是 `Application`、`EditorControls.axaml` 根是 `ResourceDictionary`，**都不是窗口** | `windows` 只有 7 条；9 个文件全在 `xaml_files` 里按 role 标注；校验按 7 断言，并**显式记录早期口径 9** 的差异，不硬凑 |
 | 2 | "主窗列 `72/*/5/360`（**列 4**）" | 根 Grid 只声明 5 行、**无列定义**；这 4 列属于 `_upstream/CrystalStudio/MainWindow.axaml:7` 的**嵌套工作区 Grid** | `window.grid_columns=[]`；4 列记在该嵌套 Grid 节点的 `grid_columns` 上；验收门拆成"根行 5"+"嵌套列 4"两条断言 |
 | 3 | `icon_sm=12`、`icon_md=16`、`icon_lg=20` | 工程里**没有 12 也没有 20 的图标尺寸**。实测：工具图标 16×16、墙体图标 18×18、复选框方块 14×14、图层眼睛 16×16、滑块拇指 12（宽）×18（高）、Canvas 设计栅格 24×24 | `icon_sm=14`、`icon_md=16`、`icon_lg=24`，另加 `icon_wall=18`、`icon_eye=16`；12 归到 `slider_thumb_width` |
-| 4 | "FontFamily Segoe UI / FontSize 12" | 对，但**两套来源**：MainWindow 显式写 `Segoe UI`（单字体）；`_upstream/CrystalStudio/App.axaml:85` 的 Window 样式是回退链 `Segoe UI, Microsoft YaHei, sans-serif`。6 个对话框里有 4 个写了 Background/Foreground 但没写字体，全部走样式 | `theme.font_family` 与 `font_family_fallback` 分开记，不合并 |
+| 4 | "FontFamily Segoe UI / FontSize 12" | 对，但**两套来源**：MainWindow 显式写 `Segoe UI`（单字体）；`_upstream/CrystalStudio/App.axaml:83` 的 Window 样式是回退链 `Segoe UI, Microsoft YaHei, sans-serif`。6 个对话框里有 4 个写了 Background/Foreground 但没写字体，全部走样式 | `theme.font_family` 与 `font_family_fallback` 分开记，不合并 |
 | 5 | "代码生成清单：3 个文件" | 3 个文件按要求列全（`DockWorkspace.cs` **20** 条 / `SettingsWindow.cs` **5** 条 / `StampCategoryPicker.cs` **6** 条 = 31），**另加 `MainWindow.axaml.cs` 21 条**，合计 52 | 因为运行期布局真值在那里（`InitializeDocking()` 拆 XAML 骨架 + 各面板停靠边/权重）。不列这段，Rust 侧会照着 XAML 复刻出一个实际不存在的界面 |
-| 6 | "行 `36/0/48/*/30`"（当作静态骨架） | 行值对，但**第 2 行 48px 的工具选项条在停靠化后被置 0**（`_upstream/CrystalStudio/MainWindow.axaml.cs:319`），内容搬进 Tool Options 面板；`BusyProgress` 从 Row 2 挪到 Row 0（`:321`） | `grid_rows` 记 XAML 声明值（属实），运行期变化写进 `code_built` + `unknowns` |
+| 6 | "行 `36/0/48/*/30`"（当作静态骨架） | 行值对，但**第 2 行 48px 的工具选项条在停靠化后被置 0**（`_upstream/CrystalStudio/MainWindow.axaml.cs:338`），内容搬进 Tool Options 面板；`BusyProgress` 从 Row 2 挪到 Row 0（`:340`） | `grid_rows` 记 XAML 声明值（属实），运行期变化写进 `code_built` + `unknowns` |
 | 7 | 统计行格式 `windows=9, ...` | 实际 `windows=7, total_nodes=499, theme_colors=71, code_built=52, unknowns=18` | 原样打印见 §6，格式照抄、数字按实测 |
 
 另有两处无实质影响的小偏差：早期清单写 `App.axaml` 93 行（实际 **94**）、`MainWindow.axaml` 72 行（实际 **73**），差额是文件末尾换行。
@@ -215,7 +215,7 @@
 5. **ResponsivePanel 自适应**：算法已读全（列数 `max(1,min(n,floor(width/ItemMinWidth)))`，行高取该行 `DesiredSize` 最大值），但 `DesiredSize` 依赖字体度量，最终列宽行高必须运行期算；`ItemMinWidth` 取值：ToolPanel=36、LayerList=160、Cell Highlights=160、InspectorDetails=245。
 6. **EditorWindow.Opened 改写宽高**（`_upstream/CrystalStudio/EditorWindow.cs:34-38`）：把 Width/Height 减去"外框−客户区"，使外框最终等于 1500×950，**客户区比它略小**；XAML 数字是外框目标值，不是控件可用面积。
 7. **PopupHeight.Fit**：窗口 `Opened` 时重新拟合弹层高度（`PopupHeight.Avalonia.cs`），未逐行读完，弹层最终高度不可静态确定。
-8. **运行期主窗布局被整体替换**：`_upstream/CrystalStudio/MainWindow.axaml.cs:267-391` 的 `InitializeDocking()` 拆除 XAML 的 `72/*/5/360` 工作区 Grid，改由 `DockWorkspace` 接管；真实尺寸来自内嵌 `DefaultWorkspace.json`（左区 DockSize=156：Tools 174 / Tool Options 92 / Layers 262 / Cell Inspector 400；右区 DockSize=356：Minimap 220 / Palette 556 / Active Asset 189），以及用户 `profile/workspace.json` 的覆盖。注意 Layers、Cell Inspector 在代码里分别以 `Dock.Right`/`Dock.Bottom` 加入，却被默认布局改到 `Left(0)`。
+8. **运行期主窗布局被整体替换**：`_upstream/CrystalStudio/MainWindow.axaml.cs:286-413` 的 `InitializeDocking()` 拆除 XAML 的 `72/*/5/360` 工作区 Grid，改由 `DockWorkspace` 接管；真实尺寸来自内嵌 `DefaultWorkspace.json`（左区 DockSize=156：Tools 174 / Tool Options 92 / Layers 262 / Cell Inspector 400；右区 DockSize=356：Minimap 220 / Palette 556 / Active Asset 189），以及用户 `profile/workspace.json` 的覆盖。注意 Layers、Cell Inspector 在代码里分别以 `Dock.Right`/`Dock.Bottom` 加入，却被默认布局改到 `Left(0)`。
 9. **主题色运行期被重算**（`_upstream/CrystalStudio/ThemeService.Avalonia.cs:35-57`）：所有 `Theme*` 键按亮度/蓝色偏移与系统 accent 混合，`Accent` 取系统强调色（缺省 RGB(132,152,255)），并动态生成 `OnAccent`/`CanvasBackground`/`CanvasPaper`/`CanvasGrid`；`App.axaml` 里的静态值只是"深色基线"。
 10. **`OnAccent` 设计时不存在**（只在 `ThemeService:52` 运行期创建），但 `_upstream/CrystalStudio/EditorControls.axaml:18` 的 `PrimaryButton.Foreground` 静态引用它 ⇒ 该前景色在 XAML 视图里不可知。
 11. **字体度量**：所有 Auto/星号尺寸与文本宽度依赖 Segoe UI 12px 的度量与 DPI 缩放，无法静态换算像素；中文标签回退 Microsoft YaHei，宽度与拉丁字不同。
@@ -223,7 +223,7 @@
 13. **窗口非客户区**（标题栏/边框）高度由 OS 决定，不是 XAML 数字。
 14. **对话框 `CenterOwner` 的屏幕坐标**取决于 Owner 位置。
 15. **StackPanel/WrapPanel 内子元素绝对 y** = 累计 `DesiredSize` 的结果，静态不可知（这些节点的 `x/y` 为 `null`，最多只给 `w/h`）。
-16. **AssetList 列数**：每项宽度写死 78（`_upstream/CrystalStudio/MainWindow.axaml:66`），但列数由外层 WrapPanel 按面板宽度换行决定。
+16. **AssetList 列数**：每项宽度写死 78（`_upstream/CrystalStudio/MainWindow.axaml:69`），但列数由外层 WrapPanel 按面板宽度换行决定。
 17. **ComboBox 下拉层 / ToolTip / ContextMenu** 的尺寸由 Fluent 模板与内容决定，不在 XAML 里。
 18. **Grid 星号余量分配**：含 Auto 轨道时星号行/列的余量分配属 Avalonia 布局算法内部，本 JSON 只给轨道声明，不给最终像素。
 
