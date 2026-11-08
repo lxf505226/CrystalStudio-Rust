@@ -4,47 +4,47 @@
 //!
 //! | 偏移 | 字段 | 类型 | 说明 | 源码行号 |
 //! |------|------|------|------|----------|
-//! | 31 | `w` | `i16` | **异或前**的宽 | `:333` |
-//! | 33 | `xor` | `i16` | 宽高共用的 XOR 掩码 | `:335` |
-//! | 35 | `h` | `i16` | **异或前**的高 | `:337` |
+//! | 31 | `w` | `i16` | **异或前**的宽 | `:335` |
+//! | 33 | `xor` | `i16` | 宽高共用的 XOR 掩码 | `:337` |
+//! | 35 | `h` | `i16` | **异或前**的高 | `:339` |
 //!
-//! `Width = w ^ xor`、`Height = h ^ xor`（`:338-339`）。
+//! `Width = w ^ xor`、`Height = h ^ xor`（`:340-341`）。
 //! `0..31` 与 `37..64` 的字节本格式不解释，原样进 `header_raw`。
-//! C# 的 `ValidateDimensions(64, 12)` 在 `:340`。
+//! C# 的 `ValidateDimensions(64, 12)` 在 `:342`。
 //!
 //! # 二、单元格（12 字节）
 //!
 //! | 格内偏移 | 字段 | 类型 | 磁盘变换 | 源码行号 |
 //! |---------|------|------|----------|----------|
-//! | 0 | 背景图号 | `u16` | **XOR `xor`** | `:348` |
-//! | 2 | 中间图号 | `u16` | **XOR `xor`** | `:350` |
-//! | 4 | 前景图号 | `u16` | **XOR `xor`** | `:352` |
-//! | 6 | `btDoorIndex` | `u8` | — | `:354` |
-//! | 7 | `btDoorOffset` | `u8` | — | `:355` |
-//! | 8 | `btAniFrame` | `u8` | — | `:356` |
-//! | 9 | `btAniTick` | `u8` | — | `:357` |
-//! | 10 | `btArea` | `u8` | — | `:358` |
-//! | 11 | `btLight` | `u8` | — | `:359` |
+//! | 0 | 背景图号 | `u16` | **XOR `xor`** | `:350` |
+//! | 2 | 中间图号 | `u16` | **XOR `xor`** | `:352` |
+//! | 4 | 前景图号 | `u16` | **XOR `xor`** | `:354` |
+//! | 6 | `btDoorIndex` | `u8` | — | `:356` |
+//! | 7 | `btDoorOffset` | `u8` | — | `:357` |
+//! | 8 | `btAniFrame` | `u8` | — | `:358` |
+//! | 9 | `btAniTick` | `u8` | — | `:359` |
+//! | 10 | `btArea` | `u8` | — | `:360` |
+//! | 11 | `btLight` | `u8` | — | `:361` |
 //!
 //! 合计 12 字节，**无尾区**。
 //!
 //! # 三、存储顺序：**列优先**
 //!
 //! ```text
-//! offset = 64 + (x * h + y) * 12      // x 外层、y 内层（C# `:342-343`）
+//! offset = 64 + (x * h + y) * 12      // x 外层、y 内层（C# `:344-345`）
 //! ```
 //!
 //! # 四、C# 的变换
 //!
 //! | 变换 | C# 源码 | 本模块函数 |
 //! |------|---------|-----------|
-//! | 背景 / 中间 / 前景图号 `^ xor` | `:348`/`:350`/`:352` | [`csharp_image`] |
-//! | 前景库号 = `btArea + 2` | `:358` | [`csharp_front_lib`] |
-//! | 有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && (btArea+2) > 0`（后者恒真） | `:364` | [`csharp_has_front`] |
-//! | 背景带 `0x8000` ⇒ `(v & 0x7FFF) \| 0x20000000` | `:360-361` | [`csharp_back_image`] |
+//! | 背景 / 中间 / 前景图号 `^ xor` | `:350`/`:352`/`:354` | [`csharp_image`] |
+//! | 前景库号 = `btArea + 2` | `:360` | [`csharp_front_lib`] |
+//! | 有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && (btArea+2) > 0`（后者恒真） | `:366` | [`csharp_has_front`] |
+//! | 背景带 `0x8000` ⇒ `(v & 0x7FFF) \| 0x20000000` | `:362-363` | [`csharp_back_image`] |
 //!
-//! ⚠ **入参契约**：[`csharp_back_image`] 吃的是 **XOR 还原后**的值 —— C# `:348` 先
-//! `^ xor` 还原，`:360` 才判 `& 0x8000`。磁盘原值必须先过 [`csharp_image`]；
+//! ⚠ **入参契约**：[`csharp_back_image`] 吃的是 **XOR 还原后**的值 —— C# `:350` 先
+//! `^ xor` 还原，`:362` 才判 `& 0x8000`。磁盘原值必须先过 [`csharp_image`]；
 //! 手边只有磁盘值时请直接调 [`csharp_back_image_from_disk`]，别自己拼。
 //!
 //! # 五、真实样本
@@ -53,7 +53,7 @@
 //!
 //! # 六、判别
 //!
-//! C# `:79`：`Bytes[0]==0x15 && Bytes[4]==0x32 && Bytes[6]==0x41 && Bytes[19]==0x31`。
+//! C# `:81`：`Bytes[0]==0x15 && Bytes[4]==0x32 && Bytes[6]==0x41 && Bytes[19]==0x31`。
 
 use crate::error::FormatError;
 use crate::model::{
@@ -70,7 +70,7 @@ pub const CELL_LEN: usize = 12;
 /// 尾区字节数（无）。
 pub const TAIL_LEN: usize = 0;
 
-/// 宽/高/图号共用的 XOR 掩码在头内的偏移（C# `:335`）。
+/// 宽/高/图号共用的 XOR 掩码在头内的偏移（C# `:337`）。
 pub const XOR_OFFSET: usize = 33;
 
 /// 格式单例。
@@ -231,29 +231,29 @@ impl MapFormat for AntiHack {
     }
 }
 
-/// C# `:348`/`:350`/`:352`：图号 = 磁盘 `u16` XOR `xor`（`xor` 取 `i16` 位模式）。
+/// C# `:350`/`:352`/`:354`：图号 = 磁盘 `u16` XOR `xor`（`xor` 取 `i16` 位模式）。
 pub fn csharp_image(raw: u16, xor: i16) -> u16 {
     raw ^ (xor as u16)
 }
 
-/// C# `:358`：前景库号 = `btArea + 2`。
+/// C# `:360`：前景库号 = `btArea + 2`。
 pub fn csharp_front_lib(area: u8) -> u16 {
     u16::from(area) + 2
 }
 
-/// C# `:364`：有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && (btArea+2) > 0`（后者恒真）。
+/// C# `:366`：有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && (btArea+2) > 0`（后者恒真）。
 pub fn csharp_has_front(fr_img: u16) -> bool {
     (fr_img & 0x7FFF) > 0
 }
 
-/// C# `:360-361`：背景图号带 `0x8000` ⇒ 清位并打渲染层标记 `0x20000000`。
+/// C# `:362-363`：背景图号带 `0x8000` ⇒ 清位并打渲染层标记 `0x20000000`。
 ///
 /// # ⚠ 入参契约：**必须传「异或还原后」的值**（不是磁盘原值）
 ///
-/// C# 分两步，顺序不能倒（`LegacyMapReader.cs:348` → `:360`）：
+/// C# 分两步，顺序不能倒（`_upstream/CrystalStudio/LegacyMapReader.cs:350` → `:362`）：
 ///
-/// 1. `:348` `MapCells.BackImage = (short)(ToInt16(Bytes, offset) ^ xor);` —— **先异或还原**；
-/// 2. `:360-361` `if ((BackImage & 0x8000) != 0) …` —— 判的是**还原后**的那个值。
+/// 1. `:350` `MapCells.BackImage = (short)(ToInt16(Bytes, offset) ^ xor);` —— **先异或还原**；
+/// 2. `:362-363` `if ((BackImage & 0x8000) != 0) …` —— 判的是**还原后**的那个值。
 ///
 /// 因此本函数的入参**不是** [`Cell::bk_img`](crate::Cell::bk_img)（那是磁盘原值），
 /// 必须先过 [`csharp_image`]。若直接喂磁盘值，`xor` 的 bit15 为 1 时阻挡位会被**判反**
@@ -265,7 +265,7 @@ pub fn csharp_has_front(fr_img: u16) -> bool {
 /// - `heroes34.rs::csharp_back_image`：Type7 本来就不 XOR ⇒ 入参就是磁盘值；
 /// - `wemade2010.rs::csharp_back_image`：**内部**做 XOR ⇒ 入参是磁盘值。
 pub fn csharp_back_image(restored: u16) -> u32 {
-    // 契约钉子（C# `:348` → `:360`）：本函数**不做** XOR。
+    // 契约钉子（C# `:350` → `:362`）：本函数**不做** XOR。
     //   入参若来自磁盘，必须已过 `csharp_image(disk, xor)`。
     //   函数体内拿不到 `xor`、无从校验，所以契约只能靠
     //   参数名 `restored` + 上面这段文档 + 本注释钉住 —— 改动前先读这三处。
@@ -276,7 +276,7 @@ pub fn csharp_back_image(restored: u16) -> u32 {
     }
 }
 
-/// 从**磁盘原值**出发的背景图号变换：先按 C# `:348` 异或还原，再按 `:360` 判 `0x8000`。
+/// 从**磁盘原值**出发的背景图号变换：先按 C# `:350` 异或还原，再按 `:362` 判 `0x8000`。
 ///
 /// 等价于 `csharp_back_image(csharp_image(disk, xor))`；给「手里只有
 /// [`Cell::bk_img`](crate::Cell::bk_img)」的调用方用，避免漏掉第一步。
@@ -290,7 +290,7 @@ mod tests {
 
     /// 按源码手工构造一张 `w×h` 的 AntiHack 字节流（**无真实样本**）。
     ///
-    /// 头里存的是**异或前**的值（`w ^ xor` / `h ^ xor`），与 C# `:338-339` 的还原式对应。
+    /// 头里存的是**异或前**的值（`w ^ xor` / `h ^ xor`），与 C# `:340-341` 的还原式对应。
     fn 造图(w: i16, h: i16, xor: i16) -> Vec<u8> {
         let mut b = vec![0u8; HEADER_LEN + CELL_LEN * (w as usize) * (h as usize)];
         for (i, x) in b.iter_mut().enumerate() {
@@ -336,7 +336,7 @@ mod tests {
 
     #[test]
     fn 背景图号入参必须是异或还原后的值() {
-        // C# `:348` 先 `^ xor`、`:360` 才判 ⇒ 入参是**还原后**的值。
+        // C# `:350` 先 `^ xor`、`:362` 才判 ⇒ 入参是**还原后**的值。
         // 取 `xor = 0x8000`（bit15 置位）：磁盘 0x0001 还原成 0x8001 ⇒ 带阻挡位。
         let xor: i16 = i16::from_le_bytes([0x00, 0x80]);
         assert_eq!(csharp_image(0x0001, xor), 0x8001, "还原后才带 bit15");

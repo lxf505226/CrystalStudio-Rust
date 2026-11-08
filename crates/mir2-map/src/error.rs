@@ -14,7 +14,7 @@ use crate::cell::{expected_lengths, HEADER_LEN};
 /// 三个尺寸变体（[`ZeroDimension`](MapError::ZeroDimension) /
 /// [`DimensionTooLarge`](MapError::DimensionTooLarge) /
 /// [`TooManyCells`](MapError::TooManyCells)）是 C# `MapDimensions.CanRoundTrip`
-/// （`MapDimensions.cs:11-12@acfbbf8a`）三条件的一一对应，由
+/// （`_upstream/CrystalStudio/MapDimensions.cs:11-12`）三条件的一一对应，由
 /// [`crate::validate_dimensions`] 按官方短路顺序择一返回。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum MapError {
@@ -25,8 +25,8 @@ pub enum MapError {
     },
     /// 头部 `wWidth` 或 `wHeight` 为 0（含「52 字节全零」这种被截断/损坏的文件）。
     ///
-    /// 真值：客户端 `map_loader.gd:94-95` 与 CrystalStudio 的 C#
-    /// `LegacyMapReader.cs:50` 都判为错误并直接返回/抛异常。
+    /// 真值：客户端 `map_loader.gd:94-95` 与 C#
+    /// `_upstream/CrystalStudio/LegacyMapReader.cs:51-53` 都判为错误并直接返回/抛异常。
     ///
     /// 为什么不能放行：`w*h == 0` 时三档期望长度都等于 52（`52 + 0`），长度判据本身
     /// 命中 `Old12` ⇒ 会把损坏文件**静默救活**成「0×0 空地图」，而编辑器仍认为它可保存，
@@ -39,7 +39,7 @@ pub enum MapError {
     },
     /// 头部宽或高超过 **32767**（`i16::MAX` = C# `short.MaxValue`）⇒ 存下去就回读不回来。
     ///
-    /// 真值：C# `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip`：
+    /// 真值：C# `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip`：
     ///
     /// ```csharp
     /// public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
@@ -47,7 +47,7 @@ pub enum MapError {
     /// ```
     ///
     /// 为什么这是**往返缺陷**而不是「上限太保守」：`.map` 头的 `wWidth`/`wHeight` 是
-    /// **有符号 16 位**字段 —— C# `Document.cs:90` 写的是 `w.Write(checked((short)Width))`，
+    /// **有符号 16 位**字段 —— C# `_upstream/CrystalStudio/Document.cs:90` 写的是 `w.Write(checked((short)Width))`，
     /// 本仓 `mir2-format` 用 `i16_at` 读回。`32768..=65535` 这一段虽然塞得进 `u16`，
     /// 写盘后要么在 C# 侧 `checked` 抛溢出异常，要么回读成负数 ⇒ 地图存了打不开。
     ///
@@ -63,9 +63,9 @@ pub enum MapError {
     },
     /// 头部声明的格数 `w*h` 超过 [`crate::MAX_CELLS`] 护栏。
     ///
-    /// 真值：C# `MapDimensions.cs:7` 的 `MaximumCells = 16_000_000`，判据在
-    /// `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 第三条
-    /// （同值另见 `LegacyMapReader.cs:50` 的 `count > 16_000_000`、`Document.cs:58`）。
+    /// 真值：C# `_upstream/CrystalStudio/MapDimensions.cs:7` 的 `MaximumCells = 16_000_000`，判据在
+    /// `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip` 第三条
+    /// （同值另见 `_upstream/CrystalStudio/LegacyMapReader.cs:51-53` 的 `count > 16_000_000`）。
     /// 这不是客户端语义（`map_loader.gd` 无此上限），而是**编辑器护栏**：
     /// 本库的格结构体是 36 B 定长，12 B/格的图内存约为文件的 3 倍，超限就会变成 OOM 而不是明确报错。
     ///

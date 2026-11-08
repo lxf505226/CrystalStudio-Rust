@@ -3,7 +3,7 @@
 //! 本 crate 只做一件事：把任意一种 `.map` 解析成 [`RawMap`]，再**逐字节**写回。
 //! 不猜字段语义、不做「顺手归一化」、不静默补零；解析失败一律 [`FormatError`]。
 //!
-//! # 一、九种格式一览（顺序 = C# `LegacyMapReader.cs:55-117` 判别链）
+//! # 一、九种格式一览（顺序 = C# `_upstream/CrystalStudio/LegacyMapReader.cs:57-119` 判别链）
 //!
 //! | # | [`FormatId`] | C# 分支 | 头部 | 单格 | 真实样本 | 模块 |
 //! |---|--------------|---------|------|------|----------|------|
@@ -66,7 +66,7 @@
 //!
 //! # 五、尺寸校验：**读写两侧同一判据**（三条件合取）
 //!
-//! 真值：CrystalStudio C# `MapDimensions.cs:11-12@acfbbf8a`：
+//! 真值：C# `_upstream/CrystalStudio/MapDimensions.cs:11-12`：
 //!
 //! ```csharp
 //! public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
@@ -88,7 +88,7 @@
 //!   两个变长格式在自己的 `write` 顶部调 `validate_write_dims`（均 crate 内私有）。
 //!
 //! ⚠ **只挂读侧是本次修掉的缺口**：`RawMap.width` 是 `u16`，上层能构造出 65535，
-//! 而九种格式的头部宽高最终都是 16 位**有符号**字段（C# `Document.cs:90` 写
+//! 而九种格式的头部宽高最终都是 16 位**有符号**字段（C# `_upstream/CrystalStudio/Document.cs:90` 写
 //! `checked((short)Width)`，本 crate 用 `i16_at` 读回）。超限写出去的文件，
 //! C# 侧抛溢出、本 crate 读回负数 ⇒ 存下去就再也读不回来。属于 round-trip 缺陷。
 //!

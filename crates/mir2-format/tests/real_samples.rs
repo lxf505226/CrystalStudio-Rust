@@ -349,7 +349,7 @@ fn 列优先与字段偏移对照_shanda14() {
 /// 期望值来自**独立的 Python 脚本**（不复用本 crate 任何代码）：
 /// `off = 52 + (x*h + y)*36`，然后
 /// `TileAnimationImage = i16@off+14`、`TileAnimationFrames = u8@off+21`、
-/// `TileAnimationOffset = i16@off+22`（对应 C# `LegacyMapReader.cs:300` / `:302` / `:303`）。
+/// `TileAnimationOffset = i16@off+22`（对应 C# `_upstream/CrystalStudio/LegacyMapReader.cs:302` / `:304` / `:305`）。
 fn 断言_type3尾区(
     p: &Path,
     尺寸: (u16, u16),

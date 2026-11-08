@@ -3,23 +3,23 @@
 //! # 一、文件头（52 字节，`TMapHeader`）
 //!
 //! 与 [`crate::formats::old12`] **完全相同**：`wWidth` `i16@0`、`wHeight` `i16@2`
-//! （C# `LegacyMapReader.cs:226`、`:228`）。C# 的 `ValidateDimensions(52, 14)` 在 `:229`。
+//! （C# `_upstream/CrystalStudio/LegacyMapReader.cs:228`、`:230`）。C# 的 `ValidateDimensions(52, 14)` 在 `:231`。
 //!
 //! # 二、单元格（14 字节，`TNewMapInfo`）
 //!
 //! | 格内偏移 | 字段 | 类型 | 说明 | 源码行号 |
 //! |---------|------|------|------|----------|
-//! | 0 | `wBkImg` | `u16` | 背景图号 | `:235` |
-//! | 2 | `wMidImg` | `u16` | 中间图号 | `:237` |
-//! | 4 | `wFrImg` | `u16` | 前景图号 | `:239` |
-//! | 6 | `btDoorIndex` | `u8` | 门索引 | `:241` |
-//! | 7 | `btDoorOffset` | `u8` | 门偏移 | `:242` |
-//! | 8 | `btAniFrame` | `u8` | 前景动画帧 | `:243` |
-//! | 9 | `btAniTick` | `u8` | 前景动画节拍 | `:244` |
-//! | 10 | `btArea` | `u8` | 区域 / 前景库号 | `:245` |
-//! | 11 | `btLight` | `u8` | 光照 | `:246` |
-//! | 12 | `btTiles` | `u8` | **背景库号** | `:247` |
-//! | 13 | `btsmTiles` | `u8` | **中间层库号** | `:248` |
+//! | 0 | `wBkImg` | `u16` | 背景图号 | `:237` |
+//! | 2 | `wMidImg` | `u16` | 中间图号 | `:239` |
+//! | 4 | `wFrImg` | `u16` | 前景图号 | `:241` |
+//! | 6 | `btDoorIndex` | `u8` | 门索引 | `:243` |
+//! | 7 | `btDoorOffset` | `u8` | 门偏移 | `:244` |
+//! | 8 | `btAniFrame` | `u8` | 前景动画帧 | `:245` |
+//! | 9 | `btAniTick` | `u8` | 前景动画节拍 | `:246` |
+//! | 10 | `btArea` | `u8` | 区域 / 前景库号 | `:247` |
+//! | 11 | `btLight` | `u8` | 光照 | `:248` |
+//! | 12 | `btTiles` | `u8` | **背景库号** | `:249` |
+//! | 13 | `btsmTiles` | `u8` | **中间层库号** | `:250` |
 //!
 //! 合计 14 字节，**无尾区**。
 //!
@@ -28,7 +28,7 @@
 //! | 来源 | 第 12 字节 | 第 13 字节 |
 //! |------|-----------|-----------|
 //! | `client/reference_full/Classes/map/TMap.h`（`TNewMapInfo`） | `byte btTiles` | `byte btsmTiles` |
-//! | C# `LegacyMapReader.cs:247-248` | `BackIndex = Bytes[offset++] + 100` | `MiddleIndex = Bytes[offset++] + 110` |
+//! | C# `_upstream/CrystalStudio/LegacyMapReader.cs:249-250` | `BackIndex = Bytes[offset++] + 100` | `MiddleIndex = Bytes[offset++] + 110` |
 //!
 //! ⇒ 两者**不矛盾**：同一个字节，客户端当「瓦片库号」，C# 当「图层库号 + 100/110 偏移」。
 //! 本 crate 存**原样字节**，放在 [`crate::Cell::tiles`] / [`crate::Cell::sm_tiles`]
@@ -38,23 +38,23 @@
 //! # 四、存储顺序：**列优先**
 //!
 //! ```text
-//! offset = 52 + (x * h + y) * 14      // x 外层、y 内层（C# `:231-232`）
+//! offset = 52 + (x * h + y) * 14      // x 外层、y 内层（C# `:233-234`）
 //! ```
 //!
 //! # 五、C# 的变换
 //!
 //! | 变换 | C# 源码 | 本模块函数 |
 //! |------|---------|-----------|
-//! | 前景库号 = `btArea + 120` | `:245` | [`csharp_front_lib`] |
-//! | 背景库号 = `btTiles + 100` | `:247` | [`csharp_back_lib`] |
-//! | 中间层库号 = `btsmTiles + 110` | `:248` | [`csharp_middle_lib`] |
-//! | 背景带 `0x8000` ⇒ `(v & 0x7FFF) \| 0x20000000` | `:249-250` | [`csharp_back_image`] |
-//! | 有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && (btArea+120) > 0` | `:253` | [`csharp_has_front`] |
+//! | 前景库号 = `btArea + 120` | `:247` | [`csharp_front_lib`] |
+//! | 背景库号 = `btTiles + 100` | `:249` | [`csharp_back_lib`] |
+//! | 中间层库号 = `btsmTiles + 110` | `:250` | [`csharp_middle_lib`] |
+//! | 背景带 `0x8000` ⇒ `(v & 0x7FFF) \| 0x20000000` | `:251-252` | [`csharp_back_image`] |
+//! | 有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && (btArea+120) > 0` | `:255` | [`csharp_has_front`] |
 //!
 //! # 六、判别为什么不能只看标题
 //!
 //! C# 用标题字节判这一支：`Bytes[4] == 0x0F && Bytes[18] == 0x0D && Bytes[19] == 0x0A`
-//! （`:91`）。实测两个方向都会错：
+//! （`:93`）。实测两个方向都会错：
 //!
 //! - **漏判**：`GodotClient/maps/10.map`（110×118，`52+14*12980 = 181772` 精确成立）
 //!   的标题首字节是 `0x07` 而不是 `0x0F` ⇒ C# 落到 `LoadMapType0` 按 12 B/格读，读成花图；
@@ -81,13 +81,13 @@ pub const TAIL_LEN: usize = 0;
 /// 阻挡位。
 pub const BLOCK_BIT: u16 = 0x8000;
 
-/// 前景库号偏移（C# `:245` 的 `+120`）。
+/// 前景库号偏移（C# `:247` 的 `+120`）。
 pub const FRONT_LIB_OFFSET: u16 = 120;
 
-/// 背景库号偏移（C# `:247` 的 `+100`）。
+/// 背景库号偏移（C# `:249` 的 `+100`）。
 pub const BACK_LIB_OFFSET: u16 = 100;
 
-/// 中间层库号偏移（C# `:248` 的 `+110`）。
+/// 中间层库号偏移（C# `:250` 的 `+110`）。
 pub const MIDDLE_LIB_OFFSET: u16 = 110;
 
 /// 格式单例。
@@ -114,10 +114,10 @@ impl MapFormat for Shanda14 {
             }
     }
 
-    /// C# `:91`：`Bytes[4] == 0x0F && Bytes[18] == 0x0D && Bytes[19] == 0x0A`
+    /// C# `:93`：`Bytes[4] == 0x0F && Bytes[18] == 0x0D && Bytes[19] == 0x0A`
     /// （标题第 0 字节 `0x0F`、第 14/15 字节 `\r\n`）。
     ///
-    /// ⚠ `Shanda2012` 与本格式**共用**这条谓词，两者只能靠文件长度区分（C# `:95` 同此思路）。
+    /// ⚠ `Shanda2012` 与本格式**共用**这条谓词，两者只能靠文件长度区分（C# `:97` 同此思路）。
     fn header_signature(&self, bytes: &[u8]) -> bool {
         bytes.len() >= 20 && bytes[4] == 0x0F && bytes[18] == 0x0D && bytes[19] == 0x0A
     }
@@ -200,7 +200,7 @@ impl MapFormat for Shanda14 {
         FormatCaps {
             can_write: true,
             // 2026-11-05（P1-9）复核后**保持 `true`**：格内 14 字节全部有名字
-            // （本模块文档第二节，逐条带 `LegacyMapReader.cs` 行号）、`tail` 恒空、
+            // （本模块文档第二节，逐条带 `_upstream/CrystalStudio/LegacyMapReader.cs` 行号）、`tail` 恒空、
             // `unmodeled_fields(Shanda14)` 为空、有真实样本（`41.map` 等）⇒ 两条判据都满足。
             editable: true,
             // 无保留（契约：`editable == true` ⟺ 本字段是空串）。
@@ -225,22 +225,22 @@ impl MapFormat for Shanda14 {
     }
 }
 
-/// C# `:245`：前景库号 = `btArea + 120`。
+/// C# `:247`：前景库号 = `btArea + 120`。
 pub fn csharp_front_lib(area: u8) -> u16 {
     u16::from(area) + FRONT_LIB_OFFSET
 }
 
-/// C# `:247`：背景库号 = `btTiles + 100`。
+/// C# `:249`：背景库号 = `btTiles + 100`。
 pub fn csharp_back_lib(tiles: u8) -> u16 {
     u16::from(tiles) + BACK_LIB_OFFSET
 }
 
-/// C# `:248`：中间层库号 = `btsmTiles + 110`。
+/// C# `:250`：中间层库号 = `btsmTiles + 110`。
 pub fn csharp_middle_lib(sm_tiles: u8) -> u16 {
     u16::from(sm_tiles) + MIDDLE_LIB_OFFSET
 }
 
-/// C# `:249-250`：背景图号带 `0x8000` ⇒ 清位并打渲染层标记 `0x20000000`。
+/// C# `:251-252`：背景图号带 `0x8000` ⇒ 清位并打渲染层标记 `0x20000000`。
 pub fn csharp_back_image(raw: u16) -> u32 {
     if raw & BLOCK_BIT != 0 {
         u32::from(raw & 0x7FFF) | 0x2000_0000
@@ -249,7 +249,7 @@ pub fn csharp_back_image(raw: u16) -> u32 {
     }
 }
 
-/// C# `:253`：有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && (btArea + 120) > 0`
+/// C# `:255`：有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && (btArea + 120) > 0`
 /// （后者恒真，因为 `btArea + 120 >= 120`）。
 pub fn csharp_has_front(fr_img: u16) -> bool {
     (fr_img & 0x7FFF) > 0

@@ -10,9 +10,9 @@ use std::fmt;
 
 /// 单张地图允许的最大格数（`w * h`）—— 它只是**三条件合取中的第三条**。
 ///
-/// 口径来源（真值）：C# `MapDimensions.cs:7`（`MaximumCells = 16_000_000`）与
-/// `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 第三条
-/// （同值另见 `LegacyMapReader.cs:50` 的 `count > 16_000_000`、`Document.cs:58`）。
+/// 口径来源（真值）：C# `_upstream/CrystalStudio/MapDimensions.cs:7`（`MaximumCells = 16_000_000`）与
+/// `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip` 第三条
+/// （同值另见 `_upstream/CrystalStudio/LegacyMapReader.cs:51-53` 的 `count > 16_000_000`）。
 ///
 /// ⚠ **本常量不是完整的合法性判据**：`40000×1` 只有 40000 格却存不下去（单边超
 /// [`MAX_DIMENSION`]）。判尺寸请用 [`crate::can_round_trip`]（布尔）/ 内部
@@ -25,7 +25,7 @@ pub const MAX_CELLS: u64 = 16_000_000;
 
 /// 单边维度上限（宽、高各自的最大值）= **32767** = `i16::MAX` = C# `short.MaxValue`。
 ///
-/// 口径来源（真值）：C# `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 里
+/// 口径来源（真值）：C# `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip` 里
 /// 两条 `<= short.MaxValue`：
 ///
 /// ```csharp
@@ -34,7 +34,7 @@ pub const MAX_CELLS: u64 = 16_000_000;
 /// ```
 ///
 /// 为什么这是**往返缺陷**而不是「上限保守一点」：九种格式的头部宽高最终都落在
-/// 16 位**有符号**字段上（`tmap_dims` 用 `i16_at` 读；C# `Document.cs:90` 用
+/// 16 位**有符号**字段上（`tmap_dims` 用 `i16_at` 读；C# `_upstream/CrystalStudio/Document.cs:90` 用
 /// `w.Write(checked((short)Width))` 写）。`32768..=65535` 这一段虽然塞得进 `u16`，
 /// 写盘后要么在 C# 侧 `checked` 抛溢出，要么回读成负数 ⇒ 存下去就再也读不回来。
 ///
@@ -57,7 +57,7 @@ pub enum FormatError {
     },
     /// 宽或高不是正数。
     ///
-    /// 真值：C# `LegacyMapReader.cs:50`（`Width <= 0 || Height <= 0` ⇒ 抛异常）。
+    /// 真值：C# `_upstream/CrystalStudio/LegacyMapReader.cs:51-53`（`Width <= 0 || Height <= 0` ⇒ 抛异常）。
     InvalidDimensions {
         /// 判定用的格式。
         format: FormatId,
@@ -68,11 +68,11 @@ pub enum FormatError {
     },
     /// 宽或高超过 **32767**（`i16::MAX` = C# `short.MaxValue`）⇒ 存下去就回读不回来。
     ///
-    /// 真值：C# `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 里两条
+    /// 真值：C# `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip` 里两条
     /// `<= short.MaxValue`。本变体是这条判据在**读侧与写侧**共用的拒绝形态。
     ///
     /// 为什么必须显式拒绝而不是 `as u16` 一转了之：九种格式的头部宽高最终都是
-    /// 16 位**有符号**字段（`tmap_dims` 用 `i16_at`；C# `Document.cs:90` 写
+    /// 16 位**有符号**字段（`tmap_dims` 用 `i16_at`；C# `_upstream/CrystalStudio/Document.cs:90` 写
     /// `checked((short)Width)`）。`32768..=65535` 塞得进 `u16` 但回读不回来；
     /// 静默 `as u16` 更是把原始值改成另一个数（写出去的是别的尺寸）—— 属于数据损坏。
     ///
@@ -108,7 +108,7 @@ pub enum FormatError {
     /// 文件长度不足以容纳「头部 + 格长 × 格数」。
     ///
     /// 对应 C# `ValidateDimensions` 的 `headerBytes + count * minimumCellBytes > Bytes.LongLength`
-    /// 分支（`LegacyMapReader.cs:52-53`）。
+    /// 分支（`_upstream/CrystalStudio/LegacyMapReader.cs:54-55`）。
     Truncated {
         /// 判定用的格式。
         format: FormatId,
@@ -144,10 +144,10 @@ pub enum FormatError {
     /// 的文件 **0 个**（`52 + 36·w·h` 的有 195 个）。
     ///
     /// **C# 实现本来就是 36 B/格，不存在「C# 按 40 读」这回事**（2026-11-05 订正）：
-    /// `LegacyMapReader.cs:300` 与 `:303` 的 `ToInt16(Bytes, offset)` **不推进 `offset`**，
-    /// 所以 `:303` 那 2 字节落在 `:304` 的 `offset += 14` 跳过区**内部**（rel 22-23 与
+    /// `_upstream/CrystalStudio/LegacyMapReader.cs:302` 与 `:305` 的 `ToInt16(Bytes, offset)` **不推进 `offset`**，
+    /// 所以 `:305` 那 2 字节落在 `:306` 的 `offset += 14` 跳过区**内部**（rel 22-23 与
     /// 跳过区 22-35 重叠），一格合计 `2+2+2+1+1+1+1+1+1 + 2+7+1+14 = 36`；
-    /// 与 `:280` 的 `ValidateDimensions(52, 36)` **完全自洽**。
+    /// 与 `:282` 的 `ValidateDimensions(52, 36)` **完全自洽**。
     ///
     /// ⇒ 本变体保留**只为防御未来出现的怪文件**（长度恰好凑成 `52 + 40·w·h`），
     /// 绝不按 36 B 硬读（那会把整张图读成花图）。
@@ -160,7 +160,7 @@ pub enum FormatError {
     },
     /// CrystalCs（Type100）版本号不在 `1..=5`。
     ///
-    /// 真值：C# `LegacyMapReader.cs:567`（`if (ver < 1 || ver > 5) throw ...`）。
+    /// 真值：C# `_upstream/CrystalStudio/LegacyMapReader.cs:569`（`if (ver < 1 || ver > 5) throw ...`）。
     UnsupportedVersion {
         /// 头部里读到的版本号。
         ver: u16,

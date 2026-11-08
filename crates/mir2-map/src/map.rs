@@ -45,12 +45,12 @@ pub struct Map {
 impl Map {
     /// 解析 `.map` 字节流。
     ///
-    /// 判定顺序（尺寸护栏**先于**格长判据，与 C# `LegacyMapReader.cs:47-54`
-    /// 的 `ValidateDimensions` 同序，尺寸判据本身与 `MapDimensions.cs:11-12@acfbbf8a`
+    /// 判定顺序（尺寸护栏**先于**格长判据，与 C# `_upstream/CrystalStudio/LegacyMapReader.cs:49-56`
+    /// 的 `ValidateDimensions` 同序，尺寸判据本身与 `_upstream/CrystalStudio/MapDimensions.cs:11-12`
     /// 的 `CanRoundTrip` 三条件一一对应）：
     /// 1. `len < 52` ⇒ [`MapError::TooShort`]；
     /// 2. `w == 0 || h == 0` ⇒ [`MapError::ZeroDimension`]
-    ///    （真值：客户端 `map_loader.gd:94-95` 与 C# `LegacyMapReader.cs:50` 都直接拒绝。
+    ///    （真值：客户端 `map_loader.gd:94-95` 与 C# `_upstream/CrystalStudio/LegacyMapReader.cs:51-53` 都直接拒绝。
     ///    放行会把「52 字节全零」这类损坏/截断文件静默救活成 0×0 空地图，且编辑器仍认为它可保存）；
     /// 3. `w > 32767 || h > 32767` ⇒ [`MapError::DimensionTooLarge`]
     ///    （真值：C# `CanRoundTrip` 的两条 `<= short.MaxValue`。`.map` 头的宽高是
@@ -76,7 +76,7 @@ impl Map {
         let width = u16::from_le_bytes([header_raw[0], header_raw[1]]);
         let height = u16::from_le_bytes([header_raw[2], header_raw[3]]);
 
-        // 尺寸护栏（官方三条件合取，顺序照 C# `MapDimensions.cs:11-12@acfbbf8a` 的短路顺序）：
+        // 尺寸护栏（官方三条件合取，顺序照 C# `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的短路顺序）：
         // ① 0 尺寸；② 单边 > 32767；③ 格数 > 16M。
         //
         // ① 若放到长度判据之后，`w*h == 0` 会因为三档期望长度都等于 52 而被判成 Old12 空图；
@@ -112,7 +112,7 @@ impl Map {
     ///
     /// # 一、上游依据：`MapDocument(int width, int height)` 到底做了什么
     ///
-    /// CrystalStudio C# `Document.cs:37-41`：
+    /// C# `_upstream/CrystalStudio/Document.cs:37-41`：
     ///
     /// ```csharp
     /// public MapDocument(int width, int height)
@@ -124,26 +124,26 @@ impl Map {
     ///
     /// 逐条对齐：
     ///
-    /// 1. **宽高怎么存**：两个 `int` 属性（`Document.cs:35-36`），构造时只赋值、不做任何推导。
+    /// 1. **宽高怎么存**：两个 `int` 属性（`_upstream/CrystalStudio/Document.cs:35-36`），构造时只赋值、不做任何推导。
     ///    本仓对应 [`Map::width`] / [`Map::height`]（`u16`；为什么不是无上限的 `int`，
     ///    见 [`crate::MAX_DIMENSION`] 的文档）。
     /// 2. **格数组怎么初始化**：**不初始化**。C# 的格表是稀疏字典
-    ///    `Dictionary<int, Cell> cells = [];`（`Document.cs:43`），构造完**一个格都不存在**；
-    ///    读取走 `Get(x, y)`，未命中返回静态 `empty`（`Document.cs:45`、`:50`），
-    ///    而 `Cell` 的字段默认值全是 0（`Document.cs:7-32`；`Empty` 判据 `:31` 也把全 0 当空格）
+    ///    `Dictionary<int, Cell> cells = [];`（`_upstream/CrystalStudio/Document.cs:43`），构造完**一个格都不存在**；
+    ///    读取走 `Get(x, y)`，未命中返回静态 `empty`（`_upstream/CrystalStudio/Document.cs:45`、`:50`），
+    ///    而 `Cell` 的字段默认值全是 0（`_upstream/CrystalStudio/Document.cs:7-32`；`Empty` 判据 `:31` 也把全 0 当空格）
     ///    ⇒ **语义等价于「`w*h` 个全 0 格」**。本仓 [`Map::cells`] 是定长 `Vec`（不是稀疏表），
     ///    所以这里显式铺 `w*h` 个 [`Cell::default()`]，与 C# 的读取结果逐字段相同。
     /// 3. **格式（`FormatId`）默认是什么**：构造函数**既不接受也不设置**格式 ——
-    ///    它只留一个 `SourceFormat` 属性（`Document.cs:42`）由调用方后置赋值，
+    ///    它只留一个 `SourceFormat` 属性（`_upstream/CrystalStudio/Document.cs:42`）由调用方后置赋值，
     ///    缺省即枚举零值 `AssetSourceFormat.Default`
-    ///    （`SettingsStore.cs:5`：`public enum AssetSourceFormat { Default, Sanxiu }`）。
+    ///    （`_upstream/CrystalStudio/SettingsStore.cs:5`：`public enum AssetSourceFormat { Default, Sanxiu }`）。
     ///    ⚠ C# 的 `SourceFormat` 是**素材来源**（是否三修素材），**不是磁盘格式**：
-    ///    上游保存永远写自己那一套（`Document.cs:90` 的 `1 / 'C' / '#' / w / h` +
+    ///    上游保存永远写自己那一套（`_upstream/CrystalStudio/Document.cs:90` 的 `1 / 'C' / '#' / w / h` +
     ///    `:102` 的 `CellCodec.Write`，26 B/格的 Crystal 格式），与源文件格式无关。
     ///    ⇒ 本函数的 `format` 参数**没有上游对应物**：它是本 crate 自己的「三档格长」
     ///    投影（见 [`CellFormat`]），语义是「按这一档的格长铺格」，**不是**「仿制某种上游格式」。
     /// 4. **header 怎么造**：C# 构造函数**不造 header**，头部字节只在保存时现写
-    ///    （`Document.cs:90`）。本仓 [`Map`] 是「52 字节头 + 格」的结构体，
+    ///    （`_upstream/CrystalStudio/Document.cs:90`）。本仓 [`Map`] 是「52 字节头 + 格」的结构体，
     ///    [`Map::to_bytes`] 直接吐 `header_raw` ⇒ 空白图**必须**在这里把宽高写进头部，
     ///    否则写出的文件头是 52 字节全 0（宽高也是 0），连自己都读不回来。
     ///    头部布局：`wWidth` u16@0、`wHeight` u16@2
@@ -165,14 +165,14 @@ impl Map {
     ///
     /// 直接调 [`validate_dimensions`]（与 [`Map::parse`] 同一个单点，不另写一套），
     /// 对应 C# 构造函数第一行 `MapDimensions.Validate(width, height)`
-    /// （`Document.cs:39` → `MapDimensions.cs:14-18` → `:11-12@acfbbf8a` 的 `CanRoundTrip` 三条件）。
+    /// （`_upstream/CrystalStudio/Document.cs:39` → `_upstream/CrystalStudio/MapDimensions.cs:14-18` → `:11-12` 的 `CanRoundTrip` 三条件）。
     ///
     /// # Errors
     ///
     /// [`MapError::ZeroDimension`] / [`MapError::DimensionTooLarge`] / [`MapError::TooManyCells`]
     /// —— 与 [`Map::parse`] 完全同一批变体、同一短路顺序。
     pub fn blank(width: u16, height: u16, format: CellFormat) -> Result<Map, MapError> {
-        // 上游构造函数第一行（`Document.cs:39`）。放在最前面：不合法的尺寸一格都不许铺。
+        // 上游构造函数第一行（`_upstream/CrystalStudio/Document.cs:39`）。放在最前面：不合法的尺寸一格都不许铺。
         validate_dimensions(width, height)?;
 
         let mut header_raw = [0u8; HEADER_LEN];
@@ -460,7 +460,7 @@ mod tests {
         // 防有人改 MAX_CELLS 却不同步注释/C# 口径
         assert_eq!(crate::MAX_CELLS, 16_000_000);
         assert_eq!(4000usize * 4000, crate::MAX_CELLS);
-        // 单边上限同理（C# `MapDimensions.cs:11-12` 的两条 `<= short.MaxValue`）
+        // 单边上限同理（C# `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的两条 `<= short.MaxValue`）
         assert_eq!(crate::MAX_DIMENSION, 32767);
     }
 
@@ -573,7 +573,7 @@ mod tests {
 
     /// `Map::blank(256,256,fmt)`：宽高写对、格**全 0**、无尾区、字节数精确。
     ///
-    /// 对应上游 `MapDocument(int,int)` 的语义（`Document.cs:37-41`：只记宽高，
+    /// 对应上游 `MapDocument(int,int)` 的语义（`_upstream/CrystalStudio/Document.cs:37-41`：只记宽高，
     /// 格表是稀疏字典、未命中返回全 0 的 `empty`，见 `Map::blank` 文档第 2 条）。
     #[test]
     fn 空白图三档尺寸正确且格全零() {

@@ -9,7 +9,7 @@
 //! ⚠ `Wemade2010` / `AntiHack` / `Mir3Wemade` / `Mir3Shanda` / `Heroes34` / `CrystalCs`
 //! 六种格式**本机无真实样本**（`GodotClient/maps` 61 个 + `client/热血传奇23周年客户端/Map`
 //! 1097 个里 0 个命中），本文件是它们**唯一的**验证来源 —— 全部字节按
-//! `CrystalStudio/LegacyMapReader.cs` 的逐字段读法反推构造。
+//! `_upstream/CrystalStudio/LegacyMapReader.cs` 的逐字段读法反推构造。
 
 use mir2_format::formats::{crystal_cs, mir3_wemade};
 use mir2_format::{

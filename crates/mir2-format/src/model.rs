@@ -9,11 +9,11 @@
 //!
 //! | 字段 | 规格 | 实际 | 依据 |
 //! |------|------|------|------|
-//! | `bk_img` | `u16` | **`u32`** | `Wemade2010` 的背景图号是 **4 字节**（`LegacyMapReader.cs:193` `ToInt32(...) ^ 0xAA38AA38`），`Heroes34` 也是 4 字节（`:530` `ToInt32`） |
-//! | `bk_idx` / `mid_idx` / `fr_idx` | 无 | **新增 `i16`** | `Shanda14` 的 back/middle 库号在格内是 1 字节（`:247-248`），但 `CrystalCs` 的库号是 `i16`（`:578`/`:582`/`:592`）；`Mir3Wemade`/`Mir3Shanda` 的库号带 `-1` 哨兵（`:404`/`:470`）。统一用 `i16` 装「原样值」可同时覆盖 1 字节（存 0..=255）与 2 字节两种形态，无损 |
-//! | `tile_frames` | 无 | **新增 `u8`** | `TileAnimationFrames`（`:302`、`:645`）是格中间的 1 字节，用 `tail` 装会让「读/写交错切分」变得不可验证 |
-//! | `mid_ani_frame` / `mid_ani_tick` | 无 | **新增 `u8`×2** | `Mir3`/`CrystalCs` 的中间层动画帧与节拍（`:416`、`:639-640`）与前景层是**两组不同字节** |
-//! | `fr_count` | 无 | **新增 `u8`** | `CrystalCs` v3+ 每格开头有「前景图个数」字节（`:588`），它是**变长格**的开关：写回时必须原样重现，否则格长漂移 |
+//! | `bk_img` | `u16` | **`u32`** | `Wemade2010` 的背景图号是 **4 字节**（`_upstream/CrystalStudio/LegacyMapReader.cs:195` `ToInt32(...) ^ 0xAA38AA38`），`Heroes34` 也是 4 字节（`:532` `ToInt32`） |
+//! | `bk_idx` / `mid_idx` / `fr_idx` | 无 | **新增 `i16`** | `Shanda14` 的 back/middle 库号在格内是 1 字节（`:249-250`），但 `CrystalCs` 的库号是 `i16`（`:580`/`:584`/`:594`）；`Mir3Wemade`/`Mir3Shanda` 的库号带 `-1` 哨兵（`:406`/`:472`）。统一用 `i16` 装「原样值」可同时覆盖 1 字节（存 0..=255）与 2 字节两种形态，无损 |
+//! | `tile_frames` | 无 | **新增 `u8`** | `TileAnimationFrames`（`:304`、`:647`）是格中间的 1 字节，用 `tail` 装会让「读/写交错切分」变得不可验证 |
+//! | `mid_ani_frame` / `mid_ani_tick` | 无 | **新增 `u8`×2** | `Mir3`/`CrystalCs` 的中间层动画帧与节拍（`:418`、`:641-642`）与前景层是**两组不同字节** |
+//! | `fr_count` | 无 | **新增 `u8`** | `CrystalCs` v3+ 每格开头有「前景图个数」字节（`:590`），它是**变长格**的开关：写回时必须原样重现，否则格长漂移 |
 //!
 //! # 二、`Cell` 里存的是「原样值」，不是「渲染值」
 //!
@@ -30,11 +30,11 @@
 //!
 //! | 字段 | 常量值 | 出现在哪些格式 | C# 行号 |
 //! |------|--------|----------------|---------|
-//! | [`Cell::mid_idx`]（`MiddleIndex`） | **1** | `Old12` / `Wemade2010` / `AntiHack` / `Heroes34` | `:134` / `:194` / `:347` / `:531` |
-//! | [`Cell::mid_ani_tick`]（`MiddleAnimationTick`） | **1** | `Mir3Shanda` | `:489` |
-//! | [`Cell::ani_tick`]（`franimationtick`） | **1** | `Mir3Shanda` | `:490` |
-//! | [`Cell::mid_ani_tick`] | **0** | `Mir3Wemade` | `:420` |
-//! | [`Cell::ani_tick`] | **0** | `Mir3Wemade` | `:421` |
+//! | [`Cell::mid_idx`]（`MiddleIndex`） | **1** | `Old12` / `Wemade2010` / `AntiHack` / `Heroes34` | `:136` / `:196` / `:349` / `:533` |
+//! | [`Cell::mid_ani_tick`]（`MiddleAnimationTick`） | **1** | `Mir3Shanda` | `:491` |
+//! | [`Cell::ani_tick`]（`franimationtick`） | **1** | `Mir3Shanda` | `:492` |
+//! | [`Cell::mid_ani_tick`] | **0** | `Mir3Wemade` | `:422` |
+//! | [`Cell::ani_tick`] | **0** | `Mir3Wemade` | `:423` |
 //!
 //! **本 crate 的处置：上表 5 组一律留 `0`（`Cell::default()` 的默认值），不虚构 C# 的常量。**
 //! ⚠ 仅限**上表这 5 组**；同名字段在别的格式里是**真实磁盘字段**（例如 `mid_idx` 在
@@ -76,7 +76,7 @@
 //!
 //! # 五、尺寸护栏：**三条件合取，读写两侧同一判据**（2026-11-06 补）
 //!
-//! 真值：C# `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` ——
+//! 真值：C# `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip` ——
 //! `w>0 && h>0` **且** `w<=32767 && h<=32767`（[`crate::MAX_DIMENSION`]）**且**
 //! `w*h<=16_000_000`（[`crate::MAX_CELLS`]）。
 //!
@@ -88,7 +88,7 @@
 //! | `validate_write_dims` | `pub(crate)` | `write_fixed`（七种定长格式）+ `CrystalCs` / `Mir3Wemade` 两个自定义 `write` |
 //!
 //! ⚠ 「只看 16M 格」是**不完整**口径：`40000×1` 只有 40000 格，但头部宽高是 16 位有符号
-//! 字段（C# `Document.cs:90` 的 `checked((short)Width)`），超 32767 写盘后读不回来。
+//! 字段（C# `_upstream/CrystalStudio/Document.cs:90` 的 `checked((short)Width)`），超 32767 写盘后读不回来。
 //! ⚠ 读写**两侧**都要挂：只改读入口会留下「保存侧仍能写出 > 32767」的漏洞。
 
 use crate::error::{FormatError, MAX_CELLS, MAX_DIMENSION};
@@ -138,7 +138,7 @@ pub(crate) fn put_u32(out: &mut Vec<u8>, v: u32) {
 
 /// 九种地图格式的标识。
 ///
-/// 声明顺序**就是** C# `LegacyMapReader.cs:55-117` 的判别链顺序
+/// 声明顺序**就是** C# `_upstream/CrystalStudio/LegacyMapReader.cs:57-119` 的判别链顺序
 /// （`CrystalCs` → `Mir3Wemade` → `Mir3Shanda` → `AntiHack` → `Wemade2010` →
 /// `Shanda2012`/`Shanda14` → `Heroes34` → `Old12` 兜底）。
 /// [`crate::registry`] 的切片顺序与之一致。
@@ -195,10 +195,10 @@ impl FormatId {
 ///
 /// | 规格书的 `*_raw` | 本 crate 字段 | 被掩的位 | 源码 |
 /// |------------------|---------------|----------|------|
-/// | `flag_raw` | [`Cell::flag`] | 整字节 8 位，只有 bit0/bit1 被 C# 用来派生碰撞 | `:415`、`:469` |
-/// | `light_raw` | [`Cell::light`] | 高 4 位（C# 读时 `& 0x0F` 再 `* 4`） | `:433-434`、`:491-492` |
-/// | `fr_anim_raw` | [`Cell::ani_frame`] | Type5 的 bit4-6（`& 0x8F`）、Type6 的 `> 0x0F` 高位 | `:418`、`:487` |
-/// | `door_raw` | [`Cell::door`] | Type100 的 bit7（C# 读时 `& 0x7F`） | `:625` |
+/// | `flag_raw` | [`Cell::flag`] | 整字节 8 位，只有 bit0/bit1 被 C# 用来派生碰撞 | `:417`、`:471` |
+/// | `light_raw` | [`Cell::light`] | 高 4 位（C# 读时 `& 0x0F` 再 `* 4`） | `:435-436`、`:493-494` |
+/// | `fr_anim_raw` | [`Cell::ani_frame`] | Type5 的 bit4-6（`& 0x8F`）、Type6 的 `> 0x0F` 高位 | `:420`、`:489` |
+/// | `door_raw` | [`Cell::door`] | Type100 的 bit7（C# 读时 `& 0x7F`） | `:627` |
 ///
 /// ⇒ 上层要「语义值」时调用对应模块里带 `csharp_` 前缀的函数（例如
 /// [`formats::crystal_cs::csharp_door_index`](crate::formats::crystal_cs::csharp_door_index)），
@@ -209,10 +209,10 @@ pub struct Cell {
     ///
     /// - 12/14/36 字节格（`Old12`/`Shanda14`/`Shanda2012`，以及同样 12 B 的 `AntiHack`）：
     ///   `u16`（高 16 位恒 0），可能带 `0x8000` 阻挡位；
-    /// - `Wemade2010`：`u32`，**磁盘上已 XOR `0xAA38AA38`**（`LegacyMapReader.cs:193`）；
-    /// - `Heroes34`：`u32`，磁盘原样无 XOR（`:530`）；
-    /// - `Mir3*`：`u16`，磁盘值 `+1` 才是真实图号（`:405`、`:476`）；
-    /// - `CrystalCs`：`u32` 原样（`:580`）。
+    /// - `Wemade2010`：`u32`，**磁盘上已 XOR `0xAA38AA38`**（`_upstream/CrystalStudio/LegacyMapReader.cs:195`）；
+    /// - `Heroes34`：`u32`，磁盘原样无 XOR（`:532`）；
+    /// - `Mir3*`：`u16`，磁盘值 `+1` 才是真实图号（`:407`、`:478`）；
+    /// - `CrystalCs`：`u32` 原样（`:582`）。
     pub bk_img: u32,
     /// 中间层图号。
     pub mid_img: u16,
@@ -221,7 +221,7 @@ pub struct Cell {
     /// 背景层库号（原样）。
     ///
     /// 1 字节形态存 `0..=255`（`Shanda14`/`Shanda2012`/`Mir3*`），2 字节形态存 `i16`（`CrystalCs`）。
-    /// `Mir3*` 的 `255` 是 `-1` 哨兵（`:404`/`:470`），这里保留原字节，语义由模块的 `csharp_` 函数给出。
+    /// `Mir3*` 的 `255` 是 `-1` 哨兵（`:406`/`:472`），这里保留原字节，语义由模块的 `csharp_` 函数给出。
     pub bk_idx: i16,
     /// 中间层库号（原样）。语义同 [`Cell::bk_idx`]。
     ///
@@ -231,10 +231,10 @@ pub struct Cell {
     ///
     /// | 格式 | C# 行号 | 写法 |
     /// |------|---------|------|
-    /// | `Old12`（Type0） | `:134` | `MapCells[x, y].MiddleIndex = 1;` |
-    /// | `Wemade2010`（Type1） | `:194` | `MiddleIndex = 1,`（对象初始化器） |
-    /// | `AntiHack`（Type4） | `:347` | `MapCells[x, y].MiddleIndex = 1;` |
-    /// | `Heroes34`（Type7） | `:531` | `MiddleIndex = 1,`（对象初始化器） |
+    /// | `Old12`（Type0） | `:136` | `MapCells[x, y].MiddleIndex = 1;` |
+    /// | `Wemade2010`（Type1） | `:196` | `MiddleIndex = 1,`（对象初始化器） |
+    /// | `AntiHack`（Type4） | `:349` | `MapCells[x, y].MiddleIndex = 1;` |
+    /// | `Heroes34`（Type7） | `:533` | `MiddleIndex = 1,`（对象初始化器） |
     ///
     /// 本 crate 在这四种里把 `mid_idx` 留成 **0**（`Cell::default()`），**不影响往返** ——
     /// 因为这四支的 `write` **根本不写 `mid_idx`**（格内没有它的位置），`mid_idx` 只是
@@ -243,18 +243,18 @@ pub struct Cell {
     /// 其余五种格式里 `mid_idx` 是**真实磁盘字段**（`Shanda14`/`Shanda2012` 用 `sm_tiles`
     /// 承载、`Mir3Wemade`/`Mir3Shanda` 是格内 1 字节、`CrystalCs` 是 `i16`），照常读写。
     pub mid_idx: i16,
-    /// 前景层库号（原样）。仅 `CrystalCs` 有独立的 2 字节字段（`:592`、`:613`）。
+    /// 前景层库号（原样）。仅 `CrystalCs` 有独立的 2 字节字段（`:594`、`:615`）。
     pub fr_idx: i16,
-    /// `CrystalCs` v3+ 的「前景图个数」字节（`:588`）。其余格式恒 0 且不写出。
+    /// `CrystalCs` v3+ 的「前景图个数」字节（`:590`）。其余格式恒 0 且不写出。
     pub fr_count: u8,
-    /// 门索引（原样）。`CrystalCs` 语义上要 `& 0x7F`（`:625`），原样保留才能往返。
+    /// 门索引（原样）。`CrystalCs` 语义上要 `& 0x7F`（`:627`），原样保留才能往返。
     pub door: u8,
     /// 门偏移（原样）。
     pub door_offset: u8,
     /// Mir3 系列的**格标志字节**（`flag`），只出现在 `Mir3Wemade`（格内偏移 0）与
     /// `Mir3Shanda`（格内偏移 0）。
     ///
-    /// 语义（C# `LegacyMapReader.cs:436-437`、`:494-495`）：`bit0 == 1` ⇒ 背景层可走、
+    /// 语义（C# `_upstream/CrystalStudio/LegacyMapReader.cs:438-439`、`:496-497`）：`bit0 == 1` ⇒ 背景层可走、
     /// `bit1 == 1` ⇒ 前景层可走；对应位不为 1 时 C# 给背景图号打上
     /// `0x20000000` / `0x40000000` 阻挡标记。其余格式恒 0 且**不写出**。
     pub flag: u8,
@@ -264,7 +264,7 @@ pub struct Cell {
     ///
     /// # ⚠ `Mir3Shanda`（Type6）里它是**常量 1**，不是从文件读的
     ///
-    /// C# `:490` 写 `byte franimationtick = 1;`（格内没有对应字节），`:502` 再把它赋给
+    /// C# `:492` 写 `byte franimationtick = 1;`（格内没有对应字节），`:504` 再把它赋给
     /// `FrontAnimationTick`。本 crate 留 **0**，**不影响往返** —— `mir3_shanda.rs` 的 `write`
     /// 不写 `ani_tick`（格内没有它的位置）。**语义值 1 ≠ 磁盘值 0**，见模块文档第四节。
     pub ani_tick: u8,
@@ -274,9 +274,9 @@ pub struct Cell {
     ///
     /// # ⚠ `Mir3*` 两支里它是**常量**，不是从文件读的
     ///
-    /// - `Mir3Shanda`（Type6）：C# `:489` 写 `MapCells[x, y].MiddleAnimationTick = 1;`
+    /// - `Mir3Shanda`（Type6）：C# `:491` 写 `MapCells[x, y].MiddleAnimationTick = 1;`
     ///   ⇒ **常量 1**；
-    /// - `Mir3Wemade`（Type5）：C# `:420` 写 `MapCells[x, y].MiddleAnimationTick = 0;`
+    /// - `Mir3Wemade`（Type5）：C# `:422` 写 `MapCells[x, y].MiddleAnimationTick = 0;`
     ///   ⇒ **常量 0**（与本 crate 的默认值相同，等价）。
     ///
     /// 本 crate 在 `Mir3Shanda` 里留 **0**（而非 C# 语义的 1），**不影响往返** ——
@@ -285,15 +285,15 @@ pub struct Cell {
     /// `TMapInfo.btArea`（原样）。
     ///
     /// 12/14/15/36 字节格里它同时是**前景库号**（C# 的 `frindex`）：
-    /// `Old12` 是 `area + 2`（`:145`），`Shanda14`/`Shanda2012` 是 `area + 120`（`:245`），
-    /// `Mir3*` 是 `area + 200 / + 300`（`:422`、`:474`）。
+    /// `Old12` 是 `area + 2`（`:147`），`Shanda14`/`Shanda2012` 是 `area + 120`（`:247`），
+    /// `Mir3*` 是 `area + 200 / + 300`（`:424`、`:476`）。
     pub area: u8,
-    /// 光照（原样）。`Mir3*` 语义上要 `& 0x0F` 再 `* 4`（`:433-434`、`:491-492`）。
+    /// 光照（原样）。`Mir3*` 语义上要 `& 0x0F` 再 `* 4`（`:435-436`、`:493-494`）。
     pub light: u8,
     /// `TileAnimationImage`（原样，`CrystalCs` 是 `i16` 位模式）。
     ///
     /// 14/36 字节格里它就是 `TNewMapInfo.btTiles`（1 字节，值存 0..=255）——
-    /// C# 把它读成「背景库号 + 100」（`:247`），`TMap.h` 把它命名为 `btTiles`。
+    /// C# 把它读成「背景库号 + 100」（`:249`），`TMap.h` 把它命名为 `btTiles`。
     pub tiles: u16,
     /// `TileAnimationOffset`（原样）。14/36 字节格里是 `TNewMapInfo.btsmTiles`。
     pub sm_tiles: u16,
@@ -336,7 +336,7 @@ pub struct RawMap {
     /// 格数组之后剩余的字节（原样保留）。
     ///
     /// 两个来源：
-    /// 1. **`CrystalCs` 的尾部元数据块**（`Document.cs:77` → `PlacedStamps.cs:159-166`：
+    /// 1. **`CrystalCs` 的尾部元数据块**（`_upstream/CrystalStudio/Document.cs:77` → `_upstream/CrystalStudio/PlacedStamps.cs:159-166`：
     ///    `Brotli(JSON) + Int64 长度 + SHA256(32) + magic "CRYSTAL-STAMPS01"(16)`；无放置物时
     ///    整块不写）。它是格式定义的一部分，**严格入口也会保留**；
     /// 2. **长度多一截的畸形文件**（`client/热血传奇23周年客户端/Map/EM001.map` 等 67 个：
@@ -441,7 +441,7 @@ impl RawMap {
 /// 2. **`trailer` 把多余字节全吞掉**（`crystal_cs.rs` 的 `trailer = bytes[cur.off..]`）：
 ///    读错后剩下的字节照样原样写回；
 /// 3. **`detect` 只查下界**（`crystal_cs.rs` 的 `detect` 只判 `len >= min_len`，
-///    对齐 C# `:572` 的 `ValidateDimensions`）：尾块长度任意都算合法。
+///    对齐 C# `:574` 的 `ValidateDimensions`）：尾块长度任意都算合法。
 ///
 /// 而它**零真实样本**（本机 1158 个 `.map` 里 0 个带 `C#` 魔数）。
 /// ⇒ 字段顺序一旦有误，会在「可编辑 + 往返全绿」的双重假象下**把真实数据写坏**。
@@ -503,7 +503,7 @@ pub struct FormatCaps {
     /// **地表层能不能「逐格」落笔**（写 `Cell::bk_img` 后写回是否真的改变文件）。
     ///
     /// `false` 只出现在 `Mir3Wemade`（Type5）：它的背景图号来自**半分辨率 3 B / 2×2 块**
-    /// （C# `:399-408`），块里的一个 3 字节组同时决定 4 个格的背景；
+    /// （C# `:401-410`），块里的一个 3 字节组同时决定 4 个格的背景；
     /// `Cell::bk_img` 在该格式里恒 0 且**写回时不参与编码**
     /// （`mir3_wemade.rs` 的 `write` 不写 `bk_img`）。
     ///
@@ -529,7 +529,7 @@ pub struct FormatCaps {
     ///
     /// 九种格式**不是同一套极性**：`Old12`/`Shanda14`/`Shanda2012`/`Wemade2010`/`AntiHack`/
     /// `Heroes34` 是「图号 bit15 = 1 ⇒ 阻挡」；`Mir3Wemade`/`Mir3Shanda` 是
-    /// 「`flag` 位 = 1 ⇒ **可走**」（C# `:436-437`、`:494-495` 的 `!= 1` 取反）；
+    /// 「`flag` 位 = 1 ⇒ **可走**」（C# `:438-439`、`:496-497` 的 `!= 1` 取反）；
     /// `CrystalCs` 直接存原生标志位（`0x20000000` = Low、`0x40000000` = High）。
     pub collision_polarity: CollisionPolarity,
     /// 权威源码位置（`文件:行号`），用于报告溯源。
@@ -567,7 +567,7 @@ pub trait MapFormat: Send + Sync {
     /// 为什么比 C# 多一条长度自洽：C# 的判别只看标题字节，实测在真实样本上会误判
     /// （`client/热血传奇23周年客户端/Map/hell107.map` 等 4 个 12 B/格文件的标题恰好
     /// 命中 14 B/格 的签名，`GodotClient/maps/10.map` 等 17 个 14 B/格文件的标题首字节
-    /// 是 `0x07` 而不是 `0x0F`）。C# 自己也在 `:91-104` 用「文件长度」区分 14/36 B 两支
+    /// 是 `0x07` 而不是 `0x0F`）。C# 自己也在 `:93-106` 用「文件长度」区分 14/36 B 两支
     /// ⇒ 加长度自洽只是把 C# 已有的思路贯彻到底，不是新判据。
     fn detect(&self, bytes: &[u8]) -> bool;
 
@@ -600,7 +600,7 @@ pub trait MapFormat: Send + Sync {
 
 /// 该宽高能不能**往返**（写盘后再读回，宽高与字节都不变）。
 ///
-/// 与 C# `MapDimensions.CanRoundTrip` 逐字对应（`MapDimensions.cs:11-12@acfbbf8a`）：
+/// 与 C# `MapDimensions.CanRoundTrip` 逐字对应（`_upstream/CrystalStudio/MapDimensions.cs:11-12`）：
 ///
 /// ```csharp
 /// public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
@@ -648,7 +648,7 @@ enum DimsReject {
 
 /// **尺寸判定的唯一真源**：返回「第一个不满足的条件」，`None` ⇒ 合法。
 ///
-/// 顺序严格照 C# `CanRoundTrip`（`MapDimensions.cs:11-12@acfbbf8a`）的短路顺序：
+/// 顺序严格照 C# `CanRoundTrip`（`_upstream/CrystalStudio/MapDimensions.cs:11-12`）的短路顺序：
 /// 非正 → 单边 > 32767 → 格数 > 16M。
 ///
 /// ②在③之前不只是「照抄官方」：`40000×40000` 两条都命中，报「单边超 32767」才是根因
@@ -672,8 +672,8 @@ fn dims_verdict(width: i64, height: i64) -> Option<DimsReject> {
     None
 }
 
-/// 校验宽高（**读路径**；对齐 C# `LegacyMapReader.cs:47-54` 的 `ValidateDimensions`
-/// 与 `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip`）。
+/// 校验宽高（**读路径**；对齐 C# `_upstream/CrystalStudio/LegacyMapReader.cs:49-56` 的 `ValidateDimensions`
+/// 与 `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip`）。
 ///
 /// 判定与 [`can_round_trip`] 同源（都走 `dims_verdict`）：
 /// 非正 ⇒ [`FormatError::InvalidDimensions`]；单边 > 32767 ⇒

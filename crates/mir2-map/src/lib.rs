@@ -20,7 +20,7 @@
 //!
 //! # 一·五、尺寸判据是**三条件合取**，不是「16M 格」单条
 //!
-//! 真值：CrystalStudio C# `MapDimensions.cs:11-12@acfbbf8a`：
+//! 真值：C# `_upstream/CrystalStudio/MapDimensions.cs:11-12`：
 //!
 //! ```csharp
 //! public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
@@ -33,15 +33,15 @@
 //!
 //! ⚠ **旧文档的「只有 16M 格上限」表述是错的，本次已订正**：`40000×1` 只有 40000 格，
 //! 满足 16M 却违反 32767 —— 而 `.map` 头的宽高在 C# 侧是 `checked((short)Width)`
-//! （`Document.cs:90`）写出的 **16 位有符号**字段，本仓按 `i16` 读回 ⇒ 这类图写盘后回读不回来。
+//! （`_upstream/CrystalStudio/Document.cs:90`）写出的 **16 位有符号**字段，本仓按 `i16` 读回 ⇒ 这类图写盘后回读不回来。
 //! 属于 round-trip 缺陷，不是「上限保守一点」的取舍。
 //!
 //! - **0 尺寸**：`w*h == 0` 时三档期望长度都等于 52（`52 + 0`），长度判据自己会命中 `Old12`
 //!   ⇒ 若不先拦，52 字节全零的损坏文件会被**静默救活**成「0×0 空地图」，而且它仍然可保存。
-//!   真值：客户端 `map_loader.gd:94-95`（`w <= 0 or h <= 0` ⇒ 报错）与 C# `LegacyMapReader.cs:50`
+//!   真值：客户端 `map_loader.gd:94-95`（`w <= 0 or h <= 0` ⇒ 报错）与 C# `_upstream/CrystalStudio/LegacyMapReader.cs:51-53`
 //!   （`Width <= 0 || Height <= 0` ⇒ 抛 `Invalid or excessive map dimensions.`）都拒绝。
-//! - **16M 格**：真值取 C# `MapDimensions.cs:7` 的 `MaximumCells`（同值见
-//!   `LegacyMapReader.cs:50` 的 `count > 16_000_000`、`Document.cs:58`）。
+//! - **16M 格**：真值取 C# `_upstream/CrystalStudio/MapDimensions.cs:7` 的 `MaximumCells`（同值见
+//!   `_upstream/CrystalStudio/LegacyMapReader.cs:51-53` 的 `count > 16_000_000`）。
 //!   客户端**没有**这条格数上限 ⇒ 这是本库有意的编辑器护栏：格结构体 36 B 定长，12 B/格的图
 //!   内存约为文件的 3 倍，没有护栏时失败方式是 OOM 而不是明确报错。
 //!   （`32767` 那条**不是**自造护栏，见上。）

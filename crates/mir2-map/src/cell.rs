@@ -15,12 +15,12 @@
 //! 边界一：`w*h == 0` —— 长度判据**本身**不区分「0 格」（此时三档期望长度都等于 52），
 //! 但 [`crate::Map::parse`] 在调用本判据**之前**就因 `w == 0 || h == 0` 返回
 //! [`crate::MapError::ZeroDimension`]（与客户端 `map_loader.gd:94-95`、
-//! C# `LegacyMapReader.cs:50` 同口径）⇒ 「52 字节的空图」不是合法地图。
+//! C# `_upstream/CrystalStudio/LegacyMapReader.cs:51-53` 同口径）⇒ 「52 字节的空图」不是合法地图。
 //!
 //! 边界二：`w > 32767` 或 `h > 32767`（[`MAX_DIMENSION`]）—— 同样先于长度判据被拦下
-//! ⇒ 得到 [`crate::MapError::DimensionTooLarge`]。真值是 C# `MapDimensions.cs:11-12@acfbbf8a`
+//! ⇒ 得到 [`crate::MapError::DimensionTooLarge`]。真值是 C# `_upstream/CrystalStudio/MapDimensions.cs:11-12`
 //! 的 `CanRoundTrip`（`width is > 0 and <= short.MaxValue && …`）：`.map` 头的宽高在
-//! C# 侧是 `checked((short)Width)`（`Document.cs:90`）写出的 **16 位有符号** 字段，
+//! C# 侧是 `checked((short)Width)`（`_upstream/CrystalStudio/Document.cs:90`）写出的 **16 位有符号** 字段，
 //! `32768..=65535` 这一段虽然塞得进 `u16`，写盘后回读却回不来 ⇒ 属于往返缺陷，不是可选优化。
 //!
 //! 边界三：`w*h > 16_000_000`（[`MAX_CELLS`]）—— 同样先于长度判据被拦下
@@ -89,8 +89,8 @@ pub const EXT36_CELL_SIZE: usize = 36;
 
 /// 单张地图允许的最大格数（`w * h`）—— 它只是**三条件合取中的第三条**。
 ///
-/// 口径来源（真值）：CrystalStudio C# `MapDimensions.cs:7`（`MaximumCells = 16_000_000`）
-/// 与 `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip`：
+/// 口径来源（真值）：C# `_upstream/CrystalStudio/MapDimensions.cs:7`（`MaximumCells = 16_000_000`）
+/// 与 `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip`：
 ///
 /// ```csharp
 /// public static bool CanRoundTrip(int width, int height) => width is > 0 and <= short.MaxValue &&
@@ -106,7 +106,7 @@ pub const EXT36_CELL_SIZE: usize = 36;
 /// 判尺寸请一律调 [`validate_dimensions`]（或 [`can_round_trip`]）。
 ///
 /// 读写两侧的其它同值出处（不是另一套真值，是同一数值在 C# 另两处的落点）：
-/// `LegacyMapReader.cs:50` 的 `ValidateDimensions`（`count > 16_000_000`）、`Document.cs:58`。
+/// `_upstream/CrystalStudio/LegacyMapReader.cs:51-53` 的 `ValidateDimensions`（`count > 16_000_000`）。
 ///
 /// 为什么还需要这条「格数」护栏：本库的 [`Cell`] 是 **36 B 定长**（14 B 字段 + 22 B 尾区），
 /// 而 `Old12` 档每格只有 12 B ⇒ 内存约为文件大小的 3 倍。没有上限时，一张 200 MB 的
@@ -119,12 +119,12 @@ pub const MAX_CELLS: usize = 16_000_000;
 
 /// 单边维度上限（宽、高各自的最大值）= **32767** = `i16::MAX` = C# `short.MaxValue`。
 ///
-/// 口径来源（真值）：C# `MapDimensions.cs:11-12@acfbbf8a` 的
+/// 口径来源（真值）：C# `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的
 /// `CanRoundTrip` 里两条 `<= short.MaxValue`。
 ///
 /// 为什么必须有这一条（是**往返缺陷**，不是可选优化）：
 /// `.map` 文件头的 `wWidth` / `wHeight` 在 C# 侧是**有符号 16 位**字段 ——
-/// `Document.cs:90` 写的是 `w.Write(checked((short)Width))`；本仓 `mir2-format` 也按
+/// `_upstream/CrystalStudio/Document.cs:90` 写的是 `w.Write(checked((short)Width))`；本仓 `mir2-format` 也按
 /// `i16` 读回（`tmap_dims` 用 `i16_at`）。`32768..=65535` 这一段虽然塞得进 `u16`，
 /// 写盘后要么在 C# 侧 `checked` 直接抛溢出异常，要么回读成负数 ⇒ **存下去就再也读不回来**。
 ///
@@ -134,7 +134,7 @@ pub const MAX_DIMENSION: u16 = i16::MAX as u16;
 
 /// 该宽高能不能**往返**（解析成功 → 写回 → 再解析，宽高与字节都不变）。
 ///
-/// 与 C# `MapDimensions.CanRoundTrip` 逐字对应（`MapDimensions.cs:11-12@acfbbf8a`），
+/// 与 C# `MapDimensions.CanRoundTrip` 逐字对应（`_upstream/CrystalStudio/MapDimensions.cs:11-12`），
 /// 三条件**合取**，短路顺序也与官方一致：
 ///
 /// 1. `width > 0` 且 `height > 0`；
@@ -161,7 +161,7 @@ pub fn can_round_trip(width: u16, height: u16) -> bool {
 
 /// 尺寸校验：`Ok(())` ⇒ 合法；`Err` ⇒ **第一个**不满足的条件（官方的短路顺序）。
 ///
-/// 顺序**严格**照 C# `CanRoundTrip`（`MapDimensions.cs:11-12@acfbbf8a`）：
+/// 顺序**严格**照 C# `CanRoundTrip`（`_upstream/CrystalStudio/MapDimensions.cs:11-12`）：
 ///
 /// | 序 | 条件 | 拒绝时的错误变体 |
 /// |----|------|------------------|
@@ -502,7 +502,7 @@ mod tests {
 
     /// 单边 32767 接受、32768 / 65535 拒绝；0 一律拒绝。
     ///
-    /// 真值：`MapDimensions.cs:11-12@acfbbf8a` 的两条 `<= short.MaxValue`。
+    /// 真值：`_upstream/CrystalStudio/MapDimensions.cs:11-12` 的两条 `<= short.MaxValue`。
     #[test]
     fn 单边上限32767的边界() {
         assert_eq!(MAX_DIMENSION, 32767, "单边上限必须是 i16::MAX");

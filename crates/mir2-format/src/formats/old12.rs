@@ -4,8 +4,8 @@
 //!
 //! | 偏移 | 字段 | 类型 | 说明 |
 //! |------|------|------|------|
-//! | 0 | `wWidth` | `i16` | 宽（C# `LegacyMapReader.cs:124` `ToInt16`） |
-//! | 2 | `wHeight` | `i16` | 高（`:126`） |
+//! | 0 | `wWidth` | `i16` | 宽（C# `_upstream/CrystalStudio/LegacyMapReader.cs:126` `ToInt16`） |
+//! | 2 | `wHeight` | `i16` | 高（`:128`） |
 //! | 4 | `sTitle[16]` | — | 标题，**本格式不解释**，原样进 `header_raw` |
 //! | 20 | `UpdateDate` | `f64` | 原样保留 |
 //! | 28 | `Reserved[24]` | — | 原样保留 |
@@ -16,17 +16,17 @@
 //!
 //! | 格内偏移 | 字段 | 类型 | 说明 | 源码行号 |
 //! |---------|------|------|------|----------|
-//! | 0 | `wBkImg` | `u16` | 背景图号 | `:135` |
-//! | 2 | `wMidImg` | `u16` | 中间图号 | `:137` |
-//! | 4 | `wFrImg` | `u16` | 前景图号 | `:139` |
-//! | 6 | `btDoorIndex` | `u8` | 门索引 | `:141` |
-//! | 7 | `btDoorOffset` | `u8` | 门偏移 | `:142` |
-//! | 8 | `btAniFrame` | `u8` | 前景动画帧 | `:143` |
-//! | 9 | `btAniTick` | `u8` | 前景动画节拍 | `:144` |
-//! | 10 | `btArea` | `u8` | 区域（同时是**前景库号**，见下） | `:145` |
-//! | 11 | `btLight` | `u8` | 光照 | `:146` |
+//! | 0 | `wBkImg` | `u16` | 背景图号 | `:137` |
+//! | 2 | `wMidImg` | `u16` | 中间图号 | `:139` |
+//! | 4 | `wFrImg` | `u16` | 前景图号 | `:141` |
+//! | 6 | `btDoorIndex` | `u8` | 门索引 | `:143` |
+//! | 7 | `btDoorOffset` | `u8` | 门偏移 | `:144` |
+//! | 8 | `btAniFrame` | `u8` | 前景动画帧 | `:145` |
+//! | 9 | `btAniTick` | `u8` | 前景动画节拍 | `:146` |
+//! | 10 | `btArea` | `u8` | 区域（同时是**前景库号**，见下） | `:147` |
+//! | 11 | `btLight` | `u8` | 光照 | `:148` |
 //!
-//! 合计 12 字节，**无尾区**（`tail` 恒空）。C# 的 `ValidateDimensions(52, 12)`（`:127`）同口径。
+//! 合计 12 字节，**无尾区**（`tail` 恒空）。C# 的 `ValidateDimensions(52, 12)`（`:129`）同口径。
 //!
 //! # 三、存储顺序：**列优先**
 //!
@@ -35,7 +35,7 @@
 //! idx    = x * h + y                  // RawMap::cells 下标
 //! ```
 //!
-//! 依据：C# `:129-130` 是 `for (x) for (y)` 双层循环，且 `offset` 在内层单调递增
+//! 依据：C# `:131-132` 是 `for (x) for (y)` 双层循环，且 `offset` 在内层单调递增
 //! （`TMap.cpp:163-209` 的 `offset = sizeof(TMapHeader) + nAline*i + sizeof(TMapInfo)*nTy`
 //! 同样是「先按 x 跳整列、再按 y 走行」）。**本格式是列优先，不是行优先。**
 //!
@@ -43,10 +43,10 @@
 //!
 //! | 变换 | C# 源码 | 本模块函数 |
 //! |------|---------|-----------|
-//! | 背景图号带 `0x8000` ⇒ `(v & 0x7FFF) \| 0x20000000` | `:147-148` | [`csharp_back_image`] |
-//! | 前景库号 = `btArea + 2` | `:145` | [`csharp_front_lib`] |
-//! | 有前景 ⇔ `(wFrImg & 0x7FFF) > 0`（`frindex = btArea+2` 恒 ≥ 2，故 `frindex > 0` 恒真） | `:151` | [`csharp_has_front`] |
-//! | 前景带 `0x8000` ⇒ 背景再 `\| 0x40000000` | `:158-159` | [`csharp_back_image_full`] |
+//! | 背景图号带 `0x8000` ⇒ `(v & 0x7FFF) \| 0x20000000` | `:149-150` | [`csharp_back_image`] |
+//! | 前景库号 = `btArea + 2` | `:147` | [`csharp_front_lib`] |
+//! | 有前景 ⇔ `(wFrImg & 0x7FFF) > 0`（`frindex = btArea+2` 恒 ≥ 2，故 `frindex > 0` 恒真） | `:153` | [`csharp_has_front`] |
+//! | 前景带 `0x8000` ⇒ 背景再 `\| 0x40000000` | `:160-161` | [`csharp_back_image_full`] |
 //!
 //! # 五、碰撞位
 //!
@@ -85,7 +85,7 @@ impl MapFormat for Old12 {
         "Old12（12B/格，TMapInfo 旧版）"
     }
 
-    /// C# 的**兜底**分支（`:114-115`：「if it's none of the above load the default old school
+    /// C# 的**兜底**分支（`:116-117`：「if it's none of the above load the default old school
     /// format」）⇒ 头部谓词恒真，唯一约束是长度必须正好是 `52 + 12*w*h`。
     ///
     /// 少了长度约束会把 17 个 14 B/格的真实文件（`GodotClient/maps/10.map` 等，标题首字节
@@ -165,8 +165,8 @@ impl MapFormat for Old12 {
         FormatCaps {
             can_write: true,
             // ★ 2026-11-05（P1-9）从 `false` 改 `true`：本格式**没有未建模区**，两条判据都满足。
-            //   ① 格内 12 字节**全部有名字**（本模块文档第二节的字段表，逐条带 `LegacyMapReader.cs`
-            //      行号：`:135`/`:137`/`:139`/`:141`/`:142`/`:143`/`:144`/`:145`/`:146`）；
+            //   ① 格内 12 字节**全部有名字**（本模块文档第二节的字段表，逐条带 `_upstream/CrystalStudio/LegacyMapReader.cs`
+            //      行号：`:137`/`:139`/`:141`/`:143`/`:144`/`:145`/`:146`/`:147`/`:148`）；
             //   ② `TAIL_LEN = 0`（`old12.rs:70`），`read` 里 `tail: Vec::new()`（`:136`）⇒ 无未解字节；
             //   ③ `miredit-core/src/convert.rs` 的 `unmodeled_fields(Old12)` 为**空**
             //      （`read` 只给视图里有的字段赋值，`old12.rs:126-139`）；
@@ -196,7 +196,7 @@ impl MapFormat for Old12 {
     }
 }
 
-/// C# `:147-148`：背景图号最高位为 1 ⇒ 清掉该位并打上渲染层标记 `0x20000000`。
+/// C# `:149-150`：背景图号最高位为 1 ⇒ 清掉该位并打上渲染层标记 `0x20000000`。
 pub fn csharp_back_image(raw: u16) -> u32 {
     if raw & BLOCK_BIT != 0 {
         u32::from(raw & 0x7FFF) | 0x2000_0000
@@ -205,19 +205,19 @@ pub fn csharp_back_image(raw: u16) -> u32 {
     }
 }
 
-/// C# `:145`：前景库号 = `btArea + 2`（`FrontIndex = (short)(Bytes[offset++] + 2)`）。
+/// C# `:147`：前景库号 = `btArea + 2`（`FrontIndex = (short)(Bytes[offset++] + 2)`）。
 pub fn csharp_front_lib(area: u8) -> u16 {
     u16::from(area) + 2
 }
 
-/// C# `:151`：有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && frindex > 0`。
+/// C# `:153`：有前景 ⇔ `(wFrImg & 0x7FFF) > 0 && frindex > 0`。
 ///
 /// `frindex = btArea + 2` 恒 ≥ 2 ⇒ 后半条件恒真，等价于只看 `wFrImg & 0x7FFF`。
 pub fn csharp_has_front(fr_img: u16) -> bool {
     (fr_img & 0x7FFF) > 0
 }
 
-/// C# `:147-159` 的**完整**背景图号变换：在 [`csharp_back_image`] 之上，
+/// C# `:149-161` 的**完整**背景图号变换：在 [`csharp_back_image`] 之上，
 /// 若「有前景且前景带 `0x8000`」再或上 `0x40000000`。
 pub fn csharp_back_image_full(bk_img: u16, fr_img: u16) -> u32 {
     let mut v = csharp_back_image(bk_img);

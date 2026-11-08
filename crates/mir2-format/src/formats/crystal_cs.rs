@@ -4,42 +4,42 @@
 //!
 //! | 偏移 | 字段 | 类型 | 说明 | 源码行号 |
 //! |------|------|------|------|----------|
-//! | 0 | `ver` | `i16` | 版本，**必须 1..=5** | `:566-567` |
-//! | 2 | 魔数 `C#` | `[u8; 2]` | `0x43 0x23`，也是判别依据 | `:60-61` |
-//! | 4 | `Width` | `i16` | 宽 | `:569` |
-//! | 6 | `Height` | `i16` | 高 | `:571` |
+//! | 0 | `ver` | `i16` | 版本，**必须 1..=5** | `:568-569` |
+//! | 2 | 魔数 `C#` | `[u8; 2]` | `0x43 0x23`，也是判别依据 | `:62-63` |
+//! | 4 | `Width` | `i16` | 宽 | `:571` |
+//! | 6 | `Height` | `i16` | 高 | `:573` |
 //!
-//! ⚠ C# `:568` 的 `offset += 4` 是「读掉 ver（2B）+ 跳过魔数（2B）」，所以宽在 **4**、高在 **6**。
+//! ⚠ C# `:570` 的 `offset += 4` 是「读掉 ver（2B）+ 跳过魔数（2B）」，所以宽在 **4**、高在 **6**。
 //!
 //! # 二、单元格（**变长**）
 //!
-//! C# `:572` 的 `ValidateDimensions(8, ver == 1 ? 26 : ver == 2 ? 38 : ver == 3 ? 35 : 33)`
+//! C# `:574` 的 `ValidateDimensions(8, ver == 1 ? 26 : ver == 2 ? 38 : ver == 3 ? 35 : 33)`
 //! 给的是**最小**格长（= 没有前景图时的长度）。有前景图时格会变长：
 //!
 //! | 段 | 偏移增量 | 出现条件 | 源码行号 |
 //! |----|---------|----------|----------|
-//! | 背景库号 `i16` | +2 | 恒有 | `:578` |
-//! | 背景图号 `u32` | +4 | 恒有 | `:580` |
-//! | 中间层库号 `i16` | +2 | 恒有 | `:582` |
-//! | 中间图号 `u16` | +2 | 恒有 | `:584` |
-//! | 前景图个数 `u8` | +1 | `ver > 2` | `:588` |
-//! | 前景库号 `i16` | +2 | `ver > 2 && frcount == 1` | `:592` |
-//! | 前景图号 `i16` | +2 | `ver > 2 && frcount == 1` | `:594` |
-//! | 前景动画帧 + 节拍 `u8`×2 | +2 | `ver > 3 && frcount == 1` | `:600-601` |
-//! | 未建模 `u8` | +1 | `ver > 4 && frcount == 1` | `:602` |
-//! | 前景库号 `i16` | +2 | `ver <= 2` | `:613` |
-//! | 前景图号 `i16` | +2 | `ver <= 2` | `:615` |
-//! | 门索引 `u8`（语义 `& 0x7F`） | +1 | 恒有 | `:625` |
-//! | 门偏移 `u8` | +1 | 恒有 | `:626` |
-//! | 前景动画帧 + 节拍 `u8`×2 | +2 | `ver < 4 && (HasFront \|\| ver <= 2)` | `:631-632` |
-//! | 未建模 `u8`×2 | +2 | `ver < 4 && !HasFront && ver > 2`（`offset += 2` 跳过） | `:636` |
-//! | 中间层动画帧 `u8` | +1 | 恒有 | `:639` |
-//! | 中间层动画节拍 `u8` | +1 | 恒有 | `:640` |
-//! | `TileAnimationImage` `i16` | +2 | 恒有 | `:641` |
-//! | `TileAnimationOffset` `i16` | +2 | 恒有 | `:643` |
-//! | `TileAnimationFrames` `u8` | +1 | 恒有 | `:645` |
-//! | 光照 `u8` | +1 | 恒有 | `:646` |
-//! | 未建模 `u8`×12 | +12 | `ver >= 2`（`:650` `+8`、`:651` `+2`、`:652` `+2`） | — |
+//! | 背景库号 `i16` | +2 | 恒有 | `:580` |
+//! | 背景图号 `u32` | +4 | 恒有 | `:582` |
+//! | 中间层库号 `i16` | +2 | 恒有 | `:584` |
+//! | 中间图号 `u16` | +2 | 恒有 | `:586` |
+//! | 前景图个数 `u8` | +1 | `ver > 2` | `:590` |
+//! | 前景库号 `i16` | +2 | `ver > 2 && frcount == 1` | `:594` |
+//! | 前景图号 `i16` | +2 | `ver > 2 && frcount == 1` | `:596` |
+//! | 前景动画帧 + 节拍 `u8`×2 | +2 | `ver > 3 && frcount == 1` | `:602-603` |
+//! | 未建模 `u8` | +1 | `ver > 4 && frcount == 1` | `:604` |
+//! | 前景库号 `i16` | +2 | `ver <= 2` | `:615` |
+//! | 前景图号 `i16` | +2 | `ver <= 2` | `:617` |
+//! | 门索引 `u8`（语义 `& 0x7F`） | +1 | 恒有 | `:627` |
+//! | 门偏移 `u8` | +1 | 恒有 | `:628` |
+//! | 前景动画帧 + 节拍 `u8`×2 | +2 | `ver < 4 && (HasFront \|\| ver <= 2)` | `:633-634` |
+//! | 未建模 `u8`×2 | +2 | `ver < 4 && !HasFront && ver > 2`（`offset += 2` 跳过） | `:638` |
+//! | 中间层动画帧 `u8` | +1 | 恒有 | `:641` |
+//! | 中间层动画节拍 `u8` | +1 | 恒有 | `:642` |
+//! | `TileAnimationImage` `i16` | +2 | 恒有 | `:643` |
+//! | `TileAnimationOffset` `i16` | +2 | 恒有 | `:645` |
+//! | `TileAnimationFrames` `u8` | +1 | 恒有 | `:647` |
+//! | 光照 `u8` | +1 | 恒有 | `:648` |
+//! | 未建模 `u8`×12 | +12 | `ver >= 2`（`:652` `+8`、`:653` `+2`、`:654` `+2`） | — |
 //!
 //! 由此推得各版本的最小/最大格长：
 //!
@@ -55,18 +55,18 @@
 //!
 //! # 三、`HasFront` 的判定（决定 `ver < 4` 那一支走哪条路）
 //!
-//! - `ver > 2`：`HasFront = (frcount == 1)`（`:590-591`）；
-//! - `ver <= 2`：`HasFront = (frindex != 0 || frimage != 0)`（`:621`）；
-//! - **`ver < 4` 读到前景动画帧/节拍之后**（C# `LegacyMapReader.cs:631-633`）：
+//! - `ver > 2`：`HasFront = (frcount == 1)`（`:592-593`）；
+//! - `ver <= 2`：`HasFront = (frindex != 0 || frimage != 0)`（`:623`）；
+//! - **`ver < 4` 读到前景动画帧/节拍之后**（C# `_upstream/CrystalStudio/LegacyMapReader.cs:633-635`）：
 //!   `HasFront |= (FrontAnimationFrame != 0 || FrontAnimationTick != 0)`。
 //!
-//! ⚠ 第三条**只影响语义，不改变任何字节**：C# `:629` 的分支判断用的是**更新前**的
-//! `HasFront`，`offset` 已经在 `:631-632` 按同一支推进过了。因此本模块 `read`/`write`
+//! ⚠ 第三条**只影响语义，不改变任何字节**：C# `:631` 的分支判断用的是**更新前**的
+//! `HasFront`，`offset` 已经在 `:633-634` 按同一支推进过了。因此本模块 `read`/`write`
 //! 的**分支仍用前两条**（[`CrystalCs::has_front`]），第三条只在
 //! [`csharp_has_front`] 里补 —— 那是给上层「这一格到底有没有前景」用的完整值。
 //!
 //! ⚠ 第三条实际只在 `ver ∈ {1,2}` 上改变结果：`ver == 3` 时那一支只有
-//! `frcount == 1` 才会走（`:629` 的 `HasFront` 已为真），`ver > 3` 则根本不进 `:627` 的块。
+//! `frcount == 1` 才会走（`:631` 的 `HasFront` 已为真），`ver > 3` 则根本不进 `:629` 的块。
 //!
 //! # 四、写回：**全部版本都支持**
 //!
@@ -82,7 +82,7 @@
 //! 第 i 格（i = x*h + y）的起点 = 8 + 前面 i 格的格长之和
 //! ```
 //!
-//! C# `:574-575` 是 `for (x) for (y)` 双层循环，`offset` 在内层单调推进 ⇒ 列优先。
+//! C# `:576-577` 是 `for (x) for (y)` 双层循环，`offset` 在内层单调推进 ⇒ 列优先。
 //!
 //! # 六、真实样本
 //!
@@ -99,7 +99,7 @@
 //!    「读多几字节 / 读少几字节」吸收，格边界自己会漂到能自洽的位置；
 //! 2. **`trailer` 把多余字节全吞掉**（`read` 里 `trailer = bytes[cur.off..]`，`write` 原样追加）
 //!    ⇒ 读错后剩下的字节照样逐字节写回；
-//! 3. **`detect` 只查下界**（`detect` 里 `len >= min_len`，对齐 C# `:572` 的 `ValidateDimensions`）
+//! 3. **`detect` 只查下界**（`detect` 里 `len >= min_len`，对齐 C# `:574` 的 `ValidateDimensions`）
 //!    ⇒ 尾块长度任意都算合法文件。
 //!
 //! 而它**零真实样本**（本机 1158 个 `.map` 里 0 个带 `C#` 魔数）。
@@ -121,12 +121,12 @@ pub const HEADER_LEN: usize = 8;
 /// 魔数 `C#` 的两个字节。
 pub const MAGIC: [u8; 2] = [0x43, 0x23];
 
-/// 版本允许范围（C# `:567`）。
+/// 版本允许范围（C# `:569`）。
 pub const VER_MIN: i16 = 1;
-/// 版本允许范围（C# `:567`）。
+/// 版本允许范围（C# `:569`）。
 pub const VER_MAX: i16 = 5;
 
-/// 某版本的最小格长（C# `:572` 的 `ValidateDimensions` 第三个参数）。
+/// 某版本的最小格长（C# `:574` 的 `ValidateDimensions` 第三个参数）。
 pub const fn min_cell_len(ver: i16) -> usize {
     match ver {
         1 => 26,
@@ -204,9 +204,9 @@ impl CrystalCs {
 
     /// `HasFront` 判定（见模块文档第三节）。
     ///
-    /// ⚠ 这里只算 **C# `:590-591` / `:621` 两条**，也就是 `:629` 分支判断**当时**的值
-    /// —— C# `:633` 的 `HasFront |= (frame != 0 || tick != 0)` 发生在分支判断**之后**，
-    /// 不改变任何偏移。完整值（含 `:633`）见 [`csharp_has_front`]。
+    /// ⚠ 这里只算 **C# `:592-593` / `:623` 两条**，也就是 `:631` 分支判断**当时**的值
+    /// —— C# `:635` 的 `HasFront |= (frame != 0 || tick != 0)` 发生在分支判断**之后**，
+    /// 不改变任何偏移。完整值（含 `:635`）见 [`csharp_has_front`]。
     const fn has_front(ver: i16, fr_count: u8, fr_idx: i16, fr_img: u16) -> bool {
         if ver > 2 {
             fr_count == 1
@@ -241,7 +241,7 @@ impl MapFormat for CrystalCs {
         }
     }
 
-    /// C# `:60`：`Bytes[2] == 0x43 && Bytes[3] == 0x23`（`"C#"`）。
+    /// C# `:62`：`Bytes[2] == 0x43 && Bytes[3] == 0x23`（`"C#"`）。
     fn header_signature(&self, bytes: &[u8]) -> bool {
         bytes.len() >= 4 && bytes[2] == MAGIC[0] && bytes[3] == MAGIC[1]
     }
@@ -331,7 +331,7 @@ impl MapFormat for CrystalCs {
             cell.door = cur.u8()?;
             cell.door_offset = cur.u8()?;
             if ver < 4 {
-                // C# `:629` 的条件是 `HasFront || ver <= 2` ⇒ `ver <= 2` 时**必定**读这两字节。
+                // C# `:631` 的条件是 `HasFront || ver <= 2` ⇒ `ver <= 2` 时**必定**读这两字节。
                 if ver <= 2 || Self::has_front(ver, cell.fr_count, cell.fr_idx, cell.fr_img) {
                     cell.ani_frame = cur.u8()?;
                     cell.ani_tick = cur.u8()?;
@@ -462,7 +462,7 @@ impl MapFormat for CrystalCs {
             // 本格式是九种里**唯一「布局理解错了、连字节级往返都照样通过」**的格式，三条叠加：
             //   ① 格长**变长**（由 `(ver, fr_count)` 决定）⇒ 字段顺序错位会被格边界漂移吸收；
             //   ② `trailer = bytes[cur.off..]` 把多余字节**全吞掉**、写回照样原样吐出；
-            //   ③ `detect` 只查**下界**（`len >= min_len`，对齐 C# `:572`）⇒ 尾块长度任意都合法。
+            //   ③ `detect` 只查**下界**（`len >= min_len`，对齐 C# `:574`）⇒ 尾块长度任意都合法。
             // 而它**零真实样本**（本机 1158 个 .map 里 0 个带 `C#` 魔数）。
             // ⇒ 字段顺序一旦有误，会在「可编辑 + 往返全绿」的双重假象下**把真实数据写坏**。
             //
@@ -471,7 +471,7 @@ impl MapFormat for CrystalCs {
             // **待拿到真实 Type100 样本、并用 C# 双向对读验证字段顺序之后，才可改回 `true`。**
             editable: false,
             editable_caveat: "格长变长（26/38/35/33/39/40，由 ver 与 fr_count 决定）；ver >= 2 每格 12 字节、ver > 4 另 1 字节未建模（编辑时原样保留）；背景图号 32 位、tiles/sm_tiles 高 8 位不在编辑视图里 ⇒ 改不到；且本机 0 张真实样本 —— 字段顺序一旦有误，连字节级往返都照样通过，测不出来",
-            // 背图是格内 `u32`（C# `:580`）且 `write` 真的写它 ⇒ 逐格落笔有效。
+            // 背图是格内 `u32`（C# `:582`）且 `write` 真的写它 ⇒ 逐格落笔有效。
             ground_paint_supported: true,
             has_lib_bytes: true,
             fixed_cell_len: None,
@@ -508,12 +508,12 @@ fn tail_at(cell: &Cell, idx: usize, t: &mut usize) -> Result<u8, FormatError> {
     }
 }
 
-/// C# `:625`：门索引语义 = `原始字节 & 0x7F`。
+/// C# `:627`：门索引语义 = `原始字节 & 0x7F`。
 pub fn csharp_door_index(raw: u8) -> u8 {
     raw & 0x7F
 }
 
-/// C# `:595-596` / `:622-623`：前景图号带 `0x8000` ⇒ 背景打 `0x40000000`（仅 `ver > 1` / `ver > 2`）。
+/// C# `:597-598` / `:624-625`：前景图号带 `0x8000` ⇒ 背景打 `0x40000000`（仅 `ver > 1` / `ver > 2`）。
 pub fn csharp_back_mark(back: u32, fr_img: u16, ver: i16) -> u32 {
     if ver > 1 && (fr_img & 0x8000) != 0 {
         back | 0x4000_0000
@@ -522,14 +522,14 @@ pub fn csharp_back_mark(back: u32, fr_img: u16, ver: i16) -> u32 {
     }
 }
 
-/// C# `:621`（`ver <= 2`）：`HasFront = (frindex != 0 || frimage != 0)`。
+/// C# `:623`（`ver <= 2`）：`HasFront = (frindex != 0 || frimage != 0)`。
 pub fn csharp_has_front_v1v2(fr_idx: i16, fr_img: u16) -> bool {
     fr_idx != 0 || fr_img != 0
 }
 
-/// 完整 `HasFront`（= C# 把一整格读完之后的值），**含 `LegacyMapReader.cs:631-633` 的那条 OR 更新**。
+/// 完整 `HasFront`（= C# 把一整格读完之后的值），**含 `_upstream/CrystalStudio/LegacyMapReader.cs:633-635` 的那条 OR 更新**。
 ///
-/// C# `:631-633`：
+/// C# `:633-635`：
 /// ```csharp
 /// if (MapCells[x, y].HasFront || ver <= 2) {
 ///     MapCells[x, y].FrontAnimationFrame = Bytes[offset++];
@@ -540,11 +540,11 @@ pub fn csharp_has_front_v1v2(fr_idx: i16, fr_img: u16) -> bool {
 /// ```
 /// ⇒ `ver < 4` 且那一支真走了、且两字节非 0 时，`HasFront` 会被**从假翻成真**。
 ///
-/// ⚠ **字节层无影响**：这条更新在 C# `:629` 的分支判断**之后**，`offset` 已经推进完了。
+/// ⚠ **字节层无影响**：这条更新在 C# `:631` 的分支判断**之后**，`offset` 已经推进完了。
 /// 本模块 `read`/`write` 的分支仍用 [`CrystalCs::has_front`]（更新前的值），所以往返不变。
 ///
 /// ⚠ 实际只有 `ver ∈ {1,2}` 会被它改变：`ver == 3` 时那一支只在 `frcount == 1`
-/// （`HasFront` 已为真）时走；`ver > 3` 不进 `:627` 的块。
+/// （`HasFront` 已为真）时走；`ver > 3` 不进 `:629` 的块。
 ///
 /// 入参都是 [`Cell`] 的字段：`fr_count` = `cell.fr_count`、`fr_idx` = `cell.fr_idx`、
 /// `fr_img` = `cell.fr_img`、`ani_frame` = `cell.ani_frame`、`ani_tick` = `cell.ani_tick`。
@@ -557,7 +557,7 @@ pub fn csharp_has_front(
     ani_tick: u8,
 ) -> bool {
     let base = CrystalCs::has_front(ver, fr_count, fr_idx, fr_img);
-    // C# `:627-637`：`ver < 4` 且（`HasFront` 或 `ver <= 2`）才读这两字节并做 OR 更新。
+    // C# `:629-639`：`ver < 4` 且（`HasFront` 或 `ver <= 2`）才读这两字节并做 OR 更新。
     if ver < 4 && (base || ver <= 2) {
         base || ani_frame != 0 || ani_tick != 0
     } else {
@@ -657,9 +657,9 @@ mod tests {
 
     #[test]
     fn 前景动画两字节非零也算有前景() {
-        // ver=2、`with_front = false` ⇒ C# `:621` 判 `HasFront = false`（前景两字段都为 0）；
-        // 但 `:629` 的 `|| ver <= 2` 让那一支照样走，读到动画两字节 0x44 / 0x55
-        // ⇒ C# `:633` 把 `HasFront` 置真（这就是审查 D6.1 漏掉的那条）。
+        // ver=2、`with_front = false` ⇒ C# `:623` 判 `HasFront = false`（前景两字段都为 0）；
+        // 但 `:631` 的 `|| ver <= 2` 让那一支照样走，读到动画两字节 0x44 / 0x55
+        // ⇒ C# `:635` 把 `HasFront` 置真（这就是审查 D6.1 漏掉的那条）。
         let raw = 造图(2, 1, 1, false);
         let m = CrystalCs.read(&raw).expect("应解析成功");
         let c = m.cell(0, 0).expect("第 0 格存在");
@@ -678,11 +678,11 @@ mod tests {
 
         // 两字节都为 0 ⇒ 仍是假（这条 OR 不是无条件置真）。
         assert!(!csharp_has_front(2, 0, 0, 0, 0, 0));
-        // ver=3 且 frcount==0 ⇒ C# `:636` 只是跳过 2 字节、不做更新 ⇒ 假。
+        // ver=3 且 frcount==0 ⇒ C# `:638` 只是跳过 2 字节、不做更新 ⇒ 假。
         assert!(!csharp_has_front(3, 0, 0, 0, 0x44, 0x55));
         // ver=3 且 frcount==1 ⇒ 本来就有前景。
         assert!(csharp_has_front(3, 1, 7, 0x3000, 0, 0));
-        // ver=4 不进 `:627` 的块 ⇒ 动画两字节不参与。
+        // ver=4 不进 `:629` 的块 ⇒ 动画两字节不参与。
         assert!(!csharp_has_front(4, 0, 0, 0, 0x44, 0x55));
     }
 

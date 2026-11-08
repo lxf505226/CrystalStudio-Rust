@@ -2,19 +2,19 @@
 //!
 //! # 一、注册表顺序 = C# 判别链顺序（只用于**遍历**，不代表判别优先级）
 //!
-//! 顺序逐条对应 CrystalStudio `LegacyMapReader.cs:55-117` 的 `if-else` 链：
+//! 顺序逐条对应 `_upstream/CrystalStudio/LegacyMapReader.cs:57-119` 的 `if-else` 链：
 //!
 //! | # | 注册项 | C# 源码 | 头部签名 |
 //! |---|--------|---------|----------|
-//! | 1 | [`crystal_cs::CrystalCs`] | `:60-64` | `Bytes[2]==0x43 && Bytes[3]==0x23`（`"C#"`） |
-//! | 2 | [`mir3_wemade::Mir3Wemade`] | `:67-71` | `Bytes[0]==0`（无标题） |
-//! | 3 | [`mir3_shanda::Mir3Shanda`] | `:73-77` | `Bytes[0]==0x0F && Bytes[5]==0x53 && Bytes[14]==0x33` |
-//! | 4 | [`antihack::AntiHack`] | `:79-83` | `Bytes[0]==0x15 && Bytes[4]==0x32 && Bytes[6]==0x41 && Bytes[19]==0x31` |
-//! | 5 | [`wemade2010::Wemade2010`] | `:85-89` | `Bytes[0]==0x10 && Bytes[2]==0x61 && Bytes[7]==0x31 && Bytes[14]==0x31` |
-//! | 6 | [`shanda2012::Shanda2012`] | `:91-99` | `Bytes[4]==0x0F && Bytes[18]==0x0D && Bytes[19]==0x0A` |
-//! | 7 | [`shanda14::Shanda14`] | `:91-104` | 同上（两者共用，C# 靠长度分流） |
-//! | 8 | [`heroes34::Heroes34`] | `:108-112` | `Bytes[0]==0x0D && Bytes[1]==0x4C && Bytes[7]==0x20 && Bytes[11]==0x6D` |
-//! | 9 | [`old12::Old12`] | `:114-115` | **兜底**（无签名） |
+//! | 1 | [`crystal_cs::CrystalCs`] | `:62-66` | `Bytes[2]==0x43 && Bytes[3]==0x23`（`"C#"`） |
+//! | 2 | [`mir3_wemade::Mir3Wemade`] | `:69-73` | `Bytes[0]==0`（无标题） |
+//! | 3 | [`mir3_shanda::Mir3Shanda`] | `:75-79` | `Bytes[0]==0x0F && Bytes[5]==0x53 && Bytes[14]==0x33` |
+//! | 4 | [`antihack::AntiHack`] | `:81-85` | `Bytes[0]==0x15 && Bytes[4]==0x32 && Bytes[6]==0x41 && Bytes[19]==0x31` |
+//! | 5 | [`wemade2010::Wemade2010`] | `:87-91` | `Bytes[0]==0x10 && Bytes[2]==0x61 && Bytes[7]==0x31 && Bytes[14]==0x31` |
+//! | 6 | [`shanda2012::Shanda2012`] | `:93-101` | `Bytes[4]==0x0F && Bytes[18]==0x0D && Bytes[19]==0x0A` |
+//! | 7 | [`shanda14::Shanda14`] | `:93-106` | 同上（两者共用，C# 靠长度分流） |
+//! | 8 | [`heroes34::Heroes34`] | `:110-114` | `Bytes[0]==0x0D && Bytes[1]==0x4C && Bytes[7]==0x20 && Bytes[11]==0x6D` |
+//! | 9 | [`old12::Old12`] | `:116-117` | **兜底**（无签名） |
 //!
 //! # 二、判别策略：**长度优先 + 签名辅助**，不能只照 C# 签名链
 //!
@@ -121,9 +121,9 @@ pub fn format_by_id(id: FormatId) -> &'static dyn MapFormat {
 /// - **真实语料 0 个**：本机 1,158 个真实 `.map` 里，长度精确等于 `52 + 40·w·h` 的
 ///   文件 **0 个**（`52 + 36·w·h` 的有 195 个）⇒ 本函数在真实数据上**永不命中**。
 /// - **它不是「C# 的格长」**：C# `LoadMapType3` 就是 **36 B/格**，
-///   `LegacyMapReader.cs:280` 的 `ValidateDimensions(52, 36)` 与实现**完全自洽**
-///   （`:300`/`:303` 的 `ToInt16` 不推进 `offset`，其 2 字节落在 `:301 +=7` 与 `:304 +=14`
-///   的跳过区内部）。旧文档写「C# 每格推进 40、与 `:280` 自相矛盾」是**误读，已删除**。
+///   `_upstream/CrystalStudio/LegacyMapReader.cs:282` 的 `ValidateDimensions(52, 36)` 与实现**完全自洽**
+///   （`:302`/`:305` 的 `ToInt16` 不推进 `offset`，其 2 字节落在 `:303 +=7` 与 `:306 +=14`
+///   的跳过区内部）。旧文档写「C# 每格推进 40、与 `:282` 自相矛盾」是**误读，已删除**。
 /// - **保留理由**：万一未来出现长度恰好凑成 `52 + 40·w·h` 的怪文件，宁可显式报
 ///   [`FormatError::UnsupportedVariant`]，也不许按 36 B 硬读。
 /// - **不会误伤 36 B/格文件**：命中是精确等式，`52+40·w·h == 52+36·w·h` 只在 `w·h == 0` 时成立。
@@ -209,7 +209,7 @@ pub fn detect_format_tolerant(bytes: &[u8]) -> Option<&'static dyn MapFormat> {
 
 /// **纯 C# 判别链**（只看头部签名，不看长度），用于与 C# 行为做对照。
 ///
-/// ⚠ 与 C# 的差异仅一处：C# 在 14/36 字节格那一支内部还会用长度分流（`:95`），
+/// ⚠ 与 C# 的差异仅一处：C# 在 14/36 字节格那一支内部还会用长度分流（`:97`），
 /// 本函数不做分流 —— 两者共用同一条签名，先命中者（[`shanda2012::Shanda2012`]）返回。
 /// 想要「按长度定档」请用 [`detect_format`]。
 pub fn detect_format_csharp_order(bytes: &[u8]) -> Option<&'static dyn MapFormat> {
@@ -445,10 +445,10 @@ mod tests {
 
     /// `ground_paint_supported`：**只有 `Mir3Wemade`（Type5）为 `false`**，其余 8 种为 `true`。
     ///
-    /// 依据：Type5 的背图在**块级**（3 B / 2×2 组，C# `LegacyMapReader.cs:399-408`），
+    /// 依据：Type5 的背图在**块级**（3 B / 2×2 组，C# `_upstream/CrystalStudio/LegacyMapReader.cs:401-410`），
     /// `Cell::bk_img` 恒 0 且 `write` 不写它 ⇒ 逐格写 `bk_img` 会被**静默丢弃**。
     ///
-    /// `CrystalCs` 定为 `true` 的理由：它的背图是**格内 `u32`**（C# `:580`
+    /// `CrystalCs` 定为 `true` 的理由：它的背图是**格内 `u32`**（C# `:582`
     /// `ToInt32` 读 `BackImage`），`write` 真的把 `cell.bk_img` 写回格内
     /// ⇒ 逐格落笔**有效**，与「能不能改格后语义自洽」（`editable`）是两件事。
     #[test]

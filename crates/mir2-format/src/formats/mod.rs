@@ -1,7 +1,7 @@
 //! 九个格式模块。
 //!
 //! 每个模块一个文件、一种格式，互不依赖（只依赖 [`crate::model`] 的公共骨架）。
-//! 注册表顺序在 [`crate::registry`]，与 C# `LegacyMapReader.cs:55-117` 的判别链一致。
+//! 注册表顺序在 [`crate::registry`]，与 C# `_upstream/CrystalStudio/LegacyMapReader.cs:57-119` 的判别链一致。
 
 pub mod antihack;
 pub mod crystal_cs;

@@ -3,27 +3,27 @@
 //! # 一、格长定案：**36 B/格，C# 也是 36**（2026-11-05 订正）
 //!
 //! ⚠ **旧文档曾写「C# 每格推进 40 B、与本格式自相矛盾」——那是误读，已删除。**
-//! 真值：`LegacyMapReader.cs:272-326` 的一格**就是 36 字节**，与 `:280` 的
+//! 真值：`_upstream/CrystalStudio/LegacyMapReader.cs:274-328` 的一格**就是 36 字节**，与 `:282` 的
 //! `ValidateDimensions(52, 36)` 完全自洽。逐句复算（`offset` 进入格时为 `P`）：
 //!
 //! | 源码行 | 代码 | `offset` 变化 | 读到的格内偏移 |
 //! |---|---|---|---|
-//! | `:286` | `ToInt16` | P（不推进） | 0-1 |
-//! | `:287` | `offset += 2` | →P+2 | — |
-//! | `:288` | `ToUInt16` | P+2（不推进） | 2-3 |
-//! | `:289` | `offset += 2` | →P+4 | — |
-//! | `:290` | `ToInt16` | P+4（不推进） | 4-5 |
-//! | `:291` | `offset += 2` | →P+6 | — |
-//! | `:292`-`:299` | `Bytes[offset++]` × 8 | →P+14 | 6..13 |
-//! | `:300` | `ToInt16(offset)` —— **不推进** | P+14 | **14-15**（`TileAnimationImage`） |
-//! | `:301` | `offset += 7` | →**P+21** | 跳过 16-20（5 B） |
-//! | `:302` | `Bytes[offset++]` | →P+22 | **21**（`TileAnimationFrames`） |
-//! | `:303` | `ToInt16(offset)` —— **不推进** | P+22 | **22-23**（`TileAnimationOffset`） |
-//! | `:304` | `offset += 14` | →**P+36** | 跳过 22-35（14 B，**与 `:303` 的读重叠**） |
+//! | `:288` | `ToInt16` | P（不推进） | 0-1 |
+//! | `:289` | `offset += 2` | →P+2 | — |
+//! | `:290` | `ToUInt16` | P+2（不推进） | 2-3 |
+//! | `:291` | `offset += 2` | →P+4 | — |
+//! | `:292` | `ToInt16` | P+4（不推进） | 4-5 |
+//! | `:293` | `offset += 2` | →P+6 | — |
+//! | `:294`-`:301` | `Bytes[offset++]` × 8 | →P+14 | 6..13 |
+//! | `:302` | `ToInt16(offset)` —— **不推进** | P+14 | **14-15**（`TileAnimationImage`） |
+//! | `:303` | `offset += 7` | →**P+21** | 跳过 16-20（5 B） |
+//! | `:304` | `Bytes[offset++]` | →P+22 | **21**（`TileAnimationFrames`） |
+//! | `:305` | `ToInt16(offset)` —— **不推进** | P+22 | **22-23**（`TileAnimationOffset`） |
+//! | `:306` | `offset += 14` | →**P+36** | 跳过 22-35（14 B，**与 `:305` 的读重叠**） |
 //!
-//! **关键点**：`:300` 与 `:303` 的 `ToInt16(Bytes, offset)` 都**没有** `offset += 2`
-//! ⇒ `:303` 那 2 字节落在 `:304` 的 `offset += 14` 跳过区（rel 22-35）**内部**。
-//! 把 `:303` 的 2 字节再算一次才会得出 40 —— 那是重复计数。
+//! **关键点**：`:302` 与 `:305` 的 `ToInt16(Bytes, offset)` 都**没有** `offset += 2`
+//! ⇒ `:305` 那 2 字节落在 `:306` 的 `offset += 14` 跳过区（rel 22-35）**内部**。
+//! 把 `:305` 的 2 字节再算一次才会得出 40 —— 那是重复计数。
 //! 合计 `6 + 8 + 2 + 7 + 1 + 14 = 36`。（同结论：审查报告 §一.3，含 195 个真实文件的
 //! 「末 offset 恰好等于文件长度」实证。）
 //!
@@ -40,7 +40,7 @@
 //!
 //! # 二、文件头（52 字节，`TMapHeader`）
 //!
-//! 与 `Old12` / `Shanda14` 相同（`wWidth` `i16@0`、`wHeight` `i16@2`，C# `:277`/`:279`）。
+//! 与 `Old12` / `Shanda14` 相同（`wWidth` `i16@0`、`wHeight` `i16@2`，C# `:279`/`:281`）。
 //!
 //! # 三、单元格（36 字节）
 //!
@@ -50,22 +50,22 @@
 //!
 //! | 格内偏移 | 字段 | 类型 | 说明 | 源码行号 |
 //! |---------|------|------|------|----------|
-//! | 0 | `wBkImg` | `u16` | 背景图号 | C# `:286` |
-//! | 2 | `wMidImg` | `u16` | 中间图号 | `:288` |
-//! | 4 | `wFrImg` | `u16` | 前景图号 | `:290` |
-//! | 6 | `btDoorIndex` | `u8` | 门索引 | `:292` |
-//! | 7 | `btDoorOffset` | `u8` | 门偏移 | `:293` |
-//! | 8 | `btAniFrame` | `u8` | 前景动画帧 | `:294` |
-//! | 9 | `btAniTick` | `u8` | 前景动画节拍 | `:295` |
-//! | 10 | `btArea` | `u8` | 区域 / 前景库号 | `:296` |
-//! | 11 | `btLight` | `u8` | 光照 | `:297` |
-//! | 12 | `btTiles` | `u8` | 背景库号 | `:298` |
-//! | 13 | `btsmTiles` | `u8` | 中间层库号 | `:299` |
-//! | **14-15** | `TileAnimationImage` | `i16` | **C# 命名并读取**（`ToInt16` 不推进 offset） | `:300` |
-//! | 16-20 | — | `[u8; 5]` | 未命名（`:301` 的 `+= 7` 里含这 5 字节） | `:301` |
-//! | **21** | `TileAnimationFrames` | `u8` | **C# 命名并读取** | `:302` |
-//! | **22-23** | `TileAnimationOffset` | `i16` | **C# 命名并读取**（`ToInt16` 不推进 offset） | `:303` |
-//! | 24-35 | — | `[u8; 12]` | 未命名（`:304` 的 `+= 14` 覆盖 22-35，与上两行**重叠**） | `:304` |
+//! | 0 | `wBkImg` | `u16` | 背景图号 | C# `:288` |
+//! | 2 | `wMidImg` | `u16` | 中间图号 | `:290` |
+//! | 4 | `wFrImg` | `u16` | 前景图号 | `:292` |
+//! | 6 | `btDoorIndex` | `u8` | 门索引 | `:294` |
+//! | 7 | `btDoorOffset` | `u8` | 门偏移 | `:295` |
+//! | 8 | `btAniFrame` | `u8` | 前景动画帧 | `:296` |
+//! | 9 | `btAniTick` | `u8` | 前景动画节拍 | `:297` |
+//! | 10 | `btArea` | `u8` | 区域 / 前景库号 | `:298` |
+//! | 11 | `btLight` | `u8` | 光照 | `:299` |
+//! | 12 | `btTiles` | `u8` | 背景库号 | `:300` |
+//! | 13 | `btsmTiles` | `u8` | 中间层库号 | `:301` |
+//! | **14-15** | `TileAnimationImage` | `i16` | **C# 命名并读取**（`ToInt16` 不推进 offset） | `:302` |
+//! | 16-20 | — | `[u8; 5]` | 未命名（`:303` 的 `+= 7` 里含这 5 字节） | `:303` |
+//! | **21** | `TileAnimationFrames` | `u8` | **C# 命名并读取** | `:304` |
+//! | **22-23** | `TileAnimationOffset` | `i16` | **C# 命名并读取**（`ToInt16` 不推进 offset） | `:305` |
+//! | 24-35 | — | `[u8; 12]` | 未命名（`:306` 的 `+= 14` 覆盖 22-35，与上两行**重叠**） | `:306` |
 //!
 //! 上述 14..36 **整段**进 [`Cell::tail`](crate::Cell::tail)（长度 22，`TAIL_LEN`）。
 //! ⇒ `Cell::tiles` / `sm_tiles` / `tile_frames` 在本格式**恒 0**（它们的语义被 12/13 与
@@ -86,7 +86,7 @@
 //! # 五、存储顺序：**列优先**
 //!
 //! ```text
-//! offset = 52 + (x * h + y) * 36      // x 外层、y 内层（C# `:282-283`）
+//! offset = 52 + (x * h + y) * 36      // x 外层、y 内层（C# `:284-285`）
 //! ```
 //!
 //! # 六、尾区三字段的**只读访问器**（2026-11-05 新增）
@@ -97,9 +97,9 @@
 //!
 //! | 访问器 | 返回 | 从 `tail` 的偏移 | 对应格内偏移 | C# 行号 |
 //! |--------|------|------------------|--------------|---------|
-//! | [`Shanda2012::tile_anim_image`] | `Option<u16>`（`i16` 位模式） | `[0..2]` | 14-15 | `:300` |
-//! | [`Shanda2012::tile_anim_frames`] | `Option<u8>` | `[7]` | 21 | `:302` |
-//! | [`Shanda2012::tile_anim_offset`] | `Option<u16>`（`i16` 位模式） | `[8..10]` | 22-23 | `:303` |
+//! | [`Shanda2012::tile_anim_image`] | `Option<u16>`（`i16` 位模式） | `[0..2]` | 14-15 | `:302` |
+//! | [`Shanda2012::tile_anim_frames`] | `Option<u8>` | `[7]` | 21 | `:304` |
+//! | [`Shanda2012::tile_anim_offset`] | `Option<u16>`（`i16` 位模式） | `[8..10]` | 22-23 | `:305` |
 //!
 //! ⚠ **访问器不参与写**：`write` 仍只把 `tail` 整段原样吐出 ⇒ 往返 0 差异不受影响。
 //! ⚠ 为什么不做成 `Cell::tile_anim_image()`：`tail` 的布局**逐格式不同**
@@ -110,7 +110,7 @@
 //! # 七、判别
 //!
 //! 与 `Shanda14` 共用 C# 标题谓词（`Bytes[4]==0x0F && Bytes[18]==0x0D && Bytes[19]==0x0A`，
-//! C# `:91`），只能靠长度区分：C# 自己在 `:95` 用 `Bytes.Length > 52 + W*H*14` 分流，
+//! C# `:93`），只能靠长度区分：C# 自己在 `:97` 用 `Bytes.Length > 52 + W*H*14` 分流，
 //! 本 crate 改成**精确等于** `52 + 36*w*h`。
 
 use crate::error::FormatError;
@@ -139,26 +139,26 @@ pub const CSHARP_CELL_LEN: usize = 40;
 
 /// 尾区里 `TileAnimationImage`（格内 rel 14-15）相对 `tail` 的偏移。
 ///
-/// 依据 C# `LegacyMapReader.cs:300`（`ToInt16(Bytes, offset)`，`offset` 当时为 `P+14`）。
+/// 依据 C# `_upstream/CrystalStudio/LegacyMapReader.cs:302`（`ToInt16(Bytes, offset)`，`offset` 当时为 `P+14`）。
 pub const TAIL_OFF_ANIM_IMAGE: usize = 0;
 
 /// 尾区里 `TileAnimationFrames`（格内 rel 21）相对 `tail` 的偏移。
 ///
-/// 依据 C# `LegacyMapReader.cs:302`（`:301` 的 `offset += 7` 之后 `Bytes[offset++]`，落在 `P+21`）。
+/// 依据 C# `_upstream/CrystalStudio/LegacyMapReader.cs:304`（`:303` 的 `offset += 7` 之后 `Bytes[offset++]`，落在 `P+21`）。
 pub const TAIL_OFF_ANIM_FRAMES: usize = 7;
 
 /// 尾区里 `TileAnimationOffset`（格内 rel 22-23）相对 `tail` 的偏移。
 ///
-/// 依据 C# `LegacyMapReader.cs:303`（`ToInt16(Bytes, offset)`，`offset` 当时为 `P+22`）。
+/// 依据 C# `_upstream/CrystalStudio/LegacyMapReader.cs:305`（`ToInt16(Bytes, offset)`，`offset` 当时为 `P+22`）。
 pub const TAIL_OFF_ANIM_OFFSET: usize = 8;
 
-/// 前景库号偏移（与 `Shanda14` 同源，C# `:296`）。
+/// 前景库号偏移（与 `Shanda14` 同源，C# `:298`）。
 pub const FRONT_LIB_OFFSET: u16 = 120;
 
-/// 背景库号偏移（C# `:298`）。
+/// 背景库号偏移（C# `:300`）。
 pub const BACK_LIB_OFFSET: u16 = 100;
 
-/// 中间层库号偏移（C# `:299`）。
+/// 中间层库号偏移（C# `:301`）。
 pub const MIDDLE_LIB_OFFSET: u16 = 110;
 
 /// 格式单例。
@@ -175,7 +175,7 @@ impl Shanda2012 {
     /// - **真实语料 0 个**：本机 1,158 个真实 `.map` 里，长度精确等于 `52 + 40·w·h` 的
     ///   文件 **0 个**（`52 + 36·w·h` 的有 195 个）。⇒ 本分支在真实数据上**永不触发**。
     /// - **它不代表 C# 的格长**：C# `LoadMapType3` 本来就是 36 B/格
-    ///   （`LegacyMapReader.cs:280` 的 `ValidateDimensions(52, 36)` 与实现自洽，见模块文档第一节）。
+    ///   （`_upstream/CrystalStudio/LegacyMapReader.cs:282` 的 `ValidateDimensions(52, 36)` 与实现自洽，见模块文档第一节）。
     ///   旧文档把它称作「C# 40 B/格变体」是**误读**，已删除。
     /// - **保留理由**：万一未来出现长度恰好凑成 `52 + 40·w·h` 的怪文件，宁可显式报
     ///   [`FormatError::UnsupportedVariant`]，也不许按 36 B 硬读（那会把整张图读成花图）。
@@ -196,7 +196,7 @@ impl Shanda2012 {
         }
     }
 
-    /// 只读访问器：`TileAnimationImage`（格内 rel 14-15，C# `:300`）。
+    /// 只读访问器：`TileAnimationImage`（格内 rel 14-15，C# `:302`）。
     ///
     /// 从 [`Cell::tail`](crate::Cell::tail) 的 `[0..2]` 按小端取 `i16` 的位模式；
     /// `tail` 不足 2 字节（非本格式的格、或人为截断）返回 `None`。
@@ -212,7 +212,7 @@ impl Shanda2012 {
         Some(u16::from_le_bytes([s[0], s[1]]))
     }
 
-    /// 只读访问器：`TileAnimationFrames`（格内 rel 21，C# `:302`）。
+    /// 只读访问器：`TileAnimationFrames`（格内 rel 21，C# `:304`）。
     ///
     /// 从 [`Cell::tail`](crate::Cell::tail) 的 `[7]` 取 1 字节；`tail` 不足 8 字节返回 `None`。
     ///
@@ -221,12 +221,12 @@ impl Shanda2012 {
         cell.tail.get(TAIL_OFF_ANIM_FRAMES).copied()
     }
 
-    /// 只读访问器：`TileAnimationOffset`（格内 rel 22-23，C# `:303`）。
+    /// 只读访问器：`TileAnimationOffset`（格内 rel 22-23，C# `:305`）。
     ///
     /// 从 [`Cell::tail`](crate::Cell::tail) 的 `[8..10]` 按小端取 `i16` 的位模式；
     /// `tail` 不足 10 字节返回 `None`。
     ///
-    /// ⚠ C# 的 `:303` **不推进 `offset`**，其 2 字节落在 `:304` 的 `offset += 14` 跳过区
+    /// ⚠ C# 的 `:305` **不推进 `offset`**，其 2 字节落在 `:306` 的 `offset += 14` 跳过区
     /// （rel 22-35）**内部** —— 这正是「40 B/格」误读的来源，见模块文档第一节。
     ///
     /// 真实样本例（同上）：`(x=5,y=16)` ⇒ `8451`；`(x=5,y=32)` ⇒ `8419`；`(x=5,y=0)` ⇒ `0`。
@@ -363,8 +363,8 @@ impl MapFormat for Shanda2012 {
             can_write: true,
             // 2026-11-05（P1-9）复核后**保持 `false`**：判据 1 不满足。
             //   前 14 字节全具名（本模块文档第三节），但 `tail` 有 22 字节未建模（rel 14-35），
-            //   而 C# 自己的注释把其中 5 字节疑为「背图索引 / 背图文件索引」（`LegacyMapReader.cs:301`）、
-            //   12 字节疑为「光照/混合参数」（`:304`）⇒ 与**可编辑的**背景图号 / 光照**联动**，
+            //   而 C# 自己的注释把其中 5 字节疑为「背图索引 / 背图文件索引」（`_upstream/CrystalStudio/LegacyMapReader.cs:303`）、
+            //   12 字节疑为「光照/混合参数」（`:306`）⇒ 与**可编辑的**背景图号 / 光照**联动**，
             //   改图号后尾区不会跟着变 ⇒ 语义不自洽。
             //   实测那 12 字节非零出现 95,990 次（本模块文档第四节）⇒ 不是可忽略的填充。
             editable: false,

@@ -4,28 +4,28 @@
 //!
 //! | 偏移 | 字段 | 类型 | 说明 | 源码行号 |
 //! |------|------|------|------|----------|
-//! | 20 | `Attribute` | `i16` | 属性（本 crate 不解释，原样保留） | `:388` |
-//! | 22 | `Width` | `i16` | 宽 | `:389` |
-//! | 24 | `Height` | `i16` | 高 | `:390` |
-//! | 26 | `EventFile` / `FogColor` | — | C# 明确「忽略」（`:391` 注释 `ignoring eventfile and fogcolor for now`） | — |
+//! | 20 | `Attribute` | `i16` | 属性（本 crate 不解释，原样保留） | `:390` |
+//! | 22 | `Width` | `i16` | 宽 | `:391` |
+//! | 24 | `Height` | `i16` | 高 | `:392` |
+//! | 26 | `EventFile` / `FogColor` | — | C# 明确「忽略」（`:393` 注释 `ignoring eventfile and fogcolor for now`） | — |
 //!
 //! 紧接 28 字节之后是**半分辨率背景块**，长度
-//! `3 * ceil(w/2) * floor(h/2)`（C# `:394` 的 `ValidateDimensions(28 + 3*((Width/2)+(Width%2))*(Height/2), 14)`
-//! 与 `:410` 的第二趟起点 `offset = 28 + 3*((Width/2)+(Width%2))*(Height/2)` 都给出这个式子）。
+//! `3 * ceil(w/2) * floor(h/2)`（C# `:396` 的 `ValidateDimensions(28 + 3*((Width/2)+(Width%2))*(Height/2), 14)`
+//! 与 `:412` 的第二趟起点 `offset = 28 + 3*((Width/2)+(Width%2))*(Height/2)` 都给出这个式子）。
 //!
 //! 块内每 **3 字节**描述 4 个格（2×2）：
 //!
 //! | 块内字节 | 含义 | 源码行号 |
 //! |---------|------|----------|
-//! | +0 | 背景库号：`255` ⇒ `-1`，否则 `+200` | `:404` |
-//! | +1..+2 | 背景图号：`ToInt16 + 1`（**有符号**，结果按 C# 的 `int` 放宽） | `:405` |
+//! | +0 | 背景库号：`255` ⇒ `-1`，否则 `+200` | `:406` |
+//! | +1..+2 | 背景图号：`ToInt16 + 1`（**有符号**，结果按 C# 的 `int` 放宽） | `:407` |
 //!
-//! 4 个格的下标是 `(x*2 + i%2, y*2 + i/2)`，`i` 取 `0..4`（`:402-406`）。
+//! 4 个格的下标是 `(x*2 + i%2, y*2 + i/2)`，`i` 取 `0..4`（`:404-408`）。
 //!
 //! # 二、⚠ 为什么背景块放在 `header_raw` 里，而不是拆进 `cells`
 //!
 //! C# 的写法有一个**自身不一致**：读背景块的循环是 `x < Width/2`、`y < Height/2`
-//! （**向下取整**，`:399-400`），而第二趟的起点用的是 `ceil(w/2)`（`:410`）。
+//! （**向下取整**，`:401-402`），而第二趟的起点用的是 `ceil(w/2)`（`:412`）。
 //! 宽为奇数时两者相差 `3 * floor(h/2)` 个字节 —— 那一段**C# 从未读取**。
 //!
 //! 若把背景块拆进 `cells`，写回时就必须从 `cells` 反推那一段，奇宽图上会**凭空补字节**，
@@ -51,32 +51,32 @@
 //!
 //! | 格内偏移 | 字段 | 类型 | 磁盘变换 | 源码行号 |
 //! |---------|------|------|----------|----------|
-//! | 0 | `flag` | `u8` | `bit0` 决定背景是否打 `0x20000000`，`bit1` 决定 `0x40000000` | `:415`、`:436-437` |
-//! | 1 | 中间层动画帧 | `u8` | — | `:416` |
-//! | 2 | 前景动画帧 | `u8` | `255 ⇒ 0`，再 `& 0x8F` | `:417-418` |
-//! | 3 | `btArea` / 前景库号 | `u8` | `255 ⇒ -1`，否则 `+200`，再过 `:429-430` 的哨兵修正 | `:422`、`:429-430` |
-//! | 4 | 中间层库号 | `u8` | `255 ⇒ -1`，否则 `+200` | `:424` |
-//! | 5 | 中间图号 | `u16` | `+1` | `:426` |
-//! | 7 | 前景图号 | `u16` | `+1` | `:428` |
-//! | 9 | — | `[u8; 3]` | **跳过**（C# `:432` 注释「mir3 maps dont have doors」） | — |
-//! | 12 | `btLight` | `u8` | `& 0x0F` 再 `* 4` | `:433-434` |
-//! | 13 | — | `u8` | 未使用（C# `:435` `offset += 2` 把它一起跳过） | — |
+//! | 0 | `flag` | `u8` | `bit0` 决定背景是否打 `0x20000000`，`bit1` 决定 `0x40000000` | `:417`、`:438-439` |
+//! | 1 | 中间层动画帧 | `u8` | — | `:418` |
+//! | 2 | 前景动画帧 | `u8` | `255 ⇒ 0`，再 `& 0x8F` | `:419-420` |
+//! | 3 | `btArea` / 前景库号 | `u8` | `255 ⇒ -1`，否则 `+200`，再过 `:431-432` 的哨兵修正 | `:424`、`:431-432` |
+//! | 4 | 中间层库号 | `u8` | `255 ⇒ -1`，否则 `+200` | `:426` |
+//! | 5 | 中间图号 | `u16` | `+1` | `:428` |
+//! | 7 | 前景图号 | `u16` | `+1` | `:430` |
+//! | 9 | — | `[u8; 3]` | **跳过**（C# `:434` 注释「mir3 maps dont have doors」） | — |
+//! | 12 | `btLight` | `u8` | `& 0x0F` 再 `* 4` | `:435-436` |
+//! | 13 | — | `u8` | 未使用（C# `:437` `offset += 2` 把它一起跳过） | — |
 //!
 //! 合计 14 字节，尾区 **4** 字节（格内偏移 9 / 10 / 11 / 13；偏移 12 是 `Light`，
 //! 单独成字段，**不重复进 tail**，否则改 `light` 会不生效）。
 //!
-//! ⚠ 注意 C# 在 `:420-421` 把 `MiddleAnimationTick` 与 `franimationtick` **硬写成 0**
+//! ⚠ 注意 C# 在 `:422-423` 把 `MiddleAnimationTick` 与 `franimationtick` **硬写成 0**
 //! （不落盘、不参与判定），本 crate 不虚构这两个值。
 //!
-//! # 三·五、⚠ 前景哨兵规则 `frimage == 1 && frindex == 200 ⇒ frindex = -1`（C# `LegacyMapReader.cs:429-430`）
+//! # 三·五、⚠ 前景哨兵规则 `frimage == 1 && frindex == 200 ⇒ frindex = -1`（C# `_upstream/CrystalStudio/LegacyMapReader.cs:431-432`）
 //!
 //! 这条规则在本格式里**是活代码**（不是从别处抄来的死代码）：
 //!
-//! - `frindex` 来自 `:422` 的 `Bytes[offset] != 255 ? Bytes[offset] + 200 : -1`
+//! - `frindex` 来自 `:424` 的 `Bytes[offset] != 255 ? Bytes[offset] + 200 : -1`
 //!   ⇒ 取值集合是 **`-1` 或 `200…454`** ⇒ **`200` 可达**（该字节为 0 时）；
-//! - `frimage` 来自 `:428` 的 `ToInt16 + 1` ⇒ `frimage == 1` ⇔ 磁盘那 2 字节为 0。
+//! - `frimage` 来自 `:430` 的 `ToInt16 + 1` ⇒ `frimage == 1` ⇔ 磁盘那 2 字节为 0。
 //!
-//! 命中后果：C# 把前景库号改成 `-1` ⇒ `:439` 的 `(frimage & 0x7FFF) > 0 && frindex > 0`
+//! 命中后果：C# 把前景库号改成 `-1` ⇒ `:441` 的 `(frimage & 0x7FFF) > 0 && frindex > 0`
 //! 判假 ⇒ `HasFront` 不置位，该格**没有前景**。
 //! 若漏掉这条，`area == 0 && 前景图号原始值 == 0` 的空前景格会被解成「库 200 / 图 1」
 //! ⇒ 上层会在空地上画出**幻影前景**。
@@ -84,13 +84,13 @@
 //! 取库号请用 [`csharp_front_lib`]（已含本条），**不要**只用 [`csharp_lib`]。
 //!
 //! ⚠ 对照组：Type6（`mir3_shanda.rs`）里**同一条规则是死代码** —— 那一支的 `frindex`
-//! 是 `-1` 或 `≥ 300`（`LegacyMapReader.cs:474` 的 `+300`），永不等于 200。
+//! 是 `-1` 或 `≥ 300`（`_upstream/CrystalStudio/LegacyMapReader.cs:476` 的 `+300`），永不等于 200。
 //! 本仓两处一活一死，**别照搬**（`mir3_shanda.rs:266-276` 的 `csharp_dead_front_fix` 保留无害）。
 //!
 //! # 四、存储顺序：**列优先**
 //!
 //! ```text
-//! offset = 28 + 块长 + (x * h + y) * 14      // x 外层、y 内层（C# `:411-412`）
+//! offset = 28 + 块长 + (x * h + y) * 14      // x 外层、y 内层（C# `:413-414`）
 //! ```
 //!
 //! # 五、真实样本
@@ -99,7 +99,7 @@
 //!
 //! # 六、判别
 //!
-//! C# `:67`：`Bytes[0] == 0`。这条谓词极宽（任何首字节为 0 的文件都命中），
+//! C# `:69`：`Bytes[0] == 0`。这条谓词极宽（任何首字节为 0 的文件都命中），
 //! 因此 [`Mir3Wemade::detect`] 额外要求长度精确等于
 //! `28 + 块长 + 14*w*h`。
 
@@ -121,13 +121,13 @@ pub const TAIL_LEN: usize = 4;
 /// 半分辨率背景块里「一个 2×2 组」的字节数。
 pub const BACK_GROUP_LEN: usize = 3;
 
-/// 背景库号的哨兵值（C# `:404` 的 `255`）。
+/// 背景库号的哨兵值（C# `:406` 的 `255`）。
 pub const BACK_LIB_SENTINEL: u8 = 255;
 
-/// 背景库号偏移（C# `:404` 的 `+200`）。
+/// 背景库号偏移（C# `:406` 的 `+200`）。
 pub const BACK_LIB_OFFSET: i16 = 200;
 
-/// 前景/中间层库号偏移（C# `:422`/`:424` 的 `+200`）。
+/// 前景/中间层库号偏移（C# `:424`/`:426` 的 `+200`）。
 pub const LIB_OFFSET: i16 = 200;
 
 /// 格式单例。
@@ -143,9 +143,9 @@ pub struct BackGroup {
     pub x: u16,
     /// 组内 4 个格的左上角纵坐标 `2y`。
     pub y: u16,
-    /// 背景库号：`255 ⇒ -1`，否则 `原值 + 200`（C# `:404`）。
+    /// 背景库号：`255 ⇒ -1`，否则 `原值 + 200`（C# `:406`）。
     pub lib: i16,
-    /// 背景图号：`ToInt16(磁盘) + 1`（C# `LegacyMapReader.cs:405`）。
+    /// 背景图号：`ToInt16(磁盘) + 1`（C# `_upstream/CrystalStudio/LegacyMapReader.cs:407`）。
     ///
     /// ⚠ **有符号**：`ToInt16` 是 `i16`，所以 `0x8000` 解出 `-32767`（不是 `32769`）；
     /// 结果类型是 `i32`，因为 C# 那边 `BackImage` 是 `int`、`+1` 在 `int` 里做
@@ -156,7 +156,7 @@ pub struct BackGroup {
 impl Mir3Wemade {
     /// 半分辨率背景块的字节数：`3 * ceil(w/2) * floor(h/2)`。
     ///
-    /// 与 C# `:394` / `:410` 的算式逐字一致（`ceil(w/2) = w/2 + w%2`，`floor(h/2) = h/2`）。
+    /// 与 C# `:396` / `:412` 的算式逐字一致（`ceil(w/2) = w/2 + w%2`，`floor(h/2) = h/2`）。
     pub const fn back_block_len(width: u16, height: u16) -> usize {
         let half_w = (width as usize / 2) + (width as usize % 2);
         let half_h = height as usize / 2;
@@ -200,7 +200,7 @@ impl MapFormat for Mir3Wemade {
             }
     }
 
-    /// C# `:67`：`Bytes[0] == 0`（「wemade mir3 maps have no title they just start with blank bytes」）。
+    /// C# `:69`：`Bytes[0] == 0`（「wemade mir3 maps have no title they just start with blank bytes」）。
     fn header_signature(&self, bytes: &[u8]) -> bool {
         bytes.first() == Some(&0) && bytes.len() >= HEADER_LEN
     }
@@ -337,7 +337,7 @@ impl MapFormat for Mir3Wemade {
             can_write: true,
             // 2026-11-05（P1-9）复核后**保持 `false`**：两条判据都不满足。
             //   判据 1：格内 4 字节未建模（`TAIL_LEN = 4`：rel 9/10/11 是门信息、rel 13 无注释），
-            //           更关键的是 `flag`（rel 0，C# `:436-437` 由 bit0/bit1 派生「可走/阻挡」）
+            //           更关键的是 `flag`（rel 0，C# `:438-439` 由 bit0/bit1 派生「可走/阻挡」）
             //           与 `mid_idx` / `mid_ani_frame` **不在编辑视图里**
             //           （`convert.rs` 的 `unmodeled_fields(Mir3Wemade)` 列了这四项）
             //           ⇒ 改了图号之后，碰撞/可走标志与中层库号不会跟着变；
@@ -348,7 +348,7 @@ impl MapFormat for Mir3Wemade {
             editable_caveat: "每格 4 字节未建模（格内 rel 9/10/11 = 门信息、C# 注释 `mir3 maps dont have doors`；rel 13 无注释、语义未知）；更关键的是 flag 字节（rel 0，C# 由 bit0/bit1 派生「可走/阻挡」）与中层库号、中层动画帧不在编辑视图里 ⇒ 改图号后碰撞/可走标志不会跟着变；另本机 0 张真实样本",
             // ★ 本格式的背图在**块级**（3 B / 2×2 组），不是每格 `bk_img`：
             //   `Cell::bk_img` 恒 0 且 `write` 不写它 ⇒ 上层按格写 `bk_img` 会被**静默丢弃**。
-            //   依据：C# `LegacyMapReader.cs:399-408`（块循环）+ 本模块 `write`（不写 bk_img）。
+            //   依据：C# `_upstream/CrystalStudio/LegacyMapReader.cs:401-410`（块循环）+ 本模块 `write`（不写 bk_img）。
             ground_paint_supported: false,
             has_lib_bytes: true,
             fixed_cell_len: Some(CELL_LEN),
@@ -372,19 +372,19 @@ impl MapFormat for Mir3Wemade {
     }
 }
 
-/// 按 C# `:399-407` 的循环解出半分辨率背景块（**只解 C# 真正读过的那些组**）。
+/// 按 C# `:401-409` 的循环解出半分辨率背景块（**只解 C# 真正读过的那些组**）。
 ///
 /// 宽为奇数时，块尾有 `3 * floor(h/2)` 个字节 C# 从未读取 —— 那些字节仍在
 /// [`RawMap::header_raw`] 里原样保存，本函数不返回它们。
 ///
-/// 图号按 C# `LegacyMapReader.cs:405` 的**有符号**语义解（`BitConverter.ToInt16` ⇒ `i16`，再 `+1`），
+/// 图号按 C# `_upstream/CrystalStudio/LegacyMapReader.cs:407` 的**有符号**语义解（`BitConverter.ToInt16` ⇒ `i16`，再 `+1`），
 /// 因此 bit15 置位时得到负值（`0x8000` ⇒ `-32767`），与无符号解释差 **65536**。
 pub fn decode_back_tiles(map: &RawMap) -> Vec<BackGroup> {
     let w = map.width as usize;
     let h = map.height as usize;
     let mut out = Vec::new();
     let mut off = HEADER_LEN;
-    // C# `:399-400`：x < Width/2、y < Height/2，都是**向下取整**。
+    // C# `:401-402`：x < Width/2、y < Height/2，都是**向下取整**。
     for x in 0..w / 2 {
         for y in 0..h / 2 {
             if off + BACK_GROUP_LEN > map.header_raw.len() {
@@ -396,7 +396,7 @@ pub fn decode_back_tiles(map: &RawMap) -> Vec<BackGroup> {
             } else {
                 i16::from(raw_lib) + BACK_LIB_OFFSET
             };
-            // C# `:405`：`(int)(BitConverter.ToInt16(Bytes, offset + 1) + 1)`
+            // C# `:407`：`(int)(BitConverter.ToInt16(Bytes, offset + 1) + 1)`
             //   —— 先按 **i16 有符号**解释，再 `+1`；C# 的 `BackImage` 是 `int`，
             //   所以 `+1` 必须在 `i32` 里做（`i16` 装 `0x7FFF + 1` 会绕成 `-32768`）。
             let img = i32::from(i16_at(&map.header_raw, off + 1)) + 1;
@@ -413,16 +413,16 @@ pub fn decode_back_tiles(map: &RawMap) -> Vec<BackGroup> {
     out
 }
 
-/// C# `:417-418`：前景动画帧 `255 ⇒ 0`，再 `& 0x8F`。
+/// C# `:419-420`：前景动画帧 `255 ⇒ 0`，再 `& 0x8F`。
 pub fn csharp_front_ani_frame(raw: u8) -> u8 {
     let v = if raw == 255 { 0 } else { raw };
     v & 0x8F
 }
 
-/// C# `:422`/`:424`：库号 `255 ⇒ -1`，否则 `+200`。
+/// C# `:424`/`:426`：库号 `255 ⇒ -1`，否则 `+200`。
 ///
-/// ⚠ 这是**两步里的第一步**：`btArea`（格内 rel 3）还要再过 `:429-430` 的哨兵修正，
-/// 请用 [`csharp_front_lib`]；`mid_idx`（rel 4，C# `:424`）**没有**那条修正，用本函数。
+/// ⚠ 这是**两步里的第一步**：`btArea`（格内 rel 3）还要再过 `:431-432` 的哨兵修正，
+/// 请用 [`csharp_front_lib`]；`mid_idx`（rel 4，C# `:426`）**没有**那条修正，用本函数。
 pub fn csharp_lib(raw: u8) -> i16 {
     if raw == BACK_LIB_SENTINEL {
         -1
@@ -431,27 +431,27 @@ pub fn csharp_lib(raw: u8) -> i16 {
     }
 }
 
-/// C# `LegacyMapReader.cs:429-430`：前景哨兵修正 —— `frimage == 1 && frindex == 200 ⇒ frindex = -1`。
+/// C# `_upstream/CrystalStudio/LegacyMapReader.cs:431-432`：前景哨兵修正 —— `frimage == 1 && frindex == 200 ⇒ frindex = -1`。
 ///
 /// ✅ **本格式（Type5）里是活规则，可达**：
-/// `frindex` 来自 `:422` 的 `Bytes[offset] != 255 ? Bytes[offset] + 200 : -1`
+/// `frindex` 来自 `:424` 的 `Bytes[offset] != 255 ? Bytes[offset] + 200 : -1`
 /// ⇒ 取值集合是 `-1` 或 `200…454` ⇒ **`200` 可达**（`btArea` 字节为 0 时）。
 ///
 /// 入参 `fr_img_disk` 是格内 rel 7..9 的**磁盘原值**（= [`Cell::fr_img`](crate::Cell::fr_img)）：
-/// C# `:428` 先 `frimage = ToInt16(磁盘) + 1`，`:429` 才判 `frimage == 1`
+/// C# `:430` 先 `frimage = ToInt16(磁盘) + 1`，`:431` 才判 `frimage == 1`
 /// ⇔ **本参数为 0**（本函数内部用 [`csharp_image`] 复现那一步，不写死 0，免得读代码的人对不上）。
 ///
-/// 命中后果：前景库号被压成 `-1` ⇒ C# `:439` 的 `frindex > 0` 判假 ⇒ `HasFront` 不置位
+/// 命中后果：前景库号被压成 `-1` ⇒ C# `:441` 的 `frindex > 0` 判假 ⇒ `HasFront` 不置位
 /// ⇒ 该格**没有前景**（不命中则会被解成「库 200 / 图 1」，即**幻影前景**）。
 ///
-/// ⚠ 只给 `btArea`（格内 rel 3，C# `:422`）用；`mid_idx`（rel 4，C# `:424`）没有这条修正。
+/// ⚠ 只给 `btArea`（格内 rel 3，C# `:424`）用；`mid_idx`（rel 4，C# `:426`）没有这条修正。
 ///
 /// ⚠ 对照组：Type6 里**同一条规则是死代码**（那一支的 `frindex` 只可能 `-1` 或 `≥ 300`，
-/// `LegacyMapReader.cs:474` 的 `+300`），见 `mir3_shanda.rs::csharp_dead_front_fix`。
+/// `_upstream/CrystalStudio/LegacyMapReader.cs:476` 的 `+300`），见 `mir3_shanda.rs::csharp_dead_front_fix`。
 /// 两处一活一死，别照搬。
 pub fn csharp_front_lib(area: u8, fr_img_disk: u16) -> i16 {
     let lib = csharp_lib(area);
-    // C# `:428` 先 `+1` 得 `frimage`，`:429-430` 才判 `(frimage == 1) && (frindex == 200)`。
+    // C# `:430` 先 `+1` 得 `frimage`，`:431-432` 才判 `(frimage == 1) && (frindex == 200)`。
     if csharp_image(fr_img_disk) == 1 && lib == 200 {
         -1
     } else {
@@ -459,17 +459,17 @@ pub fn csharp_front_lib(area: u8, fr_img_disk: u16) -> i16 {
     }
 }
 
-/// C# `:426`/`:428`：图号 `+1`。
+/// C# `:428`/`:430`：图号 `+1`。
 pub fn csharp_image(raw: u16) -> u16 {
     raw.wrapping_add(1)
 }
 
-/// C# `:433-434`：光照 `& 0x0F` 再 `* 4`。
+/// C# `:435-436`：光照 `& 0x0F` 再 `* 4`。
 pub fn csharp_light(raw: u8) -> u8 {
     (raw & 0x0F).wrapping_mul(4)
 }
 
-/// C# `:436-437`：`flag` 的 bit0/bit1 **为 1 才可走**。
+/// C# `:438-439`：`flag` 的 bit0/bit1 **为 1 才可走**。
 ///
 /// 返回 `(背景层可走, 前景层可走)`；对应位不为 1 时 C# 会给背景图号打
 /// `0x20000000` / `0x40000000` 阻挡标记。
@@ -535,7 +535,7 @@ mod tests {
 
     #[test]
     fn 背景图号按有符号解_bit15置位差六五五三六() {
-        // C# `:405`：`(int)(BitConverter.ToInt16(Bytes, offset + 1) + 1)`
+        // C# `:407`：`(int)(BitConverter.ToInt16(Bytes, offset + 1) + 1)`
         //   ⇒ 先 i16 有符号，再 +1。bit15 置位时与无符号解释**差 65536**。
         let mut raw = 造图(2, 2); // 2×2 ⇒ 只有 1 个背景组（cells_offset = 31）
         raw[28] = 0; // 库号 0 ⇒ 200
@@ -568,7 +568,7 @@ mod tests {
         assert_eq!(csharp_front_ani_frame(0xFF), 0);
         assert_eq!(csharp_lib(255), -1);
         assert_eq!(csharp_lib(0), 200);
-        // C# `:429-430` 的哨兵修正（Type5 里可达）：
+        // C# `:431-432` 的哨兵修正（Type5 里可达）：
         assert_eq!(csharp_front_lib(0, 0), -1, "frindex 200 + frimage 1 ⇒ -1");
         assert_eq!(csharp_front_lib(1, 0), 201, "201 不命中规则");
         assert_eq!(csharp_front_lib(0, 1), 200, "frimage 2（磁盘 1）不命中规则");
@@ -582,8 +582,8 @@ mod tests {
 
     #[test]
     fn 前景哨兵规则_frimage1且frindex200_解出负一() {
-        // Type5 的 `frindex` 取值集合是 `-1` 或 `200…454`（C# `:422`）⇒ `200` 可达
-        // ⇒ `:429-430` 在本格式里**是活代码**。
+        // Type5 的 `frindex` 取值集合是 `-1` 或 `200…454`（C# `:424`）⇒ `200` 可达
+        // ⇒ `:431-432` 在本格式里**是活代码**。
         let mut raw = 造图(2, 2);
         let base = Mir3Wemade::cells_offset(2, 2);
         // 第 0 格：btArea（rel 3）= 0 ⇒ frindex = 200；前景图号（rel 7..9）= 0 ⇒ frimage = 1
