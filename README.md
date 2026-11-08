@@ -144,7 +144,7 @@ cargo run -p miredit-gui --release -- --map /path/to/some.map
 
 | 文件 | 内容 |
 |---|---|
-| [docs/架构蓝图.md](docs/架构蓝图.md) | 分层、模块边界、里程碑 |
+| [docs/架构蓝图.md](docs/架构蓝图.md) | 分层与依赖方向、模块边界、实现顺序、测试规模 |
 | [docs/地图格式规格.md](docs/地图格式规格.md) | 9 种格式的逐字段字节布局与判别/读写口径 |
 | [docs/README.md](docs/README.md) | 文档索引 |
 | [web/README.md](web/README.md) | 网页版接口契约（端点 / 错误码 / WebSocket / 前端行为） |

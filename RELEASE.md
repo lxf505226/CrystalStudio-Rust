@@ -11,7 +11,7 @@
 
 ### 1.1 当前方案（`2026.11.8+a` 形态）
 
-> 2026-11-08 用户拍板，**下一版起生效**。核对时点 `Cargo.toml:26` 仍是历史方案（`20261108.0.0`），尚未切换。
+> 2026-11-08 起生效，**已随 `v2026.11.08a` 发布**（`[workspace.package].version` = `2026.11.8+a`）。
 
 - **格式**：`<年>.<月>.<日>` 首次发布；**同日再发**在末尾加构建元数据 `+a` / `+b` / `+c` …（例：`2026.11.8` → `2026.11.8+a` → `2026.11.8+b`）。
 - **为什么不是 `2026.11.08a`**：**实测 cargo 拒绝**。本机 cargo 1.98.1，在 `I:\cargo\tmp` 下逐个建最小 crate 跑 `cargo metadata --no-deps --format-version 1`：
@@ -27,13 +27,13 @@
 
 > ⚠ **显式订正**：原口径把上面三条拒绝都记成 `unexpected character 'a'`。实测 `2026.11.08a` 的报错**不是**这条，而是 `invalid leading zero in patch version number`（根因是 patch 段的**前导零**，与 `a` 无关）。结论不变（都拒绝），但归因不同 —— 别拿它当「`08a` 也行」的依据。
 
-- **tag 形态**：`v2026.11.08a`（**tag 名不受 SemVer 约束**，可用用户要的形态）；**`Cargo.toml` 里必须写 `2026.11.8+a`**。tag 与 manifest 形态不同是**有意为之**，不是笔误。
-- **⚠ 切换清单（下版做，现在还没做）**：
-  1. `VERSIONING.md` §二按新格式重写（现盘 `VERSIONING.md:17-30`）；
-  2. `scripts/bump-version.ps1` 的格式校验（`$DateVersionPattern`，现盘 `scripts/bump-version.ps1:95`）与「三段严格递增」判据（`scripts/bump-version.ps1:228-255`）放宽 build metadata；
+- **tag 形态**：`v2026.11.08a`（**tag 名不受 SemVer 约束**，可用带字母的 tag 形态）；**`Cargo.toml` 里必须写 `2026.11.8+a`**。tag 与 manifest 形态不同是**有意为之**，不是笔误。
+- **切换状态（已随 `v2026.11.08a` 落地）**：
+  1. `VERSIONING.md` §二已按新格式重写；
+  2. `scripts/bump-version.ps1` 的格式校验与递增判据已放宽 build metadata（`-Part same-day|next-day`，不再要求三段数值严格递增）；
   3. `.github/workflows/ci.yml:53-55` 的 `-Check` 门禁跟着改；
-  4. **实测新增**：`crates/miredit-gui/build.rs:119-148` 的 `version_quad` 按 `['.', '-', '+']` 切三段 —— `2026.11.8+a` 会落进「旧 `0.x.y`」分支得数值版本 `[2026,11,8,0]`，且 `+a` 与 `+b` 的**数值版本完全相同**（Windows 属性里同日再发不可区分）；切换时必须一并处理；
-  5. **现状卡点**：`scripts/bump-version.ps1:659-663` 明确拒绝含 `-` 或 `+` 的 `-Set` 值（`-Set 2026.11.8+a` 现在会直接 `exit 1`）⇒ 切换落地前只能手工改 `Cargo.toml:26`。
+  4. `crates/miredit-gui/build.rs` 的 `version_quad` 已把 `+a` / `+b` 折算成第四段 `1` / `2`（同日再发在 Windows 属性里可区分）；
+  5. `-Set` 已接受 `2026.11.8+a`，只拒绝预发布形态（含 `-`）。
 
 ### 1.2 历史方案（`<YYYYMMDD>.<轮次>.<修正>`）
 
@@ -137,7 +137,7 @@ git archive --format=zip --prefix=CrystalStudio-<版本>/ v<版本> -o CrystalSt
 ### Step 6 提交 + 打 tag
 
 ```powershell
-git status                       # 先核对只含本写域
+git status                       # 先核对只含本次发布的改动
 git add -A
 git commit -m "发布 v<版本>：<一句话摘要>"      # 中文六要素
 git tag -a v<版本> -m "Crystal Studio <版本>"
@@ -146,7 +146,7 @@ git push origin main --tags
 
 - **判据**：`git rev-parse HEAD` == `git rev-parse origin/main` == `git rev-parse v<版本>^{commit}`。
 - **失败处置**：三者不等 ⇒ tag 打错对象，`git tag -d` + `git push origin :refs/tags/v<版本>` 重打（`VERSIONING.md:293`）。
-- **核对时点现状**：HEAD `7e360ba`、`origin/main` `0c50d09`（本地 ahead 2）⇒ 判据此刻**不满足**，属发布前正常态。
+- **核对时点（2026-11-08）**：当时 HEAD `7e360ba`、`origin/main` `0c50d09`（本地 ahead 2）⇒ 判据当时**不满足**，属发布前的正常态。
 
 ### Step 7 GitHub Release
 

@@ -1,8 +1,8 @@
 # Crystal Studio · Docker 部署
 
-> ⚠ **现状：镜像从未在 CI 或任何机器上实跑过。** 开发环境没有 Docker（`docker` / `podman` / `nerdctl` 均不存在），
-> 因此下面这份编排只做过静态复核（YAML 字段、`COPY` 源、shell 语法、nginx 配置配平），**没有 `docker build` / `docker compose up` 的实测结果**。
-> 请把本文当「设计意图 + 部署清单」，首次部署时以实际输出为准；跑通请自行补一份验证记录。
+> **现状（2026-11-08）**：`docker build -f docker/Dockerfile --target runtime` 与 `docker run` 已在飞牛 NAS 上实跑验证（构建 Rust 3m58s + `apt-get` 约 8 分钟；
+> 容器 `Up (healthy)`、`Restarts=0`，`/api/health` 与根路径 `/` 均 200，见 §7）。
+> 开发机没有 Docker（`docker` / `podman` / `nerdctl` 均不存在），**本机跑不了 `docker build`**；`front`（nginx）层、素材卷挂载、`/api/save` 写盘**仍未验证**（逐项见 §7）。
 
 ## 1. 组成
 
@@ -147,7 +147,7 @@ docker compose --profile front up -d --build
 | `entrypoint.sh` | 生成运行时配置、可选开反代、回退到 503 桩 |
 | `verify.sh` / `verify.ps1` | 一条命令验证（Linux / Windows） |
 
-## 7. 已知未完成项（部署前必须处理）
+## 7. 已知未完成项（逐项状态）
 
 | 项 | 状态 | 说明 |
 |---|---|---|

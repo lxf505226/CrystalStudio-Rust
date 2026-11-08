@@ -158,7 +158,7 @@ docker build -f docker/Dockerfile --target runtime -t crystalstudio/miredit:dev 
 
 ### 3.4 已知限制
 
-- **本机没有 Docker CLI**（`docker` / `podman` / `nerdctl` 均不存在，`docker/README.md:3-5`）⇒ 编排只做过静态复核（YAML 字段、`COPY` 源、shell 语法、nginx 配平），本机跑不了 `docker build`。
+- **本机没有 Docker CLI**（`docker` / `podman` / `nerdctl` 均不存在，`docker/README.md:3-5`）⇒ 本机跑不了 `docker build`；实跑验证在飞牛 NAS 上完成（见 §四，2026-11-08 `BUILD_EXIT=0`）。
 - **镜像没推任何 registry**（`CHANGELOG.md:16`）⇒ `VERSIONING.md` §7.3 的 `docker compose pull` 拿不到镜像（该节前提是「镜像确实以版本标签发布过」），现阶段只能本地构建。
 - 除地图卷外**全部只读**（`:ro`）⇒ 容器内 `/api/save` 必然 `io_error`（`docker/README.md:114`，有意为之：先只读验渲染）。
 - `catalogue/` 与 `Objects/` 必须**并列在同一 dataRoot**（`/data/crystalstudio/`），否则列表仍 200 但每条 `cells` / `bounds` 全 `null`（`docker/README.md:111-113`）。
