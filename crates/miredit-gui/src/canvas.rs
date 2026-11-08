@@ -302,9 +302,9 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
     }
 
     // 悬停格高亮：宽 4、深蓝 `#00008B` @ α0.7（预乘 `rgba_pm(0, 0, 97, 179)`）。
-    // 上游 `fluttergo/CrystalStudio@a78affdf` **引入**的 `MapViewport.cs:144`（⚠ 该行号是 `a78affdf` 版内行号，离线不可复核 —— 本地 `_upstream` 快照无 `hoverCellOutline` 符号）
+    // 上游 `fluttergo/CrystalStudio@a78affdf` **引入**的 `MapViewport.cs:144`（⚠ 该行号是 `a78affdf` 版内行号 —— 本地 `_upstream` 快照无 `hoverCellOutline` 符号）。**可复核**：`a78affdf` 全量副本已落地本地，路径 `I:\cargo\tmp\cs-master\CrystalStudio-a78affdfd8f912d10a8bce940b54ff7a836cbbfc\CrystalStudio\MapViewport.cs`（616 行）
     // `hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4)`，
-    // 绘制点 `:305`（`:350` 调 `DrawHoverCell`）。上游 `:304` 注释（⚠ `:304`/`:305`/`:350` 同为 `a78affdf` 版内行号，离线不可复核）
+    // 绘制点 `:305`（`:350` 调 `DrawHoverCell`）。上游 `:304` 注释（⚠ `:304`/`:305`/`:350` 同为 `a78affdf` 版内行号，**可复核**：同上路径）。**订正（2026-11-08）**：原写「离线不可复核」，该表述已过期（`a78affdf` 全量副本已落地本地），已订正为「可复核」并给出路径。
     // `// Screen coordinates keep the stroke four pixels wide at every zoom.`
     // ⇒ 宽是**屏幕像素**、不随缩放变；本仓 `border_w` 吃 f32 宽、不乘 scale，口径一致。
     //

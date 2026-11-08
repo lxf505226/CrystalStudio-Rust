@@ -487,7 +487,7 @@ pub const SCROLL_PX_PER_NOTCH: f32 = 50.0;
 
 /// 鼠标所在格的高亮描边宽 **4**（屏幕像素，不随缩放变）。
 ///
-/// **上游出处（逐字）**：`fluttergo/CrystalStudio@a78affdf` 的 `MapViewport.cs:144` ——
+/// **上游出处（逐字）**：`fluttergo/CrystalStudio@a78affdf` 的 `MapViewport.cs:144`（**本地全量副本可复核**：`I:\cargo\tmp\cs-master\CrystalStudio-a78affdfd8f912d10a8bce940b54ff7a836cbbfc\CrystalStudio\MapViewport.cs`，616 行 / 40,168 B）——
 /// `private static readonly ScenePen hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4);`
 /// 末位实参 `4` 即笔画宽。绘制点 `:305`
 /// `dc.DrawRectangle(null, hoverCellOutline, new(origin.X + cell.X * 48 * Zoom, …));`，
@@ -495,7 +495,7 @@ pub const SCROLL_PX_PER_NOTCH: f32 = 50.0;
 /// 上游 `:304` 注释明写 `// Screen coordinates keep the stroke four pixels wide at every zoom.`
 /// ⇒ 4 是**屏幕像素**、不随 `Zoom` 缩放，与本仓 `border_w` 直接吃 f32 宽（不乘 scale）一致。
 ///
-/// ⚠ **真值来源特殊：别指望在本地 `_upstream` 复核**。
+/// ⚠ **真值来源特殊：本地 `_upstream`（`f84566bc` 快照）无本符号，别指望在那里复核**；但 **`a78affdf` 全量副本已落地本地 ⇒ 现在可复核**（路径见上「上游出处（逐字）」条）。
 /// 本符号是 `a78affdf` **引入**的（属"某提交引入"的历史事实，故此处保留 `@<sha>`；
 /// 引用体系统一口径下，**行号位置一律不声称对应某个提交**）。
 /// 本地 `_upstream/CrystalStudio` = `f84566bc` 快照（`MapViewport.cs` 604 行，
@@ -504,8 +504,8 @@ pub const SCROLL_PX_PER_NOTCH: f32 = 50.0;
 /// 真值取自 GitHub `a78affdf` 的 `MapViewport.cs:144`（Lead 2026-11-08 用 GitHub API 取证；
 /// 修复代理 2026-11-08 用 `api.github.com/…/contents/CrystalStudio/MapViewport.cs?ref=a78affdf`
 /// 独立复核，解码后 616 行、四处行号逐字一致）。
-/// ⚠ 本段内**所有裸 `:NN`（`:144`/`:304`/`:305`/`:298`/`:350`）都是 `a78affdf` 版内行号**，
-/// 离线一律不可复核（`_upstream` 无 `.git`、raw/api 不通）；
+/// ⚠ 本段内**所有裸 `:NN`（`:144`/`:304`/`:305`/`:298`/`:350`）都是 `a78affdf` 版内行号**（`_upstream` 无 `.git`、raw/api 不通 ⇒ 只能在本地全量副本里按版内行号读），
+/// **可复核**（路径见上「上游出处（逐字）」条）—— **订正（2026-11-08）**：原写「离线一律不可复核」，该表述已过期（`a78affdf` 全量副本已落地本地），已订正为可复核；
 /// 本地 `f84566bc` 的 `MapViewport.cs:144` 是 `public MapViewport()` 构造函数，
 /// **不是**这个符号 —— 别照着本地 `:144` 去读。
 ///
