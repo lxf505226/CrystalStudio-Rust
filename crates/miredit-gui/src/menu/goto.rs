@@ -1,6 +1,6 @@
 //! 「视图 → 定位到格…」模态（F-R13-2）：几何 + 绘制 + 输入 + 校验。
 //!
-//! 上游同语义只有一处实现 —— `MapViewport.Navigation.cs:5-13` 的 `LocateCell`：
+//! 上游同语义只有一处实现 —— `_upstream/CrystalStudio/MapViewport.Navigation.cs:5-13` 的 `LocateCell`：
 //!
 //! ```csharp
 //! internal void LocateCell(int x, int y) {
@@ -13,7 +13,7 @@
 //! }
 //! ```
 //!
-//! 上游界面上只有 CheckMap 结果面板的「定位」按钮调它（`MainWindow.MapCheck.cs:33`）。
+//! 上游界面上只有 CheckMap 结果面板的「定位」按钮调它（`_upstream/CrystalStudio/MainWindow.MapCheck.cs:33`）。
 //! 本仓把语义抽成 `MireditApp::locate_cell`（一处实现，CheckMap 与本模态共用），
 //! 并在此另开一个**通用入口**（视图菜单）—— 这是本仓新增的入口，不是上游界面项。
 //!

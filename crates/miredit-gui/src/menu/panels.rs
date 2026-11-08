@@ -2,9 +2,9 @@
 //!
 //! # 为什么是 7 个而不是 6 个
 //!
-//! 官方 `MainWindow.axaml.cs:338-379` 一共 `docking.Add(...)` 了 **7 个**面板
+//! 官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:351-392` 一共 `docking.Add(...)` 了 **7 个**面板
 //! （Tools / Tool Options / Layers / Minimap / Palette / Active Asset / Cell Inspector），
-//! 而 `DockWorkspace.cs:269 AddSectionMenu` 会为**每一个**面板生成一个 CheckBox 菜单项
+//! 而 `_upstream/CrystalStudio/DockWorkspace.cs:312 AddSectionMenu` 会为**每一个**面板生成一个 CheckBox 菜单项
 //! ⇒ 视图菜单里的面板开关就是 7 个。本仓 `layout.rs` 里也正好有这 7 块矩形
 //! （`p_tools` / `p_tool_options` / `p_layers` / `p_cell_inspector` / `p_minimap` /
 //! `p_palette` / `p_active_asset`）。
@@ -29,7 +29,7 @@ pub enum PanelId {
     /// **地图列表**（2026-11-05，上游 `901dbe2f` 新增）。
     ///
     /// 上游把它 `docking.Add("Maps", …, Dock.Left, 2)` 排在**左停靠区第一位**
-    /// （`MainWindow.axaml.cs:343`）；本仓因左栏几何已排满（余量实测 96px），
+    /// （`_upstream/CrystalStudio/MainWindow.axaml.cs:349`）；本仓因左栏几何已排满（余量实测 96px），
     /// 把它做成**中列左侧的可开合列** —— 详细理由与几何见 [`crate::maplist`] 模块文档 §四。
     ///
     /// **默认关**（8 个面板里唯一默认关的）：本仓 1500×950 默认帧是与客户端逐像素比对的

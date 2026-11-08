@@ -88,7 +88,7 @@ pub struct DocText {
     pub status_stamp: Option<String>,
     /// 状态栏：上一次填充的格数（`填充 1234 格`）；`None` = 没有可显示的填充回执。
     ///
-    /// **本版新增**：官方把填充结果写进状态栏（`MapViewport.cs:537`），本仓放在
+    /// **本版新增**：官方把填充结果写进状态栏（`_upstream/CrystalStudio/MapViewport.cs:563`），本仓放在
     /// `status.hint` 之后、坐标段之前（见 [`crate::statusbar::dyn_labels`]）。
     pub status_fill: Option<String>,
     /// 状态栏：**上一次选区 / 印章操作的回执**（`放置印章「mir_00000」8 格` /
@@ -123,7 +123,7 @@ pub struct DocText {
     pub inspector_values: [String; 6],
 }
 
-/// 工具选项胶囊里该写什么 —— **照官方 `MainWindow.axaml.cs:932` 的三分支**。
+/// 工具选项胶囊里该写什么 —— **照官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:1068` 的三分支**。
 ///
 /// ```csharp
 /// BrushSizeLabel.Text = (Viewport.Tool == EditorTool.Bucket ? LocalText.T("Fill")
@@ -143,7 +143,7 @@ pub fn pill_text(tool: Tool, size: usize) -> String {
 
 /// 状态栏里"填充结果"那一段的文字（`None` = 不显示）。
 ///
-/// 图号层 ⇒ `填充 N 格`；阻挡层 ⇒ `应用低位阻挡 N 格`（官方 `:537` 对这两种是两句不同的话）。
+/// 图号层 ⇒ `填充 N 格`；阻挡层 ⇒ `应用低位阻挡 N 格`（官方 `:563` 对这两种是两句不同的话）。
 pub fn fill_text(rec: Option<FillRecord>) -> Option<String> {
     let rec = rec?;
     Some(if rec.layer.is_collision() {
@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(ed.undo_len(), 0, "改尺寸不该产生撤销步");
         assert!(!ed.dirty(), "改尺寸不该把文档弄脏");
 
-        // 填充工具 ⇒ 官方复用 `Fill` 这条文案（`MainWindow.axaml.cs:932`）
+        // 填充工具 ⇒ 官方复用 `Fill` 这条文案（`_upstream/CrystalStudio/MainWindow.axaml.cs:1068`）
         ed.select(crate::edit::TOOL_BUCKET_IDX);
         let t = build(&d, &CanvasView::default(), None, &CellLines::unknown(), &ed);
         assert_eq!(t.pill, tx::TOOL_BUCKET);
@@ -649,7 +649,7 @@ mod tests {
         let t = build(&d, &CanvasView::default(), None, &CellLines::unknown(), &ed);
         assert_eq!(t.status_fill.as_deref(), Some("填充 4 格"));
 
-        // 阻挡层：官方是另一句话（`MapViewport.cs:537`）
+        // 阻挡层：官方是另一句话（`_upstream/CrystalStudio/MapViewport.cs:563`）
         let mut ed2 = 空会话();
         ed2.set_layer(crate::edit::EditLayer::LowCollision);
         let mut map2 = 小图();

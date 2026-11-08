@@ -3,7 +3,7 @@
 //!
 //! # 数据来源（两处互相印证）
 //!
-//! 1. `CrystalStudio/MainWindow.axaml:5` 的 `<Menu>` 树 —— 每项 `Header` 是
+//! 1. `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `<Menu>` 树 —— 每项 `Header` 是
 //!    `{local:Loc <Key>}`，`<Separator />` 的位置就是官方分组；
 //! 2. `layout/crystalstudio-strings.json` 里同一批 key 的 `Chinese`。
 //!
@@ -17,7 +17,7 @@
 //! 视图 20 = XAML 9 + 语言 1 + 面板开关 8 + 锁定/重置 2
 //!
 //! ⚠ **2026-11-05 起是 40 项**（原 39）：上游 `901dbe2f` 新增了第 8 个面板
-//! （`docking.Add("Maps", …)`），而 `DockWorkspace.cs:269 AddSectionMenu` 会为
+//! （`docking.Add("Maps", …)`），而 `_upstream/CrystalStudio/DockWorkspace.cs:312 AddSectionMenu` 会为
 //! **每一个**面板生成一条 CheckBox 菜单项 ⇒ 面板开关 7 → 8，视图 18 → 19。
 //! ⚠ **2026-11-07 起是 46 项**（编辑 4 → 5；工具 6 → 7 → 8 → 9：检查地图、裁剪到选区、地图扩边）：补了「单元格属性…」（R12-F1）；此前同日视图 19 → 20 补了「地砖信息悬浮」
 //! （[`Action::CellHover`]），照官方 `MainWindow.axaml` 的 `CellHoverToggle`
@@ -35,11 +35,11 @@
 //! （内部审查报告《审查-菜单 39 项》缺陷 1、2；已移出公开仓）。现在按 [`Sub`] 展开：
 //!
 //! ```text
-//! 文件 → 最近打开      动态列表（官方 RecentMaps.cs:27-39）；行 = 设置文件里的 `recent` 列表
+//! 文件 → 最近打开      动态列表（官方 _upstream/CrystalStudio/MainWindow.RecentMaps.cs:27-39）；行 = 设置文件里的 `recent` 列表
 //!                      （最近优先，最多 10 条，见 [`crate::menu::settings`]）；
 //!                      列表为空 ⇒ 只出现官方空态行「暂无最近地图」（:39，IsEnabled=false）
 //! 视图 → 地图光照      3 个复选子项：黎明 / 黄昏(D) · 白天(D)[官方 IsChecked="True"] · 夜晚(N)
-//! 视图 → 语言（重启后生效） 2 个复选子项：简体中文 · English（官方 Localization.cs:10-11）
+//! 视图 → 语言（重启后生效） 2 个复选子项：简体中文 · English（官方 _upstream/CrystalStudio/MainWindow.Localization.cs:10-11）
 //! ```
 //!
 //! 静态子项共 **5** 个（[`sub_count`]），另有 1 个动态列表（行数随 `recent` 变：0 条 ⇒ 1 行空态）。
@@ -74,12 +74,12 @@ pub const SUB_LIGHT_DAWN_DUSK: &str = "黎明 / 黄昏(D)";
 pub const SUB_LIGHT_DAY: &str = "白天(D)";
 /// 地图光照子项：`夜晚(N)`（官方 `Night_F7AFD490` = `夜晚(_N)`）。
 pub const SUB_LIGHT_NIGHT: &str = "夜晚(N)";
-/// 语言子项：`简体中文`（官方 `MainWindow.Localization.cs:10` 的字面量，**无助记符**）。
+/// 语言子项：`简体中文`（官方 `_upstream/CrystalStudio/MainWindow.Localization.cs:10` 的字面量，**无助记符**）。
 pub const SUB_LANGUAGE_ZH_CN: &str = "简体中文";
-/// 语言子项：`English`（官方 `MainWindow.Localization.cs:11` 的字面量，**无助记符**）。
+/// 语言子项：`English`（官方 `_upstream/CrystalStudio/MainWindow.Localization.cs:11` 的字面量，**无助记符**）。
 pub const SUB_LANGUAGE_EN: &str = "English";
 /// 「最近打开」的空态行：`暂无最近地图`
-/// （官方 `Strings.json` 的 `NoRecentMaps_156CD974`，由 `MainWindow.RecentMaps.cs:39`
+/// （官方 `Strings.json` 的 `NoRecentMaps_156CD974`，由 `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:39`
 /// 以 `IsEnabled = false` 加进子菜单）。
 pub const SUB_RECENT_EMPTY: &str = "暂无最近地图";
 
@@ -116,7 +116,7 @@ pub const STATE_RECENT_GONE: &str = "文件已不存在（灰显）";
 
 /// 「点了一条最近地图，但文件已不存在」——状态栏给用户的原因（`{path}` = 完整路径）。
 ///
-/// 官方只在 ToolTip 里说「`{path}`\nFile no longer exists.」（`RecentMaps.cs:35`），
+/// 官方只在 ToolTip 里说「`{path}`\nFile no longer exists.」（`_upstream/CrystalStudio/MainWindow.RecentMaps.cs:35`），
 /// 且**不把这条从列表里去掉**；本仓按 2026-11-05 单子：状态栏给中文原因 **并移除**该条
 /// （见 [`crate::menu::action::open_recent_index`]）。**有意偏离**，理由：留一条点不动的
 /// 死条目只会让人反复点，删掉才自洽。
@@ -142,13 +142,13 @@ pub const DIAG_RECENT_UNREADABLE: &str = "[菜单] 最近地图列表读取失�
 pub const STATUS_RECENT_STALE: &str = "最近地图列表已变化：请重新展开「最近打开」再选";
 
 
-/// 「重做」**在菜单里**显示的快捷键：官方 `MainWindow.axaml:5` 只写 `Ctrl+Shift+Z`。
+/// 「重做」**在菜单里**显示的快捷键：官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 只写 `Ctrl+Shift+Z`。
 ///
 /// ⚠ 与 [`crate::ui_text::KEY_CTRL_SHIFT_Z`]（= `Ctrl+Shift+Z / Ctrl+Y`）**故意不同**，
 /// 这不是"两套不一致"，而是两个不同的口径：
 ///
 /// * **菜单**要照官方显示 —— 官方菜单手势只有 `Ctrl+Shift+Z`（`Ctrl+Y` 官方只在
-///   `MainWindow.axaml.cs:848` 的 `KeyDownHandler` 里绑，**不写进菜单**）；
+///   `_upstream/CrystalStudio/MainWindow.axaml.cs:968` 的 `KeyDownHandler` 里绑，**不写进菜单**）；
 /// * **帮助 → 键盘快捷键浮层**列的是"本仓真实绑定了什么"，本仓确实两个键都吃
 ///   ⇒ 那里必须写全（`menu::shortcuts` 用的是 `ui_text::KEY_CTRL_SHIFT_Z`）。
 ///
@@ -160,7 +160,7 @@ pub const KEY_REDO_MENU: &str = "Ctrl+Shift+Z";
 pub enum Sub {
     /// 静态子项（官方 XAML 里就写死的：地图光照 3 项、语言 2 项）。
     Static(&'static [Item]),
-    /// **动态列表**（官方 `MainWindow.RecentMaps.cs:27-39` 往 `OpenRecentButton.Items` 里填）。
+    /// **动态列表**（官方 `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:27-39` 往 `OpenRecentButton.Items` 里填）。
     ///
     /// 行数随 [`SubState::recent`] 变；空列表时按官方 `:39` 加一条灰显的
     /// [`SUB_RECENT_EMPTY`]。
@@ -180,10 +180,10 @@ pub enum Sub {
     Recent,
 }
 
-/// 界面语言（官方 `MainWindow.Localization.cs:12-13` 的 `ChooseLanguage("zh-CN" / "en-US")`）。
+/// 界面语言（官方 `_upstream/CrystalStudio/MainWindow.Localization.cs:12-13` 的 `ChooseLanguage("zh-CN" / "en-US")`）。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Lang {
-    /// `简体中文`（官方缺省，`Localization.cs:34` 的 `selected == "zh-CN"`）。
+    /// `简体中文`（官方缺省，`_upstream/CrystalStudio/MainWindow.Localization.cs:34` 的 `selected == "zh-CN"`）。
     #[default]
     ZhCn,
     /// `English`。
@@ -223,7 +223,7 @@ impl Lang {
 /// 本结构**不再有 `light` 字段** —— 一处真源、一个缓存键、一次渲染，没有第二份档位。
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SubState {
-    /// 当前界面语言（官方缺省 = [`Lang::ZhCn`]，`Localization.cs:34` 的 `selected == "zh-CN"`）。
+    /// 当前界面语言（官方缺省 = [`Lang::ZhCn`]，`_upstream/CrystalStudio/MainWindow.Localization.cs:34` 的 `selected == "zh-CN"`）。
     pub language: Lang,
     /// 最近地图列表（官方 `RecentMapStore` 里的路径，**新→旧**）。
     pub recent: Vec<String>,
@@ -232,7 +232,7 @@ pub struct SubState {
 impl SubState {
     /// 「最近打开」子菜单要画的行：`(文案, 能不能点)`。
     ///
-    /// 照官方 `MainWindow.RecentMaps.cs:27-39`：
+    /// 照官方 `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:27-39`：
     /// * 有列表 ⇒ 每条形如 `Path.GetFileName(path)`，`IsEnabled = File.Exists(path)`；
     /// * 空列表 ⇒ 一条 [`SUB_RECENT_EMPTY`]，`IsEnabled = false`。
     ///
@@ -347,7 +347,7 @@ pub enum Action {
     FitMap,
     /// **定位到格…**（F-R13-2）：输列/行 ⇒ 视口居中到该格中心 + 1×1 选区 + 缩放抬到 ≥50%。
     ///
-    /// 上游 `MapViewport.Navigation.cs:5-13` 的 `LocateCell` 只被 CheckMap 结果面板的
+    /// 上游 `_upstream/CrystalStudio/MapViewport.Navigation.cs:5-13` 的 `LocateCell` 只被 CheckMap 结果面板的
     /// 「定位」按钮调用；本仓把语义抽成 `MireditApp::locate_cell`（CheckMap 与本项共用），
     /// 并在此处另开一个**通用入口**（官方界面没有这一项，也没有快捷键）。
     LocateCell,
@@ -515,7 +515,7 @@ impl Action {
         }
     }
 
-    /// 官方 `InputGesture`（`MainWindow.axaml:5`）；没有就是 `None`。
+    /// 官方 `InputGesture`（`_upstream/CrystalStudio/MainWindow.axaml:5`）；没有就是 `None`。
     ///
     /// ⚠ 这里只放**官方真的写了**的那些键：`Ctrl+N` / `Ctrl+O` / `Ctrl+S` /
     /// `Ctrl+Shift+S` / `Ctrl+Shift+N` / `Ctrl+Z` / `Ctrl+Shift+Z` / `G` / `F1`。
@@ -622,7 +622,7 @@ const fn it_sub(action: Action, sep_before: bool, sub: Sub) -> Item {
     }
 }
 
-/// 地图光照子项（官方 `MainWindow.axaml:5` 的 `MapLightingMenu` 下 3 个
+/// 地图光照子项（官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `MapLightingMenu` 下 3 个
 /// `ToggleType="CheckBox"` 子项，顺序即显示顺序）。
 pub const LIGHT_ITEMS: &[Item] = &[
     it(Action::LightDawnDusk, false),
@@ -630,7 +630,7 @@ pub const LIGHT_ITEMS: &[Item] = &[
     it(Action::LightNight, false),
 ];
 
-/// 语言子项（官方 `MainWindow.Localization.cs:10-11`，顺序即 `menu.Items.Add` 的顺序）。
+/// 语言子项（官方 `_upstream/CrystalStudio/MainWindow.Localization.cs:10-11`，顺序即 `menu.Items.Add` 的顺序）。
 pub const LANGUAGE_ITEMS: &[Item] = &[
     it(Action::LangChinese, false),
     it(Action::LangEnglish, false),
@@ -671,7 +671,7 @@ pub const EDIT_ITEMS: [Item; 5] = [
 /// 语言｜7 个面板｜锁定/重置。
 ///
 /// `地图光照`（#3）与 `语言`（#9）是**子菜单**（官方 XAML 里 `MapLightingMenu` 就带 3 个
-/// 子项；`语言` 由 `MainWindow.Localization.cs:15` 追加时也带 2 个）。
+/// 子项；`语言` 由 `_upstream/CrystalStudio/MainWindow.Localization.cs:15` 追加时也带 2 个）。
 pub const VIEW_ITEMS: [Item; 21] = [
     it(Action::DarkMode, false),
     // 地砖信息悬浮：官方 XAML 里它前面**有一条分隔线**（深色模式｜地砖信息悬浮|单元格网格）
@@ -913,7 +913,7 @@ pub const fn state(action: Action) -> State {
         // ⇒ 走与「打开地图…」**完全相同**的 [`crate::menu::action::open_path`]。
         //
         // 为什么是 `Ready`：官方这一项是**容器**（`OpenRecentButton` 在 axaml 里没有
-        // `Click`，`MainWindow.RecentMaps.cs:23-40` 只往 `Items` 里填行），它自己的
+        // `Click`，`_upstream/CrystalStudio/MainWindow.RecentMaps.cs:23-40` 只往 `Items` 里填行），它自己的
         // `IsEnabled` 跟着 `busy` 走（`axaml.cs` 的 `OpenRecentButton.IsEnabled = !busy`）
         // ⇒ 常态可点。本仓同样：可点、不灰，点了（或回车）只展开/收起子菜单，
         // **不执行任何父项动作**（回执见 [`STATUS_RECENT_CONTAINER`]）。
@@ -951,7 +951,7 @@ pub const fn state(action: Action) -> State {
     }
 }
 
-/// **官方缺省勾选态**（`MainWindow.axaml:5` 的 `IsChecked=` 原文）；`None` = 不是勾选型。
+/// **官方缺省勾选态**（`_upstream/CrystalStudio/MainWindow.axaml:5` 的 `IsChecked=` 原文）；`None` = 不是勾选型。
 ///
 /// 这是"官方开箱时勾着什么"，**不是**"本仓现在勾着什么"—— 后者见 [`check_with`]。
 /// 两者只在"本仓没有可写真状态"的那几项上重合（见 [`SubState`] 的文档）。
@@ -962,12 +962,12 @@ pub const fn state(action: Action) -> State {
 /// |---|---|---|
 /// | 单元格网格 | `GridToggle … ToggleType="CheckBox" IsChecked="True"` | **勾** |
 /// | 开启门 | `DoorsOpenToggle … ToggleType="CheckBox"`（**没写 IsChecked**）| 不勾 |
-/// | 锁定面板布局 | `axaml.cs:391` `ToggleType=MenuItemToggleType.CheckBox`（没写 IsChecked）| 不勾 |
+/// | 锁定面板布局 | `_upstream/CrystalStudio/MainWindow.axaml.cs:404` `ToggleType=MenuItemToggleType.CheckBox`（没写 IsChecked）| 不勾 |
 /// | 白天 | `DayLighting … ToggleType="CheckBox" IsChecked="True"` | **勾** |
 /// | 黎明 / 黄昏 · 夜晚 | 同段两个 `CheckBox`，都没写 IsChecked | 不勾 |
-/// | 简体中文 | `Localization.cs:34` `IsChecked = selected == "zh-CN"`（缺省 zh-CN）| **勾** |
+/// | 简体中文 | `_upstream/CrystalStudio/MainWindow.Localization.cs:34` `IsChecked = selected == "zh-CN"`（缺省 zh-CN）| **勾** |
 /// | English | 同上（`selected == "en-US"`）| 不勾 |
-/// | 深色模式 | `DarkModeToggle` 无 IsChecked（`axaml.cs:120` 取 `ThemeService.ForceDark`）| 不勾 |
+/// | 深色模式 | `DarkModeToggle` 无 IsChecked（`_upstream/CrystalStudio/MainWindow.axaml.cs:122` 取 `ThemeService.ForceDark`）| 不勾 |
 /// | 7 个面板 | 官方 `AddSectionMenu` 逐项 `IsChecked = true` | 勾 |
 pub const fn default_checked(action: Action) -> Option<bool> {
     match action {
@@ -1385,8 +1385,8 @@ mod tests {
 
     /// **「重做」菜单手势只显示 `Ctrl+Shift+Z`**（审查缺陷 3）。
     ///
-    /// 官方 `MainWindow.axaml:5` 的 `InputGesture="Ctrl+Shift+Z"` 是菜单里唯一那个；
-    /// `Ctrl+Y` 官方只在 `axaml.cs:848` 绑、**不写进菜单**。
+    /// 官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `InputGesture="Ctrl+Shift+Z"` 是菜单里唯一那个；
+    /// `Ctrl+Y` 官方只在 `_upstream/CrystalStudio/MainWindow.axaml.cs:968` 绑、**不写进菜单**。
     /// 本仓的 `Ctrl+Y` 是真绑定 ⇒ 它该出现在**帮助浮层**（`menu::shortcuts` 用
     /// `ui_text::KEY_CTRL_SHIFT_Z`），但**不该**出现在菜单右侧。
     #[test]
@@ -1580,7 +1580,7 @@ mod tests {
     /// * 静态子项 5（[`sub_count`] = 地图光照 3 + 语言 2）。
     ///
     /// 再加「最近打开」那个**动态列表**：它没有静态子项，空列表时按官方
-    /// `RecentMaps.cs:39` 给一条灰行 —— 这一条也在这里钉住。
+    /// `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:39` 给一条灰行 —— 这一条也在这里钉住。
     #[test]
     fn 顶级42项与子项5项计数() {
         // ① 顶级是 42（2026-11-06 帮助 1 → 2；2026-11-07 视图 19 → 20），子项不许把它撑大

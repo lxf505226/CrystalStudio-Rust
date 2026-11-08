@@ -16,7 +16,7 @@
 //! | `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y` | 同上（重做同时接受官方键与本仓旧键）|
 //! | `F` / `M` / `O` / `[` `]` / `Enter` | 同上 + [`crate::selection_ops`] + [`crate::stamp_place`] |
 //! | `B` / `P` / `F` / `E` / `M` / `O` / `V` / `K`（工具，**合并一行**）| [`crate::app::MireditApp::handle_keys`]（2026-11-07 起真绑定；`P`/`K` 的**工具**本身尚未接线，表里如实标注）|
-//! | `C`（低位/高位阻挡标记同开同关）| 同上（上游 `MainWindow.axaml.cs:997`）|
+//! | `C`（低位/高位阻挡标记同开同关）| 同上（上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:997`）|
 //! | `W` `A` `S` `D`（平移，每次 48 屏幕像素）| 同上 → [`crate::canvas_view::CanvasView::pan_by_screen`] |
 //!
 //! ⚠ **`W A S D` 的按住语义**（R41 定稿）：**每个按键事件走一步（48 屏幕像素），每帧最多一步**。
@@ -44,7 +44,7 @@ use crate::ui_text as tx;
 
 /// 「键」列的文字色 **#A8B7F6** = `rgb(168, 183, 246)` —— **深色主题专用**（见下）。
 ///
-/// 上游 `MainWindow.axaml.cs:1248`：
+/// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:1248`：
 /// `var shortcut = new TextBlock { Text = LocalText.T(key), Foreground = new ImmutableSolidColorBrush(Color.FromRgb(168, 183, 246)) };`
 /// —— **写死的字面量，不经 `ThemeService`**。
 ///
@@ -148,7 +148,7 @@ pub const GROUPS: &[Group] = &[
     Group {
         title: tx::SC_GROUP_TOOLS,
         rows: &[
-            // R40：八个工具键**合并成一行**（官方 `MainWindow.axaml.cs:989` 本来就是同一行
+            // R40：八个工具键**合并成一行**（官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:989` 本来就是同一行
             // `switch`；分八行会把浮层撑爆，也读不出"这是一组同类绑定"）
             Row {
                 keys: tx::KEY_TOOL_KEYS,
@@ -307,7 +307,7 @@ pub fn draw(p: &Painter, l: &Layout) {
         );
         y += m::SHORTCUTS_ROW_H;
         // 键色分主题（2026-11-08 订正）：
-        //   深色 = 上游 `MainWindow.axaml.cs:1248` 的 `#A8B7F6`（见 [`KEY_COLOR`]）——**上游真值**。
+        //   深色 = 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:1248` 的 `#A8B7F6`（见 [`KEY_COLOR`]）——**上游真值**。
         //   浅色 = **上游无真值**：上游 `EditorWindow` 只有深色一套，`#A8B7F6` 直接搬到浅色
         //          `panel_bg #F5F6F7` 上对比度只有 **1.80 : 1**（WCAG AA 要 4.5），键列几乎看不见。
         //          上游没给浅色版本 ⇒ 属「上游无此物」，**沿用本仓改动前的原值 `pal.text`**
@@ -429,7 +429,7 @@ mod tests {
 
     /// **把「本仓高度偏离上游 680」写成可执行断言**（不许它悄悄存在，也不许它悄悄消失）。
     ///
-    /// 上游 `MainWindow.axaml.cs:1233` 是 `Height = 680`；本仓取 [`m::SHORTCUTS_H`]。
+    /// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:1233` 是 `Height = 680`；本仓取 [`m::SHORTCUTS_H`]。
     /// 偏离的唯一理由是**内容量**（上游 19 行单列、无组名、无说明行；本仓 28 行 = 6 组名 +
     /// 22 条绑定）：本仓表在上游 680 的内容框（`680 − 2×28 = 624`）里**放不下**。
     ///

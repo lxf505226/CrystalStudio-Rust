@@ -139,7 +139,7 @@ pub fn run(cli: &Cli) -> i32 {
 
     // ②c2 **另存为成功 ⇒ 记进最近地图**（2026-11-05 补）。
     //
-    //     官方 `MainWindow.axaml.cs:501` 另存成功后也 `RememberMap(target)`，与打开地图
+    //     官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:528` 另存成功后也 `RememberMap(target)`，与打开地图
     //     同一套。菜单路径走 [`crate::menu::action::save_as_path`]（它内部调
     //     `remember_recent`），而**无窗路径走的是本函数的 `save::save_as_session`**
     //     ⇒ 这里必须显式补一次**同源**的记录调用（`action::remember_recent_into`），

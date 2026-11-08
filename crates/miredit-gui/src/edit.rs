@@ -41,15 +41,15 @@
 //! | 吸管 [`Tool::Pickup`] | 读**整格三族**（`bk_img`/`mid_img`/`fr_img`），笔刷只取**当前层**那一个字段 | 任务书 B |
 //! | 笔刷 [`Tool::Brush`] | 图号层：只写当前层图号（+ 14/36 档该层库号字节）；**族不匹配 ⇒ 拒绝且一字节不动**<br>阻挡层：**只置 `bit15`**（= 不可走），低 15 位原样；**图库笔刷 ⇒ 拒绝**<br>落笔范围 = 以鼠标格为中心的 **N×N**（`N` = 笔刷尺寸 3..=31 奇数，边缘裁剪） | 同上 / 审计 P0-9 / 审计 P0-5 |
 //! | 橡皮擦 [`Tool::Eraser`] | 图号层：**只清当前层图号**：`img &= 0x8000`（保留阻挡位）<br>阻挡层：**只清 `bit15`**（= 可走）：`img &= 0x7FFF`（保留图号）<br>落笔范围同样是 N×N | 既有约定 + 审计 P0-9 |
-//! | 填充 [`Tool::Bucket`] | 从点击格 BFS 到「**同层且该层图号相同**」的连通块，用当前笔刷逐格 `paint`；**整次填充 = 一步撤销**；地表按 C# 的 `step=2`（只走偶偶格）<br>判据逐条对 `CrystalStudio/MapViewport.cs:485-539` | 审计 P0-5 |
+//! | 填充 [`Tool::Bucket`] | 从点击格 BFS 到「**同层且该层图号相同**」的连通块，用当前笔刷逐格 `paint`；**整次填充 = 一步撤销**；地表按 C# 的 `step=2`（只走偶偶格）<br>判据逐条对 `_upstream/CrystalStudio/MapViewport.cs:510-565` | 审计 P0-5 |
 //!
 //! # 二、笔刷尺寸（3..=31 奇数）
 //!
 //! 只影响**落笔范围**（[`EditSession::footprint`]：居中 N×N、越界格跳过），
 //! **不影响任何已写进地图的字节**，因此改尺寸不重渲、不进撤销栈
 //! （[`EditSession::set_brush_size`]）。范围与步进来自
-//! `CrystalStudio/MainWindow.axaml:6` 的滑块（`Minimum=3 Maximum=31 TickFrequency=2`），
-//! 快捷键 `[` / `]` 各 ±2 来自 `MainWindow.axaml.cs:871`。
+//! `_upstream/CrystalStudio/MainWindow.axaml:6` 的滑块（`Minimum=3 Maximum=31 TickFrequency=2`），
+//! 快捷键 `[` / `]` 各 ±2 来自 `_upstream/CrystalStudio/MainWindow.axaml.cs:999`。
 //!
 //! **绝不跨字段乱写**：地表笔刷配「物体」层时，`paint` 直接返回 [`PaintOutcome::LayerMismatch`]，
 //! 由 [`EditSession::note`] 把原因交给状态栏，地图一个字节都不动。
@@ -60,7 +60,7 @@
 //! （`client/reference_full/Classes/map/TMap.cpp:339` 的 `CanWalk`；
 //! Rust 侧同口径 `mir2-map/src/cell.rs` 的 `Cell::is_walkable`）。
 //!
-//! ⚠ **绝不用 C# `CrystalStudio` 的 `0x20000000` / `0x40000000`**（`MapViewport.cs:23`）——
+//! ⚠ **绝不用 C# `CrystalStudio` 的 `0x20000000` / `0x40000000`**（`_upstream/CrystalStudio/MapViewport.cs:24`）——
 //! 那是它内存模型的私有位，写进 `.map` 我们客户端读不懂。
 //!
 //! 三条硬口径：
@@ -236,7 +236,7 @@ fn 占位文档() -> miredit_core::Document {
         .expect("1×1 Old12 是合法地图（52+12=64 字节），占位文档必然可解析")
 }
 
-/// **换层时的工具纠正**（上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged` 三条判据）。
+/// **换层时的工具纠正**（上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:648-657` 的 `LayerChanged` 三条判据）。
 ///
 /// 上游原文（`@901dbe2f`）：
 ///
@@ -258,11 +258,11 @@ fn 占位文档() -> miredit_core::Document {
 ///
 /// # 槽位映射的证据（R43 复核，`@901dbe2f`）
 ///
-/// 上游枚举有两个"像吸管"的工具，必须分清（`MapViewport.cs:4`）：
+/// 上游枚举有两个"像吸管"的工具，必须分清（`_upstream/CrystalStudio/MapViewport.cs:4`）：
 /// `EditorTool { Brush, Pencil, Bucket, Eraser, Select, Stamp, Pickup, Clone, SpecialBrush,
 /// Wall, TownStamp, Eyedropper, Pan }`。
 ///
-/// - **`Eyedropper`**：axaml `Tag="Eyedropper"`（工具条第 5 个），`MainWindow.axaml.cs:644`
+/// - **`Eyedropper`**：axaml `Tag="Eyedropper"`（工具条第 5 个），`_upstream/CrystalStudio/MainWindow.axaml.cs:644`
 ///   的提示是 "Click a ground or middle tile to select its source artwork"
 ///   ⇒ **读格内容当笔刷** = 本仓**槽位 6**（内核 `Tool::Pickup` 的文档："吸管：把某格
 ///   **当前编辑层**的内容取成笔刷"）。⇒ 规则 ① 适用于槽 6。
@@ -324,7 +324,7 @@ pub fn 纠正工具(槽位: usize, 层: EditLayer) -> Option<usize> {
 
 /// **铅笔**在工具图标表（[`crate::icons::TOOLS`]）里的下标。
 ///
-/// 对应官方 `MainWindow.axaml.cs:989` 的 `Key.P => EditorTool.Pencil`。⚠ 内核 `Tool` 目前
+/// 对应官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:989` 的 `Key.P => EditorTool.Pencil`。⚠ 内核 `Tool` 目前
 /// **没有铅笔语义**（`Tool::from_index(1)` ⇒ `Tool::Unwired`）⇒ 按 `P` 只是选中该槽位，
 /// 状态栏与画布会如实说「未接线、不改地图」（与点该图标同一结果，不假装能画）。
 pub const TOOL_PENCIL_IDX: usize = 1;
@@ -686,7 +686,7 @@ impl EditSession {
     /// 切层会立刻重算「族不匹配」提示：上一层的笔刷很可能配不上新层，
     /// 那种情况下状态栏应当**马上**说出来，而不是等用户点下去才发现没反应。
     ///
-    /// **工具纠正就在本函数里完成**（判据见 [`纠正工具`]，上游 `MainWindow.axaml.cs:648-657`）：
+    /// **工具纠正就在本函数里完成**（判据见 [`纠正工具`]，上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:648-657`）：
     /// 槽位真源是 `self.slot`（[`Self::slot`]），所以这里既拿得到"当前工具是谁"，
     /// 也知道"新层允不允许它"—— `--layer`、左侧面板点行、`Command::SetLayer` 三条入口
     /// 因此天然同一判据（后两者见 `apply_cmd_in` 的拦截）。
@@ -698,7 +698,7 @@ impl EditSession {
     /// 返回 `Some(槽位)` ⇒ 这次换层**纠正了工具**，调用方据此回填镜像并回执；`None` ⇒ 工具没动。
     pub fn set_layer(&mut self, layer: EditLayer) -> Option<usize> {
         self.core.set_layer(layer);
-        // 上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged`：不兼容就强制切铅笔。
+        // 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:648-657` 的 `LayerChanged`：不兼容就强制切铅笔。
         // 判据是纯函数；**施力点只有这里**，所以 `--layer`、面板点行、`Command::SetLayer`
         // 三条路径天然一致（后两条见 `apply_cmd_in` 的拦截）。
         let 纠正 = 纠正工具(self.slot, layer)?;
@@ -712,7 +712,7 @@ impl EditSession {
     ///
     /// 尺寸只决定"下一次落笔覆盖多大一块"，已写进地图的字节一个都不变，
     /// 因此**没有理由**让画布丢掉纹理缓存（[`crate::canvas_view::CanvasView::ensure`] 的键
-    /// 里也没有尺寸）。官方 `MainWindow.axaml.cs:609` 的 `BrushChanged` 只做了两件事：
+    /// 里也没有尺寸）。官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:659` 的 `BrushChanged` 只做了两件事：
     /// `Viewport.BrushSize = …` 与 `BrushSizeLabel.Text = …`（+ 让视口重画笔刷预览），
     /// 同样是"不碰地图数据"。
     pub fn set_brush_size(&mut self, n: usize) -> usize {
@@ -729,14 +729,14 @@ impl EditSession {
     /// 形状/裁剪判据在 `miredit_core::footprint_of`（单一实现）；本方法只把
     /// "当前笔刷尺寸 + 调用方给的宽高"喂进去。
     ///
-    /// 形状 = **居中方形**（官方 `MapViewport.cs:476-478` 的双层循环
+    /// 形状 = **居中方形**（官方 `_upstream/CrystalStudio/MapViewport.cs:501-504` 的双层循环
     /// `for iy in -radius..=radius { for ix in -radius..=radius { … if (!Document.Contains(sx, sy)) continue; } }`；
     /// 官方工具提示 `CentredBrushFootprintAndtoResize_55DDE2E3` 也写的是「以中心定位笔刷范围」）。
     ///
     /// 边缘裁剪 = **逐格跳过越界格**（与官方 `continue` 同一判据），不是"把方块整体挪回界内"。
     ///
     /// ⚠ **与官方的一处差异（有意，已记档）**：官方地表层的 `step = 2`
-    /// （`MapViewport.cs:474-475`：`int step = Layer == MapLayer.Ground ? 2 : 1; if (step == 2) { x &= ~1; y &= ~1; }`，
+    /// （`_upstream/CrystalStudio/MapViewport.cs:499-500`：`int step = Layer == MapLayer.Ground ? 2 : 1; if (step == 2) { x &= ~1; y &= ~1; }`，
     /// 即它的地表按 2×2 对齐落笔）；本仓 `paint()` 对三层都是**逐格**写，
     /// 所以这里 `step = 1`。理由：填充/笔刷必须与既有落笔语义（以及 `mir2-map` 的逐格字节）一致，
     /// 否则同一格会出现"笔刷写得到、填充写不到"的两套网格。
@@ -781,7 +781,7 @@ impl EditSession {
     /// 在当前拖动里把工具作用到**以 `(x, y)` 为中心的 N×N**（N = [`Self::brush_size`]）；
     /// 返回真的改了几格（0..=N²，边缘会被裁剪）。
     ///
-    /// 这是**画笔 / 橡皮**的落笔入口（官方 `MapViewport.cs:473-482`）：
+    /// 这是**画笔 / 橡皮**的落笔入口（官方 `_upstream/CrystalStudio/MapViewport.cs:473-482`）：
     /// 尺寸只对这两个工具生效，铅笔与填充恒为 1 格（[`Tool::uses_brush_size`]）。
     /// 吸管/未接线工具**不吃尺寸**，直接返回 0（它们本来就不改地图）。
     pub fn touch_footprint(&mut self, map: &mut Map, x: u16, y: u16) -> usize {
@@ -827,19 +827,19 @@ impl EditSession {
     /// 填充：从 `(x, y)` 出发，BFS 扩散到「**同层且该层图号相同**」的连通块，用当前笔刷填满。
     ///
     /// 判据表见 `miredit_core::fill` 模块文档（逐条对
-    /// `CrystalStudio/MapViewport.cs:485-539` 的 `BucketFill`）。
+    /// `_upstream/CrystalStudio/MapViewport.cs:510-565` 的 `BucketFill`）。
     ///
     /// # 与官方的两处**有意差异**（都已写进 core 注释，不是悄悄改）
     ///
     /// 1. **上限保护**：官方没有上限，本仓单次最多 `FILL_MAX_CELLS`（200,000）格，
     ///    超过 ⇒ [`FillOutcome::TooLarge`] 且**一格不写**（先把连通块收齐再动笔）；
-    /// 2. **计的是"真改了几格"**：官方 `:530` 的 `count++` 数的是**出队格数**；
+    /// 2. **计的是"真改了几格"**：官方 `:556` 的 `count++` 数的是**出队格数**；
     ///    本仓数的是 `Step.changes.len()`（值真的变了的格）。
     ///
     /// # 阻挡层只**置位**，不清位
     ///
-    /// 官方 `:516` 是 `c.BackImage |= ActiveCollisionMask`（只有 `|=`，没有 `&=`），
-    /// 且 `:501` 的早退保证"点已置位的块"直接返回 0。要清位请用橡皮
+    /// 官方 `:542` 是 `c.BackImage |= ActiveCollisionMask`（只有 `|=`，没有 `&=`），
+    /// 且 `:527` 的早退保证"点已置位的块"直接返回 0。要清位请用橡皮
     /// （[`Tool::Eraser`] 在阻挡层是 `& !0x8000`）。
     pub fn fill(&mut self, map: &mut Map, x: u16, y: u16) -> FillOutcome {
         self.with_map(map, |core| core.fill(x, y))
@@ -1479,7 +1479,7 @@ pub fn print_check(doc: &mut crate::mapdoc::DocState, orig: Option<&[u8]>, path:
 mod tests {
     use super::*;
 
-    /// **换层纠正逐条**（R12-F2：上游 `MainWindow.axaml.cs:648-657` 三条判据 × 5 层 × 10 槽位）。
+    /// **换层纠正逐条**（R12-F2：上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:648-657` 三条判据 × 5 层 × 10 槽位）。
     ///
     /// 期望值直接按上游三条 if 手算成表，**不复用被测函数**：
     /// - 吸管（6）只在图号层（地表 0 / 中层 1）保留，其余三层 ⇒ 铅笔（1）；
@@ -1627,7 +1627,7 @@ mod tests {
     /// **吸管取值**：把该格 `bk_img`（含阻挡位）与 `btTiles` 原样取下。
     ///
     /// ⚠ 夹具放在**偶偶格** `(2,2)`：地表吸管按 2×2 对齐到偶偶格再读格
-    /// （上游 `CrystalStudio/MapViewport.cs:405` `if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`，
+    /// （上游 `_upstream/CrystalStudio/MapViewport.cs:406` `if (Layer == MapLayer.Ground) { x &= ~1; y &= ~1; }`，
     /// 本 crate `EditSession::pick_anchor`）。放奇格会被吸附到左上的偶格，
     /// 吸到的是空图号 —— 那是另一条用例（吸附本身）要证明的事，不是本条的判定意图。
     #[test]
@@ -1666,10 +1666,10 @@ mod tests {
     /// **改前必红用例**：在 `bk_img=0x815F`（带低阻挡位）的格上写纯图号 10，
     /// 结果必须是 `0x800A`（只换低 15 位、bit15 原样），不是 `0x000A`。
     ///
-    /// 真值：`CrystalStudio/CrystalStudio/MapViewport.cs:480`
+    /// 真值：`_upstream/CrystalStudio/MapViewport.cs:505`
     /// `c.BackImage = (c.BackImage & 0x60000000) | image;`（画地表保留碰撞位）；
-    /// `:520` 填充同款；`:546` 清除选区只留碰撞位。C# 内存模型里 `0x60000000`
-    /// 就是低/高两位阻挡（`:23` `ActiveCollisionMask = 0x20000000 / 0x40000000`），
+    /// `:546` 填充同款；`:598` 清除选区只留碰撞位。C# 内存模型里 `0x60000000`
+    /// 就是低/高两位阻挡（`:24` `ActiveCollisionMask = 0x20000000 / 0x40000000`），
     /// 我们文件级等价位是 `bk_img` / `fr_img` 的 `bit15`（`0x8000`，
     /// `mir2-map/src/cell.rs:205-212` `Cell::is_walkable`、
     /// `client/reference_full/Classes/map/TMap.cpp:339` `CanWalk`）。
@@ -2254,7 +2254,7 @@ mod tests {
     /// **不能**再减 1（减了就与面板/状态栏的口径又差 1）。
     ///
     /// ⚠ 夹具与取材点都在**偶偶格** `(0,0)`：地表吸管按 2×2 对齐到偶偶格再读格
-    /// （`MapViewport.cs:405`）。`(1,1)` 会被吸附到 `(0,0)`，而本图 `(0,0)` 是空格
+    /// （`_upstream/CrystalStudio/MapViewport.cs:406`）。`(1,1)` 会被吸附到 `(0,0)`，而本图 `(0,0)` 是空格
     /// ⇒ 吸到图号 0，反显就成了 0 而不是 905（那是吸附用例的判定，不是本条的意图）。
     #[test]
     fn 吸管反显图号不再减一() {
@@ -2847,7 +2847,7 @@ mod tests {
     /// **吸管在阻挡层取到同一格的内容**：低位阻挡 ⇒ `bk_img`/`btTiles`（地面族），
     /// 高位阻挡 ⇒ `fr_img`/`btArea`（表层族）。取的是"格子内容"，不是"这一层能写什么"。
     ///
-    /// ⚠ 三层都取**偶偶格** `(2,2)`：地表吸管按 2×2 对齐（`MapViewport.cs:405`），
+    /// ⚠ 三层都取**偶偶格** `(2,2)`：地表吸管按 2×2 对齐（`_upstream/CrystalStudio/MapViewport.cs:406`），
     /// 阻挡层不吸附。取奇格时两者读的不是同一格（`(1,1)` vs `(0,0)`）⇒ `l == g`
     /// 恒不成立，那是「地表对齐」的差异，不是「取同一格内容」这条判定要证的事。
     #[test]
@@ -3040,7 +3040,7 @@ mod tests {
         assert_eq!(ed.undo_len(), 1, "整条轨迹 = 一步");
     }
 
-    // ───────────────── 本版新增：填充（Bucket，判据照 MapViewport.cs:485-539） ─────────────────
+    // ───────────────── 本版新增：填充（Bucket，判据照 _upstream/CrystalStudio/MapViewport.cs:510-565） ─────────────────
 
     /// **填充只吃"同层同图号"的连通块**：块外一格不动、块内格数对得上。
     ///
@@ -3066,7 +3066,7 @@ mod tests {
         assert_eq!(block, 16);
 
         // 造一支"图号 1、库号 3"的地表笔刷：临时改一格吸走，再改回去。
-        // ⚠ 临时值必须放在**偶偶格** `(8,8)`：地表吸管按 2×2 对齐（`MapViewport.cs:405`），
+        // ⚠ 临时值必须放在**偶偶格** `(8,8)`：地表吸管按 2×2 对齐（`_upstream/CrystalStudio/MapViewport.cs:406`），
         // 点 `(9,9)` 会吸附到 `(8,8)` 读格 —— 值放奇格的话吸到的是 `(8,8)` 原来的 9，
         // 填充就成了"把 7 写成 9"，与"图号 1"的判定意图不符。
         let i88 = index_of(&map, 8, 8).unwrap();
@@ -3227,7 +3227,7 @@ mod tests {
         let orig = map.to_bytes();
         let mut ed = EditSession::default();
         ed.set_layer(EditLayer::LowCollision);
-        // 阻挡层不需要笔刷（官方 :494 `image = collision ? mask : …`）
+        // 阻挡层不需要笔刷（官方 :520 `image = collision ? mask : …`）
         let out = ed.fill(&mut map, 2, 2);
         assert_eq!(out, FillOutcome::Filled(36), "整图 36 格都要置位");
         for (i, c) in map.cells.iter().enumerate() {
@@ -3236,14 +3236,14 @@ mod tests {
             assert_eq!(c.bk_img & 0x7FFF, old.bk_img & 0x7FFF, "第 {i} 格低 15 位不许动");
             assert_eq!(c.fr_img, old.fr_img, "高位阻挡位不许动");
         }
-        // 再点一次：已是目标值 ⇒ 无事可做（官方 :501 早退）
+        // 再点一次：已是目标值 ⇒ 无事可做（官方 :527 早退）
         let after_first = map.to_bytes();
         assert_eq!(ed.fill(&mut map, 2, 2), FillOutcome::AlreadyFilled);
         assert_eq!(map.to_bytes(), after_first);
         assert_eq!(ed.undo_len(), 1, "第二次没有产生步骤");
     }
 
-    /// 物体层不支持填充（官方 `:488-492`）；一格都不写。
+    /// 物体层不支持填充（官方 `:513-517`）；一格都不写。
     #[test]
     fn 填充物体层被拒() {
         let mut map = 造图(4, 4, CellFormat::New14);
@@ -3321,7 +3321,7 @@ mod tests {
     // ───── 2026-11-04 数据正确性：写图号不许清掉 bit15（验收门 §四.2~§四.5） ─────
     //
     // 真值链见 [`EditLayer::img_of_has_collision_bit`] 与 `paint()` 的 ③：
-    // C# `MapViewport.cs:480 / :520 / :546` 保留 `0x60000000` 两个碰撞位
+    // C# `_upstream/CrystalStudio/MapViewport.cs:505 / :546 / :598` 保留 `0x60000000` 两个碰撞位
     // ⇔ 文件级 `bk_img` / `fr_img` 各自的 `bit15`；`mid_img` 是纯图号。
 
     /// 三档**真实地图**的只读来源（验收门 §四.2 / §四.3 的 hex 证据）。
@@ -3723,7 +3723,7 @@ mod tests {
                 .copy_from_slice(&(0x8007u16).to_le_bytes());
         }
         // 笔刷源放在**偶偶格** (6,6)：纯图号 1、不带 bit15（列优先下标 = 6*8+6 = 54）。
-        // ⚠ 不能放 (7,7)：地表吸管按 2×2 对齐（`MapViewport.cs:405`），脚本里的
+        // ⚠ 不能放 (7,7)：地表吸管按 2×2 对齐（`_upstream/CrystalStudio/MapViewport.cs:406`），脚本里的
         // `Pickup(7,7)` 会吸附到 (6,6) 读格 —— 值放奇格时吸到的是 (6,6) 的 0x8007，
         // 低 15 位 7 与整图相同 ⇒ 脚本一格都不改（旧版本正是这样退化成空操作的）。
         bytes[HEADER_LEN + 54 * 12..HEADER_LEN + 54 * 12 + 2]

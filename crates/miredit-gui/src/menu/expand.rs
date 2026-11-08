@@ -166,7 +166,7 @@ impl 校验 {
 ///
 /// # 空串**不许**当 0（2026-11-07 P3 订正）
 ///
-/// 上游 `MapExpansionWindow.cs:39-41` 是 `int.TryParse(LeftInput.Text, out int left) && …`：
+/// 上游 `_upstream/CrystalStudio/MapExpansionWindow.cs:39-41` 是 `int.TryParse(LeftInput.Text, out int left) && …`：
 /// 空串 ⇒ `TryParse` 返回 `false` ⇒ `ApplyButton.IsEnabled = false`。本仓旧实现把空串当 `0`，
 /// **与上游相反**，已改成 [`校验::不是整数`]（摘要行同时说明「不能为空」）。
 ///

@@ -29,16 +29,16 @@
 //!
 //! # 二·五、库号是「全局 id」，必须先换算成族内页号（A-024，2026-11-07）
 //!
-//! `.X` 里的三个库号是 **C# `Assets` 表的全局 id**（`Document.cs:86,94-96` 存的就是
+//! `.X` 里的三个库号是 **C# `Assets` 表的全局 id**（`_upstream/CrystalStudio/Document.cs:71-72` 存的就是
 //! `Cell.BackLibrary/MiddleLibrary/Foreground.Library`，而 C# 全程拿它们直接喂
-//! `Assets.Get(library, …)`，见 `StampPreview.cs:40`）。而本仓 `StampCellInput` /
+//! `Assets.Get(library, …)`，见 `_upstream/CrystalStudio/StampPreview.cs:40`）。而本仓 `StampCellInput` /
 //! `PositionedCell` 的三个库号是**地图格字节口径**（`btTiles` / `btsmTiles` / `btArea`
 //! = 族内页号）⇒ 两者差一个**每族固定基址**：
 //!
 //! | 号段 | 地表 `Tiles` | 中层 `SmTiles` | 物体 `Objects` | 出处 |
 //! |---|---|---|---|---|
-//! | `Wemade`（`WemadeMir2` / 扁平目录兜底） | `0` | `1` | `2..=99`（第 k 页 = `2+k`） | `Assets.cs:361-362` |
-//! | `Shanda` | `100..=109` | `110..=119` | `120..=150` | `Assets.cs:363-365` |
+//! | `Wemade`（`WemadeMir2` / 扁平目录兜底） | `0` | `1` | `2..=99`（第 k 页 = `2+k`） | `_upstream/CrystalStudio/Assets.cs:361-362` |
+//! | `Shanda` | `100..=109` | `110..=119` | `120..=150` | `_upstream/CrystalStudio/Assets.cs:363-365` |
 //!
 //! ⇒ 族内页号 = 全局号 − 该族**号段下界**（`Wemade`：0/1/2；`Shanda`：100/110/120）。
 //! **不是**「全局号原样当页号」—— 那样前景会去 `Objects3`（`surface(2)`）、中层去
@@ -158,7 +158,7 @@ pub fn cells_of(
 
 // ───────────────────── A-011：落位预览的**状态**（只读） ─────────────────────
 
-/// 允许落位时的内容不透明度（上游 `MapViewport.StampRendering.cs:61` 的 `0.55`）。
+/// 允许落位时的内容不透明度（上游 `_upstream/CrystalStudio/MapViewport.StampRendering.cs:61` 的 `0.55`）。
 pub const 不透明度允许: f32 = 0.55;
 /// 受阻（或有 error）时的内容不透明度（同处 `0.18`）。
 pub const 不透明度受阻: f32 = 0.18;
@@ -254,7 +254,7 @@ pub fn read(path: &Path, 号段: 库号号段) -> Result<StampFile, String> {
 /// 返回 `Ok(Placed)` = 真改了 `cells` 格；`Err(中文原因)` = **一格未写**。
 ///
 /// 为什么每次都重新读盘：`.X` 在磁盘上可能被用户改过（CrystalStudio 也是每次放置前
-/// 现读，`PlacedStamps.cs:114-121`）。缓存格表会让"改了印章、贴出来还是旧的"。
+/// 现读，`_upstream/CrystalStudio/PlacedStamps.cs:114-121`）。缓存格表会让"改了印章、贴出来还是旧的"。
 ///
 /// `号段` 与 [`read`] 同一个来源（[`crate::mapdoc::Assets::号段`]）⇒
 /// 「缩略图看到的」与「贴到地上的」用的是同一套库号换算。

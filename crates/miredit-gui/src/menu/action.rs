@@ -50,7 +50,7 @@ pub struct Ctx<'a> {
     pub dark: &'a mut bool,
     /// **地砖信息悬浮开关**（真源在 app，菜单只翻转它；每帧的浮层读同一个字段）。
     ///
-    /// ⚠ **不持久化**：上游 `CellHoverToggle` 只是运行期勾选态（`CellHover.cs:31` 每帧读
+    /// ⚠ **不持久化**：上游 `CellHoverToggle` 只是运行期勾选态（`_upstream/CrystalStudio/MainWindow.CellHover.cs:31` 每帧读
     /// `IsChecked`），`SettingsStore` 里没有它 ⇒ 本仓也**不写设置文件**
     /// （与 `grid` / `doors_open` / `lighting` 同口径，但更彻底：那两个至少还有
     /// `--cell-grid` / `--open-doors` 这类启动参数，浮层只有菜单一条入口）。
@@ -92,7 +92,7 @@ pub struct Ctx<'a> {
     /// **指针所在的世界格**（`None` = 指针不在画布上/不在图内）。
     ///
     /// 谁用：「单元格属性…」在没有选区时按上游 `ApplyMetadata` 的 `Selection ?? hover 1×1`
-    /// 取目标格（`MapViewport.cs:583`）；别的动作不读它。
+    /// 取目标格（`_upstream/CrystalStudio/MapViewport.cs:583`）；别的动作不读它。
     pub hover: Option<(u16, u16)>,
 }
 
@@ -183,7 +183,7 @@ fn save_settings(cx: &mut Ctx<'_>, dark: bool) {
 /// * [`open_path`] 的成功分支 —— 打开一张图（失败分支早就 `return` 了，
 ///   所以"打不开的路径不会被记进历史"是**结构上**成立的，不靠额外判断）；
 /// * [`save_as_path`] 的成功分支 —— 另存为把文档改认新路径之后
-///   （官方 `MainWindow.axaml.cs:501` 也是 `RememberMap(target)`，与打开同一套）；
+///   （官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:528` 也是 `RememberMap(target)`，与打开同一套）；
 /// * 无窗 `--save-as`（[`crate::editrun::run`]）—— 它**不经过** `Ctx`，
 ///   所以直接调下面那个不依赖 `Ctx` 的 [`remember_recent_into`]。
 ///
@@ -266,7 +266,7 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
             Outcome::opened_overlay()
         }
         // 「最近打开」是**子菜单容器**（官方 `OpenRecentButton` 在 axaml 里没有 `Click`，
-        // `MainWindow.RecentMaps.cs:23-40` 只往 `Items` 里填行）⇒ 派发它本身**不执行动作**。
+        // `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:23-40` 只往 `Items` 里填行）⇒ 派发它本身**不执行动作**。
         //
         // 鼠标点它 / 回车 = `Click::Toggled` / `KeyResult::Changed`（只展开/收起子菜单），
         // 走不到这条分支；这里只为 `--menu-click file.open_recent` 这种**直接派发**兜底，
@@ -324,7 +324,7 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         },
         // **导出小地图**：同一套模态 + 尺寸输入（2026-11-06，N F-R14-1）。
         //
-        // 初值 = `<地图名>_小地图.png` + **Small 预设**（官方 `MinimapExportWindow.cs:21`
+        // 初值 = `<地图名>_小地图.png` + **Small 预设**（官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:21`
         // 的默认项，与 CLI 缺省 `MinimapSize::Default` 逐像素相同）。
         // 地图格数在这里取一次，交给模态算预设像素（`MinimapSize::resolve`）。
         Action::ExportMinimap => match cx.doc.doc.as_ref() {
@@ -390,10 +390,10 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         }
         // ───────────── 编辑：单元格属性（R12-F1） ─────────────
         //
-        // 上游是**视口右键菜单**入口（`MainWindow.axaml.cs:740` 的 `OpenCellProperties`）；
+        // 上游是**视口右键菜单**入口（`_upstream/CrystalStudio/MainWindow.axaml.cs:740` 的 `OpenCellProperties`）；
         // 本仓没有右键菜单 ⇒ 落在编辑菜单（`edit.cell_properties`，可 `--menu-click`）。
         //
-        // 目标区域 = 上游 `ApplyMetadata` 的 `Selection ?? hover 1×1`（`MapViewport.cs:583`）：
+        // 目标区域 = 上游 `ApplyMetadata` 的 `Selection ?? hover 1×1`（`_upstream/CrystalStudio/MapViewport.cs:583`）：
         // 有选区就整片，没有就用指针那一格；两样都没有 ⇒ 一句"先把鼠标移到格上"。
         //
         // 初值 = 选区**共同值**（`CommonMetadata`，有差异 ⇒ 空串 = Mixed），
@@ -566,7 +566,7 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         }
         // ───────────── 视图：定位到格…（F-R13-2） ─────────────
         //
-        // 上游 `MapViewport.Navigation.cs:5-13` 的 `LocateCell` 没有输入界面（只被 CheckMap
+        // 上游 `_upstream/CrystalStudio/MapViewport.Navigation.cs:5-13` 的 `LocateCell` 没有输入界面（只被 CheckMap
         // 结果面板的「定位」按钮调用）；本仓在此补一个通用入口：弹两格输入模态，
         // 提交后落 [`MireditApp::locate_cell`]（同一处实现，CheckMap 也用它）。
         //
@@ -591,7 +591,7 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         }
         // ───────────── 工具：裁剪到选区（A-015 Crop） ─────────────
         //
-        // 上游 `MainWindow.Crop.cs:5-9`：`busy` / 印章图不处理；`Viewport.CropSelection()`
+        // 上游 `_upstream/CrystalStudio/MainWindow.Crop.cs:5-9`：`busy` / 印章图不处理；`Viewport.CropSelection()`
         // 内部要选区（`if (Selection is not Rect area || !AllowEdit()) return false;`），
         // 成功后状态栏「Cropped map to W × H cells」，`RefreshAfterResize` 里再 `Fit()`。
         //
@@ -631,7 +631,7 @@ pub fn apply(action: Action, cx: &mut Ctx<'_>) -> Outcome {
         }
         // ───────────── 工具：地图扩边（A-015 Expand） ─────────────
         //
-        // 上游 `MainWindow.Expand.cs:5-12`：`busy` / 印章图 / 任意层锁定 ⇒ 直接返回；
+        // 上游 `_upstream/CrystalStudio/MainWindow.Expand.cs:5-12`：`busy` / 印章图 / 任意层锁定 ⇒ 直接返回；
         // 否则弹 440 宽对话框，确认后 `Viewport.ExpandMap(l,t,r,b)`（四向偶数、上限在
         // `MapDimensions.CanExpand` 里判），成功再写状态栏「Expanded map: W × H cells」。
         //
@@ -824,7 +824,7 @@ pub fn open_path(cx: &mut Ctx<'_>, path: &str) -> Outcome {
 /// 1. 文件还在 ⇒ 走与「打开地图…」**完全相同**的 [`open_path`]
 ///    （不另写一条加载旁路，九格式判别/会话重建/视口适应全都同一份）；
 /// 2. 文件**已不存在** ⇒ 状态栏给中文原因（[`model::STATUS_RECENT_GONE_TMPL`]）
-///    **并把这一条从列表里移除**（官方 `RecentMaps.cs:29-35` 只把它灰掉、不删；
+///    **并把这一条从列表里移除**（官方 `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:29-35` 只把它灰掉、不删；
 ///    本仓有意偏离 —— 理由见那条常量的注释）；
 /// 3. 下标越界 ⇒ 给一句"列表已变化"的原因，**不 panic**（GUI 里 panic 等于崩给用户看）。
 ///
@@ -857,7 +857,7 @@ pub fn open_recent_index(cx: &mut Ctx<'_>, idx: usize) -> Outcome {
 /// 成功才把浮层关掉（失败时模态留着，用户改一下路径就能重试）。
 ///
 /// 成功还会把**新路径**记进最近列表（[`remember_recent`]）—— 官方另存成功后同样
-/// `RememberMap(target)`（`MainWindow.axaml.cs:501`），与打开地图走同一套。
+/// `RememberMap(target)`（`_upstream/CrystalStudio/MainWindow.axaml.cs:528`），与打开地图走同一套。
 ///
 /// 真正的写盘与"改认新路径"在 [`crate::save::save_as_session`]：它复用
 /// [`crate::save::save_atomic`] 的原子写（tmp → `sync_all` → 读回核对 → `rename` →
@@ -876,7 +876,7 @@ pub fn save_as_path(cx: &mut Ctx<'_>, path: &str) -> Outcome {
         SaveOutcome::Written { path, bytes, .. } => {
             *cx.overlay = crate::menu::Overlay::None;
             // **记入最近地图**（2026-11-05 补）：官方另存成功后也 `RememberMap(target)`
-            // （`MainWindow.axaml.cs:501`），与 `OpenMap` 的 `:458/462` 同一套
+            // （`_upstream/CrystalStudio/MainWindow.axaml.cs:528`），与 `OpenMap` 的 `:472/479` 同一套
             // ⇒ 本仓走与 [`open_path`] **完全相同**的 [`remember_recent`]
             // （最近优先 / 去重 / 上限 10 / 立刻落盘）。
             //
@@ -1571,7 +1571,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(a.parent().unwrap());
     }
 
-    /// **另存为成功也记进最近列表**（官方 `MainWindow.axaml.cs:501` 的
+    /// **另存为成功也记进最近列表**（官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:528` 的
     /// `RememberMap(target)` —— 另存成功同样要记，不只是"打开"才记）。
     ///
     /// 判据：`--save-as` 到新路径后 `recent[0]` 是**新路径**（不是原路径），

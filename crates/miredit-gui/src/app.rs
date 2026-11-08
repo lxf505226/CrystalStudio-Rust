@@ -174,7 +174,7 @@ struct PendingStamp {
 
 /// **换到某一层 + 按上游纠正工具**（R12-F2 的唯一入口）。
 ///
-/// 上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged`：换层后若当前工具与新层不兼容，
+/// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:648-657` 的 `LayerChanged`：换层后若当前工具与新层不兼容，
 /// **强制切铅笔**。判据与纠正**都在** [`edit::EditSession::set_layer`] 内完成
 /// （纯函数 [`edit::纠正工具`]；本仓槽位 ↔ 上游工具名的映射见那里）；本函数只把槽位真源
 /// `EditSession.slot` 回填到宿主的 `selected_tool` 镜像。待放置印章/进行中的选区拖动由
@@ -208,7 +208,7 @@ pub struct MireditApp {
     /// 区别只有一处：它的合成在**工作线程**里跑（整图三层合成动辄几百毫秒，
     /// 放 UI 线程就是卡死 —— 见 [`crate::minimap_job`] 模块文档）。
     pub minimap: MinimapJob,
-    /// 小地图**拖拽中**的抓取偏移（世界像素坐标系，上游 `MapMinimap.Avalonia.cs:81-83`）。
+    /// 小地图**拖拽中**的抓取偏移（世界像素坐标系，上游 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:81-83`）。
     ///
     /// `Some` = 已在小地图上按下、正在拖；`None` = 没在拖。
     /// 偏移在**按下瞬间**算一次：落在视口框内 ⇒ 记「该点 − 视口中心」，否则记 `(0,0)`
@@ -281,7 +281,7 @@ pub struct MireditApp {
     /// **单张标签关闭的待确认下标**（`None` = 没有待确认的标签关闭）。
     ///
     /// 上游没有这个字段：它是靠 `CloseMapTab` 先 `mapTabs.SelectedItem = tab`
-    /// （`MainWindow.MapTabs.cs:99`）再让 `SelectionChanged` 把 `activeMap` 换过去，
+    /// （`_upstream/CrystalStudio/MainWindow.MapTabs.cs:99`）再让 `SelectionChanged` 把 `activeMap` 换过去，
     /// 于是 `ConfirmDiscard()`（`:419`）判的正是"刚要关的那张"。
     /// **本仓结构上没有 `SelectionChanged`**（每帧派生式）⇒ 不许照抄那个时序
     /// （"先选中再判脏"会先把用户眼里的活跃标签换掉，取消后状态已经变了）。
@@ -317,7 +317,7 @@ pub struct MireditApp {
     /// **单元格网格开关**（真源；`--cell-grid` / `--no-cell-grid` 置初值，`G` / 菜单 /
     /// `--menu-click` 翻转）。
     ///
-    /// 默认**开**（官方 `MainWindow.axaml:5` 的 `IsChecked="True"`；2026-11-05 之前本仓默认关，
+    /// 默认**开**（官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `IsChecked="True"`；2026-11-05 之前本仓默认关，
     /// 审查判定为形态偏离后订正 —— 判据在 [`crate::cli::Cli::cell_grid_enabled`]，
     /// 要无网格基线请显式传 `--no-cell-grid`）。
     /// 画布每帧读它决定画不画格线（[`crate::canvas::CanvasCtx::grid`]），
@@ -392,7 +392,7 @@ pub struct MireditApp {
 
 /// **capture**：把 `app.*` 中随标签走的字段与 `槽` 逐字段 `mem::swap`。
 ///
-/// 上游 `MapViewport.cs:147-161` 的 `CaptureEditorState` 同款：调用后
+/// 上游 `_upstream/CrystalStudio/MapViewport.cs:147-161` 的 `CaptureEditorState` 同款：调用后
 /// `app.*` 是原槽内容（占位），`槽` 是原 `app.*` 真值（真快照）。
 /// 这里能直接访问 `MireditApp` 的私有字段（同模块），故不需要任何
 /// `pub(crate)` 可见性调整，也不给状态类型加 `Default` 造假占位值。
@@ -784,7 +784,7 @@ impl MireditApp {
             menu: menu_state,
             panels,
             dark,
-            // 单元格网格初值：官方 `MainWindow.axaml:5` 的 `IsChecked="True"` ⇒ **默认开**。
+            // 单元格网格初值：官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `IsChecked="True"` ⇒ **默认开**。
             // 优先级 `--no-cell-grid` > `--cell-grid` > 默认 true（判据在
             // [`crate::cli::Cli::cell_grid_enabled`]，不是在这里另写一套）。
             grid: cli.cell_grid_enabled(),
@@ -874,7 +874,7 @@ impl MireditApp {
         self.centered = true;
     }
 
-    /// **窗口尺寸变化后修 fit 不变量**（A-012，对齐上游 `MapViewport.cs:169-179`）。
+    /// **窗口尺寸变化后修 fit 不变量**（A-012，对齐上游 `_upstream/CrystalStudio/MapViewport.cs:169-179`）。
     ///
     /// 触发条件与上游 `OnSizeChanged` 相同 —— **画布矩形尺寸真的变了**才动手：
     ///
@@ -976,7 +976,7 @@ impl MireditApp {
 
     /// **小地图交互**：点击居中 / 拖拽 / 滚轮缩放（F-R13-1 **C 段**，2026-11-07）。
     ///
-    /// # 上游语义（`MapMinimap.Avalonia.cs:78-92`，逐条对）
+    /// # 上游语义（`_upstream/CrystalStudio/MapMinimap.Avalonia.cs:78-92`，逐条对）
     ///
     /// | 行为 | 上游 | 本实现 |
     /// |---|---|---|
@@ -1011,7 +1011,7 @@ impl MireditApp {
             f32::from(mh) * m::CELL_H,
         );
         // 视口框的**世界**矩形：上游判 `Visible.Contains(world)` 用的是
-        // `Viewport.VisibleWorldBounds`（`MapViewport.Minimap.cs:9`），那是
+        // `Viewport.VisibleWorldBounds`（`_upstream/CrystalStudio/MapViewport.Minimap.cs:9`），那是
         // **像素精确**的 `(−origin.X/Zoom, −origin.Y/Zoom, ActualWidth/Zoom, ActualHeight/Zoom)`，
         // 数学上就等于 `(pan_x, pan_y, 画布宽/scale, 画布高/scale)`。
         //
@@ -1070,7 +1070,7 @@ impl MireditApp {
                 return;
             }
         }
-        // ③ 滚轮：绕**画布中心**缩放（上游 `:89-92` + `MapViewport.cs:180-187`）。
+        // ③ 滚轮：绕**画布中心**缩放（上游 `:89-92` + `_upstream/CrystalStudio/MapViewport.cs:180-187`）。
         //
         // ⚠ 注释精度（复核指出）：上游 `OnPointerWheelChanged` **没有显式 `Contains` 检查** ——
         //   「指针在小地图上」是 Avalonia **事件路由**的隐含前提（控件级事件只在指针位于其
@@ -1139,7 +1139,7 @@ impl MireditApp {
 
     /// 悬停浮层的排版结果（`None` = 这一帧不画）。
     ///
-    /// 三条前提**缺一不可**（官方 `CellHover.cs:31-42`）：开关勾着、指针在一个真格上、
+    /// 三条前提**缺一不可**（官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:31-42`）：开关勾着、指针在一个真格上、
     /// 该格在地图内。不满足就**一个像素都不画**（不画空框、不画"无数据"）。
     fn hover_panel(&self, l: &Layout) -> Option<cell_hover::Panel> {
         if !self.cell_hover {
@@ -1260,12 +1260,12 @@ impl MireditApp {
 
     /// `Ctrl+Z` / `Ctrl+Y` / `Ctrl+S` / `Esc` + 工具快捷键（菜单栏的下拉另单做）。
     ///
-    /// 工具快捷键**照官方**（`MainWindow.axaml.cs:861`）：
+    /// 工具快捷键**照官方**（`_upstream/CrystalStudio/MainWindow.axaml.cs:989`）：
     /// `Key.F => EditorTool.Bucket` —— 本单只接 `F`（填充）；
     /// 笔刷 `B` / 铅笔 `P` / 橡皮 `E` / 吸管 `V` 官方也有，但本仓的图标顺序与官方不同，
     /// 逐个接会引入"按 B 选到第 0 个还是第几个"的新歧义，故只接本单新增的那一个。
     ///
-    /// 笔刷尺寸 `[` / `]`：官方 `MainWindow.axaml.cs:871`
+    /// 笔刷尺寸 `[` / `]`：官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:999`
     /// `BrushSize.Value = Math.Clamp(BrushSize.Value + (OemOpenBrackets ? -2 : 2), 3, 31);`
     /// ⇒ 一次走 2 格、夹在 3..31（见 [`EditSession::grow_brush_size`]）。
     fn handle_keys(&mut self, ctx: &egui::Context) {
@@ -1362,7 +1362,7 @@ impl MireditApp {
             let plain = !i.modifiers.command && !i.modifiers.alt;
             (
                 plain && i.key_pressed(egui::Key::F),
-                // 官方 `MainWindow.axaml.cs:861`：`Key.M => EditorTool.Select`、`Key.O => EditorTool.Stamp`
+                // 官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:989`：`Key.M => EditorTool.Select`、`Key.O => EditorTool.Stamp`
                 plain && i.key_pressed(egui::Key::M),
                 plain && i.key_pressed(egui::Key::O),
                 plain && i.key_pressed(egui::Key::OpenBracket),
@@ -1406,10 +1406,10 @@ impl MireditApp {
         }
         // ── 工具键 `B/P/E/V/K` + 阻挡开关 `C` + 平移 `W/A/S/D`（R9-F2，2026-11-07） ──
         //
-        // 上游 `MainWindow.axaml.cs:989`：`B=>Brush / P=>Pencil / F=>Bucket / E=>Eraser /
+        // 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:989`：`B=>Brush / P=>Pencil / F=>Bucket / E=>Eraser /
         // M=>Select / O=>Stamp / V=>Pickup / K=>Clone`；`:997` 单独一条 `C`：
         // `bool show = !Viewport.CollisionVisible; LowCollisionVisible.IsChecked = show;
-        //  HighCollisionVisible.IsChecked = show;`（`MapViewport.cs:82-85`：getter = 低 **或** 高，
+        //  HighCollisionVisible.IsChecked = show;`（`_upstream/CrystalStudio/MapViewport.cs:82-85`：getter = 低 **或** 高，
         //  setter 同时写两边）；`:978-984` 的 `W/A/S/D` 走 `Viewport.PanBy(...)` 每次 **48 屏幕像素**。
         //
         // 三条纪律（别改）：
@@ -1474,7 +1474,7 @@ impl MireditApp {
             ctx.request_repaint();
         }
         if 切阻挡 {
-            // 上游 `MapViewport.cs:82-85`：`CollisionVisible` getter = 低 **或** 高，setter 同写两边
+            // 上游 `_upstream/CrystalStudio/MapViewport.cs:82-85`：`CollisionVisible` getter = 低 **或** 高，setter 同写两边
             let show = !(self.view.overlay.low || self.view.overlay.high);
             self.view.overlay.low = show;
             self.view.overlay.high = show;
@@ -1509,10 +1509,10 @@ impl MireditApp {
         if esc {
             self.confirm_close = false;
             // B2 单：Esc 同时退出「关闭脏标签」的确认态（**不关任何标签**，改动全留着）。
-            // 与上游 `MessageBoxResult.Cancel`（`MainWindow.axaml.cs:419` `if (answer == Cancel) return false;`）
+            // 与上游 `MessageBoxResult.Cancel`（`_upstream/CrystalStudio/MainWindow.axaml.cs:419` `if (answer == Cancel) return false;`）
             // 同一条语义：取消 = 什么都不做。
             self.pending_close = None;
-            // `Esc` 的第三层语义：取消选区（官方 `Deselect`，`MapViewport.cs:103-108`）。
+            // `Esc` 的第三层语义：取消选区（官方 `Deselect`，`_upstream/CrystalStudio/MapViewport.cs:107-112`）。
             // 顺序：先关模态 → 再退待放置态 → 最后才清选区（越"重"的越先撤）。
             if self.armed.is_none() && self.edit.selection().is_some() {
                 self.edit.clear_selection();
@@ -2001,7 +2001,7 @@ impl MireditApp {
         let Some(cmd) = cmd else {
             return;
         };
-        // 粘贴传的是**鼠标格**（点击点）；真正的落点由内核按上游 `RegionCopy.cs:70` 的 `Anchor`
+        // 粘贴传的是**鼠标格**（点击点）；真正的落点由内核按上游 `_upstream/CrystalStudio/RegionCopy.cs:70` 的 `Anchor`
         // 重算（地表可见时按源的奇偶往左上对齐，负锚点整块拒绝）—— GUI 不做第二次对齐，
         // 以免出现"界面预览/回执一套、落笔另一套"。
         // 这里现算而不复用 `self.hover`：`handle_keys` 跑在 `update_hover` 之前，
@@ -2461,7 +2461,7 @@ impl MireditApp {
 
     /// **换层**（运行期唯一入口）：层 + 工具纠正 + 清交互状态 + 回执 + 状态栏重建。
     ///
-    /// 上游 `MainWindow.axaml.cs:648-657` 的 `LayerChanged` 除了纠正工具，还做了两件"清干净"的事
+    /// 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:648-657` 的 `LayerChanged` 除了纠正工具，还做了两件"清干净"的事
     /// （`Viewport.Layer = …; Viewport.SpriteIndex = -1; page = 0;`）。本仓对应：
     /// **清待放置印章（`armed`）与选区拖动（`sel_drag`）** —— 换层后这两样都失去意义
     /// （印章只对物件层、选区拖动按的是旧层），留着会让下一次点击落错东西。
@@ -2514,7 +2514,7 @@ impl MireditApp {
         Ok(self.locate_cell(x, y, canvas))
     }
 
-    /// **定位到格**（= 上游 `MapViewport.Navigation.cs:5-13` 的 `LocateCell`）：一处实现，
+    /// **定位到格**（= 上游 `_upstream/CrystalStudio/MapViewport.Navigation.cs:5-13` 的 `LocateCell`）：一处实现，
     /// CheckMap 结果面板的「定位」按钮与「视图 → 定位到格…」模态**共用**。
     ///
     /// 逐条对照上游：
@@ -2586,7 +2586,7 @@ impl MireditApp {
     /// 在别的标签 B 上改了东西、直接关窗 ⇒ B 的未保存改动静默丢失
     /// （B 的编辑会话只活在 `tabs.items[B]` 的快照里，关窗路径上没有任何人看它）。
     ///
-    /// 上游真值 `MainWindow.axaml.cs:424-430`（`OnClosing`）**遍历全部标签**、任一脏就拦：
+    /// 上游真值 `_upstream/CrystalStudio/MainWindow.axaml.cs:424-430`（`OnClosing`）**遍历全部标签**、任一脏就拦：
     /// ```csharp
     /// foreach (var tab in mapTabs.Items.Cast<TabItem>().ToArray())
     /// {
@@ -2635,9 +2635,9 @@ impl MireditApp {
     /// 关闭确认模态的矩形（居中在视口上）。
     ///
     /// 宽 `metrics::MODAL_W` 现在是**上游真值 520**（上游这个模态就是系统 `MessageBox`：
-    /// `EditorDialogs.cs:79` `Width = 520`）；高 `MODAL_H` 仍是本仓推导值
+    /// `_upstream/CrystalStudio/EditorDialogs.cs:79` `Width = 520`）；高 `MODAL_H` 仍是本仓推导值
     /// （上游 `SizeToContent = SizeToContent.Height`，没有定高）。
-    /// 内边距 `MSG_BOX_PAD = 22` 对应上游 `EditorDialogs.cs:81` `Margin = new Thickness(22)`
+    /// 内边距 `MSG_BOX_PAD = 22` 对应上游 `_upstream/CrystalStudio/EditorDialogs.cs:81` `Margin = new Thickness(22)`
     /// —— **不是**四个自定义对话框的 24。绘制与命中**共用这一个函数**，
     /// 不许两处各算一份（否则画出来的按钮与能点的按钮会错位）。
     fn close_modal_rect(l: &Layout) -> Rect {
@@ -2647,7 +2647,7 @@ impl MireditApp {
     /// 关闭确认模态里**两个选项的可点带**：`(继续关闭, 取消)`。
     ///
     /// ⚠ **上游无对应物（如实登记）**：上游用系统 `MessageBox.Show(… YesNoCancel …)`
-    /// （`MainWindow.axaml.cs:419`），按钮文字/位置/间距全由系统提供，仓里没有对应真值。
+    /// （`_upstream/CrystalStudio/MainWindow.axaml.cs:419`），按钮文字/位置/间距全由系统提供，仓里没有对应真值。
     /// 这里是本仓自绘模态的**派生量**，刻意**不引入任何新的间距常量**：
     /// - 纵向：以模态框中心**下移一个字高**（`MODAL_FONT`）为带中心，带高 = 两个字高；
     /// - 横向：左半 = 继续关闭、右半 = 取消（顺序照上游 `YesNoCancel` 的 Yes→Cancel）；
@@ -3282,7 +3282,7 @@ impl eframe::App for MireditApp {
                         has_map: self.doc.doc.is_some(),
                         // 单元格网格（视图 → 单元格网格）：**与菜单勾选同一个字段**
                         grid: self.grid,
-                        // 地图尺寸：网格按它把格线裁到地图边界（官方 `Presentation.cs:37-39`）。
+                        // 地图尺寸：网格按它把格线裁到地图边界（官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:37-39`）。
                         // 无图 ⇒ 0 ⇒ `grid::lines_in` 直接返回空集（不是"不夹"档）。
                         map_w: self.doc.doc.as_ref().map(|d| d.map.width).unwrap_or(0),
                         map_h: self.doc.doc.as_ref().map(|d| d.map.height).unwrap_or(0),
@@ -3400,7 +3400,7 @@ impl eframe::App for MireditApp {
                     // 导出两个模态与另存为共用**同一套排版骨架**（标题/路径框/按钮行的几何同源）。
                     // ⚠ 订正（2026-11-08）：原文是「导出两个模态与另存为**同一套排版**，只是标题/提示/按钮文案不同」——
                     //   **「提示」这一项已不成立**：小地图模态的提示行已按上游删除
-                    //   （上游 `MinimapExportWindow.cs:20-30` 实读 8 个子项里没有提示行），
+                    //   （上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30` 实读 8 个子项里没有提示行），
                     //   另两个路径模态仍有（见 `dialog.rs` 的 `Kind::hint()` 返回 `Option`）。
                     //   原文保留作历史引用。
                     Overlay::ExportSelection { path } => {
@@ -3551,7 +3551,7 @@ impl MireditApp {
     /// 为什么缺 ④ 就不画：没有包围盒就没有真实几何，随便框一个"大概大小"就是假数据。
     /// **Alt 落位预览**（A-011）：内容（半透明）+ 轮廓 + 受阻诊断。
     ///
-    /// 上游 `MapViewport.StampRendering.cs:58-109` 的三段：`PushOpacity(Allowed ? 0.55 : 0.18)`
+    /// 上游 `_upstream/CrystalStudio/MapViewport.StampRendering.cs:58-109` 的三段：`PushOpacity(Allowed ? 0.55 : 0.18)`
     /// → 内容 → 轮廓 → `blocked` 非空才画红/琥珀诊断。
     ///
     /// 本方法只做**宿主侧**三件事，判据全在内核/纯函数：
@@ -3688,10 +3688,10 @@ impl MireditApp {
     ///
     /// # 两段式（**不许照抄上游时序**）
     ///
-    /// 上游 `CloseMapTab`（`MainWindow.MapTabs.cs:96-112`）是
+    /// 上游 `CloseMapTab`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:96-112`）是
     /// `mapTabs.SelectedItem = tab;` → `if (!ConfirmDiscard()) return false;`
     /// —— 它靠 `SelectionChanged` 事件把 `activeMap` 换成"正要关的那张"，
-    /// 于是 `ConfirmDiscard()`（`MainWindow.axaml.cs:419`）判的正好是它。
+    /// 于是 `ConfirmDiscard()`（`_upstream/CrystalStudio/MainWindow.axaml.cs:419`）判的正好是它。
     ///
     /// 本仓是**每帧派生式、结构上没有 `SelectionChanged`** ⇒ 照抄会变成
     /// "先把用户的活跃标签换掉、再问要不要关"（取消之后界面已经跳走了）。
@@ -3700,7 +3700,7 @@ impl MireditApp {
     /// - **脏** ⇒ 进确认态（记 `pending_close = Some(idx)`），**一张标签都不动**；
     /// - **净** ⇒ 直接 [`Self::close_tab_now`]。
     ///
-    /// ⚠ 上游 `ForgetRecovery(...)`（`MapTabs.cs:101`）本仓**无对应物**（没有崩溃恢复台账），
+    /// ⚠ 上游 `ForgetRecovery(...)`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:101`）本仓**无对应物**（没有崩溃恢复台账），
     /// 不实现、不造空函数（见回执「上游有本仓无」）。
     pub(crate) fn request_close_tab(&mut self, idx: usize) {
         match self.tabs.dirty_of(self, idx) {
@@ -3719,7 +3719,7 @@ impl MireditApp {
 
     /// **真的关掉第 `idx` 张标签**（跳过确认；调用方必须已经判过脏）。
     ///
-    /// 上游 `MainWindow.MapTabs.cs:102-110` 的对应段：
+    /// 上游 `_upstream/CrystalStudio/MainWindow.MapTabs.cs:102-110` 的对应段：
     /// ```csharp
     /// switchingMap = true;
     /// try { activeMap = null; mapTabs.Items.Remove(tab); } finally { switchingMap = false; }
@@ -4083,7 +4083,7 @@ impl MireditApp {
             }
         }
         // ⑦b **「原始大小」按钮**（上游 `901dbe2f` 的 `OriginalSizeButton`，
-        //     `MainWindow.axaml:22`，`Click="ResetZoomClick"`）。
+        //     `_upstream/CrystalStudio/MainWindow.axaml:25`，`Click="ResetZoomClick"`）。
         //
         //     走**同一条 action**：[`menu::model::Action::ActualSize`] ⇒ 与菜单
         //     「视图 → 实际大小」、`--menu-click view.actual_size` 完全同一条代码路径
@@ -4807,7 +4807,7 @@ mod tests {
         );
     }
 
-    /// **框外按下 ⇒ 该点直接居中，并被 clamp 夹到边界**（上游 `:84-86` + `Minimap.cs:36-42`）。
+    /// **框外按下 ⇒ 该点直接居中，并被 clamp 夹到边界**（上游 `:84-86` + `_upstream/CrystalStudio/MapViewport.Minimap.cs:36-42`）。
     ///
     /// 取世界 `(100,100)`：远在视口框左侧（框 x 从 1000 起）⇒ grab = 0 ⇒ 该点居中；
     /// 而 `x < half` ⇒ 夹到 `half` ⇒ `pan_x = 0`。若 clamp 漏了会变成**负** `pan`（越界留白）。
@@ -5196,7 +5196,7 @@ mod tests {
     /// 用户看到的就是"点了没反应"或"勾着却没有线"。
     #[test]
     fn 单元格网格可开可关且不动地图() {
-        // ① 缺省**开**：官方 `MainWindow.axaml:5` 的 `GridToggle` 是
+        // ① 缺省**开**：官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `GridToggle` 是
         //    `ToggleType="CheckBox" IsChecked="True"`。
         //    ⚠ 2026-11-05 订正：旧版这里断言"默认必须是关"（当时的理由写在
         //    `grid` 模块文档 §五），审查（内部报告《审查-菜单 39 项》，已移出公开仓
@@ -5342,7 +5342,7 @@ mod tests {
             l.content
         );
 
-        // ⑤ 没有悬停格 ⇒ 开着也不画（官方 `CellHover.cs:31-42` 的"不画空框"）
+        // ⑤ 没有悬停格 ⇒ 开着也不画（官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:31-42` 的"不画空框"）
         app.hover = None;
         assert!(app.hover_panel(&l).is_none(), "没有悬停格时不许画空框");
         app.hover = Some((1, 1));
@@ -7574,7 +7574,7 @@ mod tests {
 
     // ───────────────────── 键位 R9-F2：工具键 / 阻挡开关 / 平移 ─────────────────────
 
-    /// **工具键 `B/P/E/V/K` 各选自己的槽位**（上游 `MainWindow.axaml.cs:989`）。
+    /// **工具键 `B/P/E/V/K` 各选自己的槽位**（上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:989`）。
     ///
     /// 槽位下标 = `icons::TOOLS` 的顺序（与官方 axaml 的按钮顺序一致）：
     /// `B`=0 画笔 / `P`=1 铅笔 / `E`=3 橡皮 / `V`=6 吸管 / `K`=7 克隆。
@@ -7636,8 +7636,8 @@ mod tests {
         }
     }
 
-    /// **`C` 只切低位/高位阻挡标记，不动当前工具**（上游 `MainWindow.axaml.cs:997` +
-    /// `MapViewport.cs:82-85`：getter = 低或高，setter 同写两边）。
+    /// **`C` 只切低位/高位阻挡标记，不动当前工具**（上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:997` +
+    /// `_upstream/CrystalStudio/MapViewport.cs:82-85`：getter = 低或高，setter 同写两边）。
     #[test]
     fn c键只切阻挡不动工具() {
         let mut app = 尺寸应用(8, 8);
@@ -7790,7 +7790,7 @@ mod tests {
         }
     }
 
-    /// **`W/A/S/D` 每次平移 48 屏幕像素**（上游 `PanBy`，`MapViewport.Minimap.cs:11-22`）。
+    /// **`W/A/S/D` 每次平移 48 屏幕像素**（上游 `PanBy`，`_upstream/CrystalStudio/MapViewport.Minimap.cs:11-22`）。
     ///
     /// 判据刻意用 `pan * scale`（= 屏幕像素）而不是 `pan`：缩放 200% 时一次 W 仍是 48 屏幕像素，
     /// 也就是世界坐标只走 24 —— 这正是"按屏幕像素、不按格"的区别。
@@ -8262,7 +8262,7 @@ mod tests {
     ///
     /// # 上游真值
     ///
-    /// `MainWindow.axaml.cs:424-430` 的 `OnClosing` **遍历全部标签**、任一脏就 `e.Cancel = true`。
+    /// `_upstream/CrystalStudio/MainWindow.axaml.cs:424-430` 的 `OnClosing` **遍历全部标签**、任一脏就 `e.Cancel = true`。
     ///
     /// # 变异自证
     ///
@@ -8304,7 +8304,7 @@ mod tests {
     /// 两段式 ①：**脏 ⇒ 进确认态且一张标签都没关、`active` 一个字节没动**。
     ///
     /// 这一条同时钉住「**不许照抄上游时序**」：上游 `CloseMapTab` 先 `mapTabs.SelectedItem = tab`
-    /// （`MainWindow.MapTabs.cs:99`）再判脏；本仓结构上没有 `SelectionChanged`，
+    /// （`_upstream/CrystalStudio/MainWindow.MapTabs.cs:99`）再判脏；本仓结构上没有 `SelectionChanged`，
     /// 若照抄就会在"取消"之后留下一个被换掉的活跃标签。
     #[test]
     fn 关闭脏标签_进确认态但一张都不关() {
@@ -8365,7 +8365,7 @@ mod tests {
 
     /// 关闭**唯一**标签 ⇒ **拒绝 + 中文回执**（不 panic、不静默）。
     ///
-    /// 上游此时是 `AddMapTab(new(256, 256))`（`MainWindow.MapTabs.cs:105`）——
+    /// 上游此时是 `AddMapTab(new(256, 256))`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:105`）——
     /// 那依赖 core 的 `Document::blank`（另一写手在做）+ `path: Option` 改造，**属后续单**。
     /// 本单的处理是「拒绝 + 如实显示」：`Tabs::close` 的中文错误进状态栏回执（警示色）。
     #[test]

@@ -89,7 +89,7 @@ pub const TOOL_PICKUP: &str = "吸管"; // EN: Pickup ｜ 官方: Pickup_B685076
 /// 官方 `Fill_033955D4` = 「填充」（工具提示是
 /// `FillFFillConnectedMatchingTilesSmtilesorApplyLowHighCollisions_CED026EB` =
 /// 「填充 · F / 填充连通且匹配的地表 / 中层图块，或应用高低位阻挡」）。
-/// 快捷键真值：`MainWindow.axaml.cs:861` `Key.F => EditorTool.Bucket`。
+/// 快捷键真值：`_upstream/CrystalStudio/MainWindow.axaml.cs:989` `Key.F => EditorTool.Bucket`。
 pub const TOOL_BUCKET: &str = "填充"; // EN: Fill ｜ 官方: Fill_033955D4
 /// 其余 6 个工具本单**未接线**（落到画布上什么都不做），如实显示这句。
 pub const TOOL_UNWIRED: &str = "未接线"; // EN: Not wired
@@ -136,7 +136,7 @@ pub const BRAND: &str = "Crystal Studio"; // EN: Crystal Studio ｜ 品牌不译
 // ───────────────────── 下拉菜单项（官方 5 菜单；本仓 41 项，2026-11-05 起） ─────────────────────
 //
 // **权威来源（两处，互相印证）**：
-// 1. `CrystalStudio/MainWindow.axaml:5` 的 `<Menu>` 树 —— 每项 `Header` 是
+// 1. `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `<Menu>` 树 —— 每项 `Header` 是
 //    `{local:Loc <Key>}`，`<Separator />` 的位置就是官方的分组；
 // 2. `layout/crystalstudio-strings.json` 里同一批 key 的 `Chinese` 字段。
 //
@@ -145,9 +145,9 @@ pub const BRAND: &str = "Crystal Studio"; // EN: Crystal Studio ｜ 品牌不译
 // 写 `_` 只会多一个可见下划线）。省略号用 U+2026 `…`（官方原文就是它）。
 //
 // ⚠ **视图菜单有 4 类项不在 XAML 里**，由代码追加（见各条注释）：
-//    语言（`MainWindow.Localization.cs:15`）、7 个面板开关（`DockWorkspace.cs:269`
-//    `AddSectionMenu`，面板清单来自 `MainWindow.axaml.cs:338-379` 的 `docking.Add(...)`）、
-//    锁定 / 重置面板布局（`MainWindow.axaml.cs:389-396`）。
+//    语言（`_upstream/CrystalStudio/MainWindow.Localization.cs:15`）、7 个面板开关（`_upstream/CrystalStudio/DockWorkspace.cs:312`
+//    `AddSectionMenu`，面板清单来自 `_upstream/CrystalStudio/MainWindow.axaml.cs:351-392` 的 `docking.Add(...)`）、
+//    锁定 / 重置面板布局（`_upstream/CrystalStudio/MainWindow.axaml.cs:400-409`）。
 //
 // ⚠ **项数的账**：官方 XAML 是 39 项（文件 10 + 编辑 4 + 视图 18 + 工具 6 + 帮助 1）；
 // 本仓 2026-11-05 起 40 项（视图多一个「地图列表」面板开关），
@@ -197,7 +197,7 @@ pub const MENU_CELL_GRID: &str = "单元格网格(G)"; // EN: Cell _Grid ｜ 官
 /// 官方词条 `CellHoverInfo`（`Localization/Strings.json:153`）：
 /// `"Tile information on hover"` / `"地砖信息悬浮"`。
 ///
-/// ⚠ **不持久化**：上游 `CellHoverToggle` 只是运行期勾选态（`MainWindow.CellHover.cs:31`
+/// ⚠ **不持久化**：上游 `CellHoverToggle` 只是运行期勾选态（`_upstream/CrystalStudio/MainWindow.CellHover.cs:31`
 /// 每帧读 `IsChecked`），既没进 `SettingsStore`，也没有命令行/配置文件入口 ⇒
 /// 本仓同样**只放在内存里**（见 `crate::menu::settings::Settings` 的两个字段：
 /// `dark` + `recent`，没有第三条）。
@@ -217,7 +217,7 @@ pub const CELL_PROPS_TITLE: &str = "单元格属性"; // EN: Cell Properties ｜
 /// 模态头行：**单选一格**时的写法（官方 `"Cell {0}, {1}"`）。
 ///
 /// 占位符：`{x}` / `{y}`（`u16` 世界格坐标）。官方这处**没有** `:N0`
-/// （`MainWindow.axaml.cs:749`）⇒ 本仓同样**不带千分位**，坐标直接填十进制。
+/// （`_upstream/CrystalStudio/MainWindow.axaml.cs:749`）⇒ 本仓同样**不带千分位**，坐标直接填十进制。
 /// 与悬停浮层的区别是上游真值不同，不是写法不统一（浮层见 [`HOVER_COORD_TMPL`]）。
 pub const CELL_PROPS_HEADER_CELL_TMPL: &str = "单元格 {x},{y}"; // EN: Cell {x},{y} ｜ 官方: Cell {0}, {1}（无 N0）
 
@@ -330,7 +330,7 @@ pub const TOOL_CROP_DISABLED: &str = "先在地图上框选要保留的部分再
 
 // ───────────────────────── 换层纠正工具（R12-F2 / R43） ─────────────────────────
 
-/// **换层时纠正了工具**的回执（上游 `MainWindow.axaml.cs:648-657` 强制切 Pencil 的那条）。
+/// **换层时纠正了工具**的回执（上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:648-657` 强制切 Pencil 的那条）。
 ///
 /// 占位符：`{layer}` = 新层名（「地表图层」等）；`{tool}` = 被换下来的槽位名。
 /// ⚠ 点明「铅笔（本仓未接线）」：上游纠正到的是能画的 Pencil，本仓铅笔尚未接线 ——
@@ -339,7 +339,7 @@ pub const STATUS_LAYER_TOOL_FIXED_TMPL: &str = "已切到{layer}；该工具在�
 
 // ───────────────────────── 视图 → 定位到格（F-R13-2 / R42） ─────────────────────────
 
-/// 视图 → **定位到格…**（本仓新增入口；上游同语义只有 `MapViewport.Navigation.cs:5-13`
+/// 视图 → **定位到格…**（本仓新增入口；上游同语义只有 `_upstream/CrystalStudio/MapViewport.Navigation.cs:5-13`
 /// 的 `LocateCell`，界面上只有 CheckMap 结果里的「定位」按钮调它）。
 ///
 /// 省略号表示"点了还要输坐标"（与「打开地图…」「另存为…」同一约定）。
@@ -403,7 +403,7 @@ pub const EXPAND_SUMMARY_TMPL: &str = "扩边后：{w} × {h} 格"; // EN: Expan
 /// 本仓按四种拒绝原因分别说（负数 / 奇数 / 全 0 / 越界），文案出自
 /// `miredit_core::ResizeError` 的 `Display`；这里只留「**不是整数 / 空着**」那一条。
 ///
-/// ⚠ **空串不许当 0**（2026-11-07 P3 订正）：上游 `MapExpansionWindow.cs:39-41` 用
+/// ⚠ **空串不许当 0**（2026-11-07 P3 订正）：上游 `_upstream/CrystalStudio/MapExpansionWindow.cs:39-41` 用
 /// `int.TryParse`，空串返回 `false` ⇒ `ApplyButton.IsEnabled = false`。旧文案「留空按 0 算」
 /// 与本仓旧实现一致、但与上游相反，已改成现在这句。
 pub const EXPAND_ERR_NOT_NUMBER: &str = "四条边都要填整数，且不能为空"; // EN: Enter whole numbers; empty is not allowed.
@@ -438,7 +438,7 @@ pub const CHECK_MAP_SUMMARY_TMPL: &str =
 
 /// 没有图库时的追加提示（官方 `"Load libraries to check image references."`）。
 ///
-/// 语义：**图号引用这一项整体没查**（上游 `MapCheck.cs:26` 在 `libraries == null` 时
+/// 语义：**图号引用这一项整体没查**（上游 `_upstream/CrystalStudio/MapCheck.cs:26` 在 `libraries == null` 时
 /// 直接 `return`），报告里的条数只剩「门两警告 + 不连通区」。
 pub const CHECK_MAP_NO_LIBS: &str =
     "加载图库后才能检查图号引用。"; // EN: Load libraries to check image references. ｜ 官方: 同
@@ -562,7 +562,7 @@ pub const MENU_DARK_OFF: &str = "深色模式：关（已写入设置文件）";
 /// 为什么带上「48×32」：网格的几何只有这一组数（[`crate::metrics::CELL_W`] /
 /// [`crate::metrics::CELL_H`]），回执里写出来，用户点完就知道自己看到的是什么间距的线。
 pub const MENU_CELL_GRID_ON: &str = "单元格网格：开（世界格 48×32）"; // EN: Cell grid: on (48×32)
-/// **阻挡标记开**回执（键 `C`；上游 `MainWindow.axaml.cs:997` 同时打开低/高两个通道）。
+/// **阻挡标记开**回执（键 `C`；上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:997` 同时打开低/高两个通道）。
 ///
 /// ⚠ **与上游的有意差异**（R41 记档）：上游 `C` 只改两个 `CheckBox.IsChecked`，**不写状态栏**；
 /// 本仓的纪律是"每次状态变更都要有回执"（同 `G` 网格、门开关），所以这里多一句。
@@ -689,15 +689,15 @@ pub const SC_TOOL_FILL: &str = "填充工具"; // EN: Fill tool
 pub const SC_TOOL_SELECT: &str = "选择工具"; // EN: Select tool
 /// 动作名：印章工具。
 pub const SC_TOOL_STAMP: &str = "印章工具"; // EN: Stamp tool
-/// 工具键（八个，官方 `MainWindow.axaml.cs:989` 同一行：`B/P/F/E/M/O/V/K`）。
+/// 工具键（八个，官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:989` 同一行：`B/P/F/E/M/O/V/K`）。
 ///
 /// ⚠ 其中 **`P`（铅笔）与 `K`（克隆）本仓尚未接线**：键只切到那个槽位，
 /// 画布上落笔不改地图、状态栏如实说"未接线"（与点该图标同一结果）。表里合并成一行，
 /// 是为了别让快捷键浮层被五个几乎同义的行撑爆。
 pub const SC_TOOL_KEYS: &str = "工具切换（铅笔/克隆未接线）"; // EN: Switch tool (pencil/clone not wired)
-/// 官方 `Key.C`：低位/高位阻挡标记同开同关（`MainWindow.axaml.cs:997`）。
+/// 官方 `Key.C`：低位/高位阻挡标记同开同关（`_upstream/CrystalStudio/MainWindow.axaml.cs:997`）。
 pub const SC_TOGGLE_COLLISION: &str = "低位 / 高位阻挡标记 开 / 关"; // EN: Toggle low/high collision markers
-/// 官方 `W/A/S/D`：每次平移 48 **屏幕**像素（`PanBy`，`MapViewport.Minimap.cs:11-22`）。
+/// 官方 `W/A/S/D`：每次平移 48 **屏幕**像素（`PanBy`，`_upstream/CrystalStudio/MapViewport.Minimap.cs:11-22`）。
 ///
 /// "每次" = **每个按键事件**一次：按住时系统自动重复会一次一次地走（`i.key_pressed()` 含
 /// key-repeat），但**没有事件的帧不会漂移**（不做按帧积分）；一帧内多次重复只算一步。
@@ -790,7 +790,7 @@ pub const KEY_CTRL_SHIFT_S: &str = "Ctrl+Shift+S"; // EN: Ctrl+Shift+S
 pub const KEY_CTRL_SHIFT_N: &str = "Ctrl+Shift+N"; // EN: Ctrl+Shift+N
 /// 键名：`G`（官方「单元格网格」的手势）。
 pub const KEY_G: &str = "G"; // EN: G
-/// 键：八个工具键（官方 `MainWindow.axaml.cs:989` 的同一行 `switch`）。
+/// 键：八个工具键（官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:989` 的同一行 `switch`）。
 ///
 /// 快捷键浮层里合并成一行（`P`/`K` 的工具尚未接线，见 [`SC_TOOL_KEYS`]）。
 pub const KEY_TOOL_KEYS: &str = "B/P/F/E/M/O/V/K"; // EN: B/P/F/E/M/O/V/K
@@ -888,7 +888,7 @@ pub const EXPORT_SEL_DLG_OK: &str = "导出"; // EN: Export ｜ 官方: ExportSe
 
 /// 导出小地图模态标题。
 pub const EXPORT_MINI_DLG_TITLE: &str = "导出小地图"; // EN: Export Minimap ｜ 官方: ExportMinimap_C5960A2C
-// 导出小地图模态的**说明行已删除**（2026-11-08）：上游 `MinimapExportWindow.cs:20-30`
+// 导出小地图模态的**说明行已删除**（2026-11-08）：上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30`
 // 的子项里没有任何提示/说明行（实读顺序：尺寸预设标签 → ComboBox → 宽度标签 →
 // WidthInput → 高度标签 → HeightInput → error → 按钮行）⇒ 本仓自加的那条
 // `EXPORT_MINI_DLG_HINT` 属于自主设计，已连同绘制点一起删除（无消费点，留着会 `dead_code`）。
@@ -897,19 +897,19 @@ pub const EXPORT_MINI_DLG_OK: &str = "导出"; // EN: Export ｜ 官方: ExportM
 
 // ── 「导出小地图」模态的尺寸输入（2026-11-06，N F-R14-1） ──
 //
-// 官方 `MinimapExportWindow.cs:20-41@6450da90`：预设下拉 `Small (¼) / Medium (½) / Large (1:1)`
+// 官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-41`：预设下拉 `Small (¼) / Medium (½) / Large (1:1)`
 // （**默认 Small**，除数 `{4,2,1}`）+ 自定义宽/高 TextBox + `Validate`
 // （`int.TryParse` ∧ `MinimapExporter.ValidSize`）。数值口径全部复用 `crate::export`。
 
 /// 预设行左侧的说明标签（官方的 ComboBox 上方没有标题，这条是本仓补的说明）。
-pub const EXPORT_MINI_DLG_PRESET_LABEL: &str = "尺寸预设"; // EN: Size preset ｜ 官方: MinimapExportWindow.cs:21（ComboBox）
-/// 三档预设的显示名（**与官方 `MinimapExportWindow.cs:21` 逐字相同**，不译）。
-pub const MINIMAP_PRESET_SMALL: &str = "Small (¼)"; // EN: Small (¼) ｜ 官方: MinimapExportWindow.cs:21
+pub const EXPORT_MINI_DLG_PRESET_LABEL: &str = "尺寸预设"; // EN: Size preset ｜ 官方: _upstream/CrystalStudio/MinimapExportWindow.cs:21（ComboBox）
+/// 三档预设的显示名（**与官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:21` 逐字相同**，不译）。
+pub const MINIMAP_PRESET_SMALL: &str = "Small (¼)"; // EN: Small (¼) ｜ 官方: _upstream/CrystalStudio/MinimapExportWindow.cs:21
 /// 见 [`MINIMAP_PRESET_SMALL`]。
-pub const MINIMAP_PRESET_MEDIUM: &str = "Medium (½)"; // EN: Medium (½) ｜ 官方: MinimapExportWindow.cs:21
+pub const MINIMAP_PRESET_MEDIUM: &str = "Medium (½)"; // EN: Medium (½) ｜ 官方: _upstream/CrystalStudio/MinimapExportWindow.cs:21
 /// 见 [`MINIMAP_PRESET_SMALL`]。
-pub const MINIMAP_PRESET_LARGE: &str = "Large (1:1)"; // EN: Large (1:1) ｜ 官方: MinimapExportWindow.cs:21
-/// 宽/高输入框前的标签（官方 `MinimapExportWindow.cs:26-33` 的两个 TextBox）。
+pub const MINIMAP_PRESET_LARGE: &str = "Large (1:1)"; // EN: Large (1:1) ｜ 官方: _upstream/CrystalStudio/MinimapExportWindow.cs:21
+/// 宽/高输入框前的标签（官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:23-26` 的两个 TextBox）。
 pub const EXPORT_MINI_DLG_WIDTH: &str = "宽"; // EN: W
 /// 见 [`EXPORT_MINI_DLG_WIDTH`]。
 pub const EXPORT_MINI_DLG_HEIGHT: &str = "高"; // EN: H
@@ -939,7 +939,7 @@ pub const EXPORT_OVERWROTE: &str = "；原文件已覆盖"; // EN: (existing fil
 pub const EXPORT_TWO_STAGE: &str = "；已按上游 PreviewRaster 口径二次合成到目标尺寸（等比居中 + 不透明黑底 + 最近邻）"; // EN: (second pass composed to the target size per upstream PreviewRaster: aspect-fit, centred, opaque black, nearest-neighbour)
 // ⚠ 订正（2026-11-08）：本常量原文是
 //   「；已按面积平均二次缩放到目标长边（render crate 的 resize_to）」——**那句已成假话**：
-//   导出第二段已改为上游 `PreviewRaster.cs:15-19,35-38` 口径（等比 + 居中 + 不透明黑底 + 最近邻），
+//   导出第二段已改为上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38` 口径（等比 + 居中 + 不透明黑底 + 最近邻），
 //   既不是面积平均、也不再走 `compare::resize_to`（该函数保留未删，仍服务 overview mip 预缩与诊断）。
 //   原文保留作历史引用，见台账 §8.66 / `export.rs` 模块文档 §四。
 /// `--minimap-max-side` 的值非法（太小 / 不是整数）。
@@ -1012,10 +1012,10 @@ pub const TITLE_ACTIVE_ASSET: &str = "当前资源"; // EN: Active Asset ｜ 官
 
 /// **地图列表面板**标题（2026-11-05，上游 `901dbe2f` 新增面板）。
 ///
-/// ⚠ 上游面板名 `"Maps"` 来自 `MainWindow.axaml.cs:343` 的 `docking.Add("Maps", …)`，
+/// ⚠ 上游面板名 `"Maps"` 来自 `_upstream/CrystalStudio/MainWindow.axaml.cs:349` 的 `docking.Add("Maps", …)`，
 /// **不在** `Strings.json` 里（那批 `LocalText.T("…")` 用的字面量键都没进译文表）
 /// ⇒ 官方漏译，按本仓口径自定（与「资源面板」「单元格检查器」同一套两字+名词风格）。
-pub const TITLE_MAPS: &str = "地图列表"; // EN: Maps ｜ 上游 `MainWindow.axaml.cs:343`（Strings.json 无此键 ⇒ 自定）
+pub const TITLE_MAPS: &str = "地图列表"; // EN: Maps ｜ 上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:349`（Strings.json 无此键 ⇒ 自定）
 
 // ───────────────────────── 小地图（总览纹理的三条状态） ─────────────────────────
 
@@ -1038,8 +1038,8 @@ pub const MINIMAP_THREAD_LOST: &str = "小地图后台线程已退出（没有�
 
 /// 笔刷尺寸胶囊里的文字：**真实尺寸** `N×N`（数字不译，`×` 是 U+00D7）。
 ///
-/// 真值：`CrystalStudio/MainWindow.axaml:6` 的 `<TextBlock x:Name="BrushSizeLabel"
-/// Text="3×3" …/>`，运行期由 `MainWindow.axaml.cs:932` 按当前工具与尺寸改写：
+/// 真值：`_upstream/CrystalStudio/MainWindow.axaml:6` 的 `<TextBlock x:Name="BrushSizeLabel"
+/// Text="3×3" …/>`，运行期由 `_upstream/CrystalStudio/MainWindow.axaml.cs:1068` 按当前工具与尺寸改写：
 /// `BrushSizeLabel.Text = (Tool == Bucket ? T("Fill") : (Tool == Pencil ? "1×1"
 ///   : $"{BrushSize}×{BrushSize}"));`
 ///
@@ -1047,9 +1047,9 @@ pub const MINIMAP_THREAD_LOST: &str = "小地图后台线程已退出（没有�
 /// - 填充工具 ⇒ [`TOOL_BUCKET`]（官方就是复用 `Fill` 这一条文案）；
 /// - 铅笔 ⇒ `1×1`（铅笔本单未接线，但文案口径照样留着）；
 /// - 其余（笔刷/橡皮/吸管）⇒ `N×N`（N = [`crate::metrics::BRUSH_MIN`]..=[`crate::metrics::BRUSH_MAX`] 的奇数）。
-pub const PILL_SIZE_TMPL: &str = "{n}×{n}"; // EN: {n}×{n} ｜ 官方: BrushSizeLabel 的运行期格式（MainWindow.axaml.cs:932）
+pub const PILL_SIZE_TMPL: &str = "{n}×{n}"; // EN: {n}×{n} ｜ 官方: BrushSizeLabel 的运行期格式（_upstream/CrystalStudio/MainWindow.axaml.cs:1068）
 /// 铅笔工具的胶囊文案（官方 `1×1`：铅笔永远是单格）。
-pub const PILL_PENCIL: &str = "1×1"; // EN: 1×1 ｜ 官方: MainWindow.axaml.cs:932
+pub const PILL_PENCIL: &str = "1×1"; // EN: 1×1 ｜ 官方: _upstream/CrystalStudio/MainWindow.axaml.cs:1068
 
 /// 五个图层行。
 ///
@@ -1197,7 +1197,7 @@ pub const TRUNC_SUFFIX: &str = "…"; // EN: …
 
 // ───────────────────────── 悬停地砖信息浮层（视图 → 地砖信息悬浮）─────────────────────────
 //
-// 上游 `MainWindow.CellHover.cs:56-63` 只拼三样东西（逐条对照，别自己加字段）：
+// 上游 `_upstream/CrystalStudio/MainWindow.CellHover.cs:56-63` 只拼三样东西（逐条对照，别自己加字段）：
 //   ① 坐标行  `LocalText.Format("Cell {0:N0}, {1:N0}", x, y)`（`Strings.json:949` 的
 //     `"Cell {0:N0}, {1:N0}"`，带千分位）；
 //   ② 可行走行 `LocalText.T(blocked ? "Not walkable" : "Walkable")`
@@ -1207,7 +1207,7 @@ pub const TRUNC_SUFFIX: &str = "…"; // EN: …
 
 /// 悬停浮层的坐标行模板。占位符：`{x}` / `{y}`。
 ///
-/// ⚠ 官方是 `"Cell {0:N0}, {1:N0}"`（`MainWindow.CellHover.cs:58`）—— `N0` = **千分位分隔**、
+/// ⚠ 官方是 `"Cell {0:N0}, {1:N0}"`（`_upstream/CrystalStudio/MainWindow.CellHover.cs:58`）—— `N0` = **千分位分隔**、
 /// 无小数（如 `Cell 1,234`）。**A16 已对齐**：`{x}` / `{y}` 由 [`crate::cellinfo::千分位`]
 /// 预先格成带 `,` 的十进制串再填进来（[`fill`] 只做字面替换，**不认 `N0`** 这类格式说明符），
 /// 于是「模板里只有占位符、数字格式在调用点决定」这条既有分工不变。
@@ -1223,7 +1223,7 @@ pub const HOVER_WALKABLE: &str = "可行走"; // EN: Walkable ｜ 官方: CellWa
 /// 悬停浮层：该格**不可行走**（上游用红色 `Brushes.Red` 显示这一行）。
 pub const HOVER_NOT_WALKABLE: &str = "不可行走"; // EN: Not walkable ｜ 官方: CellNotWalkable
 
-/// 悬停浮层里**一条明细**的模板（官方 `CellHover.cs:62` 的 `$"{T(g.Title)}: {g.Detail}"`）。
+/// 悬停浮层里**一条明细**的模板（官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:62` 的 `$"{T(g.Title)}: {g.Detail}"`）。
 ///
 /// 占位符：`{title}` = 常驻检查器的键名（[`INSPECTOR_KEYS`]，已本地化）、
 /// `{value}` = 该组的值（多行值先压成一行，见 [`HOVER_DETAIL_JOIN`]）。
@@ -1232,9 +1232,9 @@ pub const HOVER_DETAIL_TMPL: &str = "{title}: {value}"; // EN: "{title}: {value}
 /// 悬停浮层里把常驻检查器的**多行值**压成一行时的连接符（如
 /// `图号 2724\n库号 0\n帧 100×100` ⇒ `图号 2724 · 库号 0 · 帧 100×100`）。
 ///
-/// 为什么压成一行：上游的明细区是**每格一组一条**（`CellHover.cs:62` 逐组一行），
+/// 为什么压成一行：上游的明细区是**每格一组一条**（`_upstream/CrystalStudio/MainWindow.CellHover.cs:62` 逐组一行），
 /// 而本仓的六组值里有四组自带 `\n`（模板就是这么为**竖向面板**排的）。浮层只有
-/// 350px 宽（`MainWindow.axaml:87` 的 `Width="350"`），照搬多行会让一个悬停框长到
+/// 350px 宽（`_upstream/CrystalStudio/MainWindow.axaml:87` 的 `Width="350"`），照搬多行会让一个悬停框长到
 /// 20 行以上；压成一行后每组仍是一条「标题: 值」，信息一个不少。
 ///
 /// ⚠ 拼之前**先剥掉每段的行尾分隔符**（模板里 `低位阻挡{low} ·\n高位阻挡{high}` 的
@@ -1639,22 +1639,22 @@ pub const STATUS_SAVE_FAIL_TMPL: &str = "保存失败：{err}（原文件未改�
 /// 状态栏：**上一次填充填了几格**（图号层）。
 ///
 /// 占位符：`{n}` = 真正改动的格数（= 那一步撤销里的格数）。
-/// 官方原文是 `Filled {0:N0} tiles`（`MapViewport.cs:537`，`{0:N0}` 带千位分隔符）；
+/// 官方原文是 `Filled {0:N0} tiles`（`_upstream/CrystalStudio/MapViewport.cs:563`，`{0:N0}` 带千位分隔符）；
 /// 本仓**不加千位分隔符**（任务书 §三.2 的示例是 `填充 1234 格`，且中文界面里
 /// `1,234` 与 `1234` 并存会让 grep 对账变麻烦）。
-pub const STATUS_FILL_TMPL: &str = "填充 {n} 格"; // EN: Filled {n} tiles ｜ 官方: Fill_033955D4 / MapViewport.cs:537 `Filled {0:N0} tiles`
+pub const STATUS_FILL_TMPL: &str = "填充 {n} 格"; // EN: Filled {n} tiles ｜ 官方: Fill_033955D4 / _upstream/CrystalStudio/MapViewport.cs:563 `Filled {0:N0} tiles`
 /// 状态栏：**阻挡层**填充的结果（官方在这一层不说 "Filled tiles"，说的是应用阻挡）。
 ///
-/// 官方原文：`Applied {0} collision to {1:N0} cells`（`MapViewport.cs:537`），
+/// 官方原文：`Applied {0} collision to {1:N0} cells`（`_upstream/CrystalStudio/MapViewport.cs:563`），
 /// 其中 `{0}` 是 `low` / `high`（官方译文 `低位` / `高位`）。本仓把层名（`低位阻挡` /
 /// `高位阻挡`）直接放进来，比"应用 low 到 N 格"更可读，语义不变。
-pub const STATUS_FILL_COLLISION_TMPL: &str = "应用{layer} {n} 格"; // EN: Applied {layer} collision to {n} cells ｜ 官方: MapViewport.cs:537
+pub const STATUS_FILL_COLLISION_TMPL: &str = "应用{layer} {n} 格"; // EN: Applied {layer} collision to {n} cells ｜ 官方: _upstream/CrystalStudio/MapViewport.cs:563
 
 // ───────────────────── 矩形选区 / 剪贴板（2026-11-05 新增） ─────────────────────
 
 /// 状态栏：**只有选区**（`{w}`×`{h}` 是格数，`{x0},{y0}..{x1},{y1}` 是闭区间坐标）。
 ///
-/// 官方在 `MapViewport.cs:412-415` 把选区画出来，但没有状态栏文案；
+/// 官方在 `_upstream/CrystalStudio/MapViewport.cs:303` 把选区画出来，但没有状态栏文案；
 /// 本仓补一句是因为"框了多少格、从哪到哪"是用户下一步操作（复制/填充）的唯一依据。
 pub const STATUS_SEL_TMPL: &str = "选区 {w}×{h}（{x0},{y0}..{x1},{y1}）"; // EN: Selection {w}×{h} ({x0},{y0}..{x1},{y1}) ｜ 官方: 无（官方不显示选区尺寸）
 
@@ -1662,25 +1662,25 @@ pub const STATUS_SEL_TMPL: &str = "选区 {w}×{h}（{x0},{y0}..{x1},{y1}）"; /
 pub const STATUS_SEL_CLIP_TMPL: &str = "选区 {w}×{h}（{x0},{y0}..{x1},{y1}）· 剪贴板 {cw}×{ch}"; // EN: Selection {w}×{h} ({x0},{y0}..{x1},{y1}) · Clipboard {cw}×{ch} ｜ 官方: 无
 
 /// 状态栏：**只有剪贴板**（选区已被取消，但复制过的东西还在 —— 官方 `Deselect`
-/// 不清 `copiedRegion`，见 `RegionCopy.cs:96`/`:114`）。
+/// 不清 `copiedRegion`，见 `_upstream/CrystalStudio/RegionCopy.cs:96`/`:114`）。
 pub const STATUS_CLIP_TMPL: &str = "剪贴板 {cw}×{ch}"; // EN: Clipboard {cw}×{ch} ｜ 官方: 无
 
 /// 选区操作的**快捷键提示**（待选区态/状态栏 hint 用；三个有官方依据、一个没有）。
 ///
 /// ⚠ 第 4 条 `Ctrl+Shift+V` 是**本仓自定**：官方 `MapViewport.cs` 只绑了
 /// `Ctrl+C` / `Ctrl+X` / `Ctrl+V`（`:101`-`:121`）与 `Delete`，**没有**"填充选区"的快捷键
-/// （填充是工具 `F` + 点击，`MainWindow.axaml.cs:861`）。本仓为选区填充补一个键，
+/// （填充是工具 `F` + 点击，`_upstream/CrystalStudio/MainWindow.axaml.cs:989`）。本仓为选区填充补一个键，
 /// **无官方依据**，在此显式记档。
 pub const SEL_KEYS_HINT: &str = "选区：Ctrl+C 复制 · Ctrl+X 剪切 · Ctrl+V 粘贴 · Delete 删除 · Ctrl+Shift+V 填充（本仓自定）"; // EN: Selection: Ctrl+C / Ctrl+X / Ctrl+V / Delete / Ctrl+Shift+V fills (no upstream binding)
 
 /// 选区操作回执：**已复制**（`{w}`×`{h}` = 格数）。
-pub const SEL_COPY_TMPL: &str = "已复制 {w}×{h} 格"; // EN: Copied {w}×{h} cells ｜ 官方: RegionCopy.cs:101（官方只在视口上闪一句提示，无固定文案）
+pub const SEL_COPY_TMPL: &str = "已复制 {w}×{h} 格"; // EN: Copied {w}×{h} cells ｜ 官方: _upstream/CrystalStudio/RegionCopy.cs:101（官方只在视口上闪一句提示，无固定文案）
 
 /// 选区操作回执：**已剪切**（复制到剪贴板 + 源块清空 `{n}` 格）。
-pub const SEL_CUT_TMPL: &str = "剪切 {w}×{h} 格（清空 {n} 格）"; // EN: Cut {w}×{h} cells ({n} cleared) ｜ 官方: RegionCopy.cs:102
+pub const SEL_CUT_TMPL: &str = "剪切 {w}×{h} 格（清空 {n} 格）"; // EN: Cut {w}×{h} cells ({n} cleared) ｜ 官方: _upstream/CrystalStudio/RegionCopy.cs:102
 
 /// 选区操作回执：**已粘贴**（`{w}`×`{h}` = 剪贴板的尺寸，不是"改了几格"）。
-pub const SEL_PASTE_TMPL: &str = "粘贴 {w}×{h} 格"; // EN: Pasted {w}×{h} cells ｜ 官方: RegionCopy.cs:121 `Region pasted · Ctrl+V to paste again`
+pub const SEL_PASTE_TMPL: &str = "粘贴 {w}×{h} 格"; // EN: Pasted {w}×{h} cells ｜ 官方: _upstream/CrystalStudio/RegionCopy.cs:121 `Region pasted · Ctrl+V to paste again`
 
 /// 粘贴时越界格被逐格跳过（接在 [`SEL_PASTE_TMPL`] 后面）。
 ///
@@ -1689,7 +1689,7 @@ pub const SEL_PASTE_TMPL: &str = "粘贴 {w}×{h} 格"; // EN: Pasted {w}×{h} c
 pub const SEL_PASTE_SKIP_TMPL: &str = "（{k} 格在地图外，已跳过）"; // EN: ({k} cells outside the map, skipped)
 
 /// 选区操作回执：**已删除**（`{n}` = 真清掉的格数，三族按层清）。
-pub const SEL_DELETE_TMPL: &str = "删除 {n} 格"; // EN: Deleted {n} cells ｜ 官方: RegionCopy.cs:45-69 `CutSource`
+pub const SEL_DELETE_TMPL: &str = "删除 {n} 格"; // EN: Deleted {n} cells ｜ 官方: _upstream/CrystalStudio/RegionCopy.cs:45-69 `CutSource`
 
 /// 选区操作回执：**已填充选区**（`{n}` = 真改动的格数）。
 ///
@@ -1697,7 +1697,7 @@ pub const SEL_DELETE_TMPL: &str = "删除 {n} 格"; // EN: Deleted {n} cells ｜
 /// 成功时**不写**那一本，因为同一根状态栏上的 [`STATUS_FILL_TMPL`]（`填充 {n} 格`）
 /// 已经从 `last_fill` 说了同一件事（同一个 `n`），两段并排只差「选区」两个字。
 /// 判定点只有一处：[`crate::selection_ops::写操作回执`]。
-pub const SEL_FILL_TMPL: &str = "填充选区 {n} 格"; // EN: Filled {n} cells in the selection ｜ 官方: MapViewport.cs:540 `FillSelection`
+pub const SEL_FILL_TMPL: &str = "填充选区 {n} 格"; // EN: Filled {n} cells in the selection ｜ 官方: _upstream/CrystalStudio/MapViewport.cs:566 `FillSelection`
 
 /// 兜底拒绝：没有选区（内核正常会给更具体的原因，这条只在取不到 `note` 时用）。
 pub const SEL_ERR_NO_SELECTION: &str = "没有选区：先框一个矩形选区"; // EN: no selection
@@ -1723,17 +1723,17 @@ pub const STATUS_OP_TMPL: &str = "{text}"; // EN: {text}（运行期自由文案
 
 /// 填充被拒：**本层不支持填充**。
 ///
-/// 官方原文（`MapViewport.cs:490`）：
+/// 官方原文（`_upstream/CrystalStudio/MapViewport.cs:516`）：
 /// `"Fill works on ground tiles, middle tiles (smtiles), and low/high collisions"`；
 /// 官方译文（工具提示 `FillFFillConnectedMatchingTilesSmtilesorApplyLowHighCollisions_CED026EB`）：
 /// 「填充连通且匹配的地表 / 中层图块，或应用高低位阻挡」。
 /// 物体层被排除是因为它没有"图号"可比较（官方 `Foreground` 是 `(lib, img)` 对，且填充循环里
-/// 只处理 Ground / Middle / 碰撞三种，见 `MapViewport.cs:498-527`）。
+/// 只处理 Ground / Middle / 碰撞三种，见 `_upstream/CrystalStudio/MapViewport.cs:524-553`）。
 pub const FILL_ERR_LAYER: &str =
     "填充只支持地表图层 / 中层图层 / 低位阻挡 / 高位阻挡（物体层没有可比较的图号）"; // EN: fill works on ground/middle/low/high only ｜ 官方: FillFFillConnectedMatchingTilesSmtilesorApplyLowHighCollisions_CED026EB
 /// 填充被拒：**手上没有笔刷**（图号层需要知道填成哪一号图）。
 pub const FILL_ERR_NO_BRUSH: &str = "没有笔刷：先用吸管取一格，或在资源面板选一帧"; // EN: no brush — pick a cell or a palette frame first
-/// 填充被拒：**点击格在地图外**（官方 `MapViewport.cs:493` 的 `!Document.Contains(x, y)`）。
+/// 填充被拒：**点击格在地图外**（官方 `_upstream/CrystalStudio/MapViewport.cs:487` 的 `!Document.Contains(x, y)`）。
 pub const FILL_ERR_OUT_OF_MAP: &str = "点击格 ({x},{y}) 在地图外"; // EN: cell ({x},{y}) is outside the map
 /// 填充被拒：**连通块超过上限，一格都没写**。
 ///
@@ -1745,41 +1745,41 @@ pub const FILL_ERR_TOO_LARGE: &str =
 
 /// 页签标题模板（`{name}` = 地图文件名）。
 ///
-/// 上游: `MainWindow.MapTabs.cs:120`
+/// 上游: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:120`
 /// `(map.Label).Text = string.Concat(MapDisplayName(map), (dirty ? " *" : ""));`
 /// —— 干净态就是 `MapDisplayName(map)` 原文，不加任何前后缀。
 pub const TAB_TITLE_TMPL: &str = "{name}"; // EN: {name}
 /// 页签标题模板（**有未保存修改**）。
 ///
-/// 上游: `MainWindow.MapTabs.cs:120` 的 `(dirty ? " *" : "")`
+/// 上游: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:120` 的 `(dirty ? " *" : "")`
 /// —— 脏标记是**直接拼接 `" *"`**（一个半角空格 + 一个星号），不是另起一套格式；
 /// 这里做成 `{name} *` 模板与之**逐字等价**（`fill` 替换后 = `string.Concat(name, " *")`）。
 pub const TAB_TITLE_DIRTY_TMPL: &str = "{name} *"; // EN: {name} *
 /// **未命名地图**的页签标题模板（`{n}` = 自增序号）。
 ///
-/// 上游: `MainWindow.MapTabs.cs:125-131` `MapDisplayName`
+/// 上游: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:125-131` `MapDisplayName`
 /// ```text
 /// if (map.Path != null) return Path.GetFileName(map.Path);
 /// string prefix = map.IsStamp ? "Untitled stamp " : "Untitled ";
 /// return ... LocalText.Format(map.IsStamp ? "Untitled stamp {0}" : "Untitled {0}", number) : map.Name;
 /// ```
-/// 序号来源：`MapTabs.cs:52` `$"Untitled {++untitledNumber}"`（宿主自增计数器，从 1 起）。
+/// 序号来源：`_upstream/CrystalStudio/MainWindow.MapTabs.cs:52` `$"Untitled {++untitledNumber}"`（宿主自增计数器，从 1 起）。
 ///
 /// ⚠ **本仓暂不可达**（如实标注，不编造调用点）：本仓没有"新建空白地图"入口
 /// （`DocState.doc` 为 `None` 时标签条整张不画，见 `Tabs::显示信息` 的 `None` 分支），
 /// 所有文档都从 `.map` 文件装载 ⇒ `file_name` 恒等于 `Path::file_name`（`mapdoc.rs:456`）
 /// ⇒ 永远走上游的**有 Path** 那一支。等"新建空白图"落地时直接用本模板，别再另写一份格式。
-pub const TAB_TITLE_UNTITLED_TMPL: &str = "Untitled {n}"; // EN: Untitled {n} ｜ 官方: MainWindow.MapTabs.cs:130
+pub const TAB_TITLE_UNTITLED_TMPL: &str = "Untitled {n}"; // EN: Untitled {n} ｜ 官方: _upstream/CrystalStudio/MainWindow.MapTabs.cs:130
 /// 页签右端的关闭符。
 ///
-/// 上游: `MainWindow.MapTabs.cs:57` `Content = ("\u00d7")` —— **U+00D7 MULTIPLICATION SIGN**，
+/// 上游: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:57` `Content = ("\u00d7")` —— **U+00D7 MULTIPLICATION SIGN**，
 /// 不是字母 `x`、也不是 `✕`(U+2715)。
 pub const TAB_CLOSE: &str = "×"; // EN: ×
 
 /// **关闭脏标签的确认文案（第一行，带标签名）** —— B2 单，2026-11-08。
 ///
 /// ⚠ **上游无对应物（如实登记，不冒充照抄）**：上游用的是
-/// `MainWindow.axaml.cs:419` 的 `MessageBox.Show(this, "Save your changes before continuing?",
+/// `_upstream/CrystalStudio/MainWindow.axaml.cs:419` 的 `MessageBox.Show(this, "Save your changes before continuing?",
 /// activeMap?.IsStamp == true ? "Unsaved stamp" : "Unsaved map", YesNoCancel, …)` ——
 /// ① 那是**系统模态框**（本仓自绘模态，见 `app::draw_close_modal`）；
 /// ② 文案里**不带标签名**（用户看不出是哪一张脏）。
@@ -1789,7 +1789,7 @@ pub const TAB_CLOSE_CONFIRM_TMPL: &str = "{name} 有未保存的修改"; // EN: 
 
 /// 关闭脏标签确认态的两个选项之一：**继续关闭**（放弃该标签的未保存改动）。
 ///
-/// ⚠ 上游无对应物：上游 `MessageBoxButton.YesNoCancel`（`MainWindow.axaml.cs:419`）的
+/// ⚠ 上游无对应物：上游 `MessageBoxButton.YesNoCancel`（`_upstream/CrystalStudio/MainWindow.axaml.cs:419`）的
 /// 按钮文字由系统本地化提供，仓里没有这两个词条；且上游是**三键**（存/不存/取消），
 /// 本仓按 B2 审计倾向先做**两态**（本键 + [`TAB_CLOSE_CONFIRM_CANCEL`]），**待用户拍板**。
 pub const TAB_CLOSE_CONFIRM_OK: &str = "继续关闭"; // EN: Close anyway
@@ -1822,7 +1822,7 @@ pub const ZOOM_PLUS: &str = "+"; // EN: +
 pub const ZOOM_FIT: &str = "适应地图"; // EN: Fit Map ｜ 官方: FitMap_CDF75BEB（旧称「适应窗口」；截图实测「适应地图」）
 
 /// 缩放浮层尾部「原始大小」按钮（**上游 `901dbe2f` 新增的 `OriginalSizeButton`**，
-/// `MainWindow.axaml:22`，`Click="ResetZoomClick"` ⇒ 与本仓 `view.actual_size` 同一条动作）。
+/// `_upstream/CrystalStudio/MainWindow.axaml:25`，`Click="ResetZoomClick"` ⇒ 与本仓 `view.actual_size` 同一条动作）。
 pub const ZOOM_ORIGINAL: &str = "原始大小"; // EN: Original Size ｜ 官方: OriginalSize_20261105
 
 // ───────────────────────── 中列：地图列表面板（2026-11-05） ─────────────────────────
@@ -1832,13 +1832,13 @@ pub const ZOOM_ORIGINAL: &str = "原始大小"; // EN: Original Size ｜ 官方:
 // 并在每条后面标出它对应的上游控件，便于以后官方补译时逐条替换。
 
 /// 面板内「刷新」按钮（上游 `mapRefreshButton` 的 `Content = LocalText.T("Refresh")`）。
-pub const MAPLIST_REFRESH: &str = "刷新"; // EN: Refresh ｜ 上游 `MapBrowser.cs:10`
+pub const MAPLIST_REFRESH: &str = "刷新"; // EN: Refresh ｜ 上游 `_upstream/CrystalStudio/MainWindow.MapBrowser.cs:10`
 
 /// 列表行**文件名列**的模板（`{name}` = 相对路径；行内文字上游是 `entry.RelativePath`）。
 ///
 /// 之所以要有模板而不是直接画数据：本 crate 的动态文字一律走
 /// [`crate::text_fit::DynLabel`]（按裁剪盒实测截断），模板必须能进 [`ALL`]。
-pub const MAPLIST_NAME_TMPL: &str = "{name}"; // EN: {name} ｜ 上游 `MapBrowser.cs:37`
+pub const MAPLIST_NAME_TMPL: &str = "{name}"; // EN: {name} ｜ 上游 `_upstream/CrystalStudio/MainWindow.MapBrowser.cs:37`
 
 /// 扫描中状态行（`{n}` = 已找到的张数）。
 pub const MAPLIST_SCANNING_TMPL: &str = "扫描中…已找到 {n} 张"; // EN: Scanning… {n} maps found
@@ -2613,7 +2613,7 @@ pub const ALL: &[(&str, &str)] = &[
     ("FILL_ERR_TOO_LARGE", FILL_ERR_TOO_LARGE),
     ("TAB_TITLE_TMPL", TAB_TITLE_TMPL),
     ("TAB_TITLE_DIRTY_TMPL", TAB_TITLE_DIRTY_TMPL),
-    // B1-FIX：未命名地图的 `Untitled {n}`（上游 `MainWindow.MapTabs.cs:130`）。
+    // B1-FIX：未命名地图的 `Untitled {n}`（上游 `_upstream/CrystalStudio/MainWindow.MapTabs.cs:130`）。
     // 本仓暂不可达（没有"新建空白图"入口），但文案真值先登记 —— 字形守卫与
     // `清单覆盖所有常量` 都会一起扫到，等入口落地时不必再补一条。
     ("TAB_TITLE_UNTITLED_TMPL", TAB_TITLE_UNTITLED_TMPL),
@@ -3169,7 +3169,7 @@ mod tests {
         assert_eq!(t, "7-7");
     }
 
-    /// **页签标题文案 = 上游 `MainWindow.MapTabs.cs:120/130` 的拼接规则**（B1-FIX）。
+    /// **页签标题文案 = 上游 `_upstream/CrystalStudio/MainWindow.MapTabs.cs:120/130` 的拼接规则**（B1-FIX）。
     ///
     /// 钉的是两条字面真值：① 脏标记是 `string.Concat(name, " *")`（**空格 + 星号直接拼**，
     /// 不是另起一套前后缀）；② 未命名地图是 `Untitled {n}`（序号从 1 起）。

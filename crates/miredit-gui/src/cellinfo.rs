@@ -24,7 +24,7 @@
 //! 客户端 `GameScene.cpp:3468,3510`（`wunit = btArea` → `GetObjs(wunit, …)`）、
 //! `map_loader.gd:203-208`（`get_front_lib_index` = off10）、
 //! `mir2-assets/src/lib_paths.rs:15`（`Surface ← btArea`）、
-//! C# `LegacyMapReader.cs:296` + `Assets.cs:206,208`（`frindex = off + 120` = Objects 家族）。
+//! C# `_upstream/CrystalStudio/LegacyMapReader.cs:298` + `_upstream/CrystalStudio/Assets.cs:363,365`（`frindex = off + 120` = Objects 家族）。
 //! 命名源头在 `mir2-map/src/cell.rs:168-169`（那个 crate 本单不许改），所以**只在 gui 侧改显示名**。
 //! `.map` 里没有第三个动画字段（off8/9/10 已被上面的表列全），故「图块动画」如实只留两行。
 //!
@@ -222,7 +222,7 @@ fn size_of(
 // 悬停地砖信息浮层的取数（视图 → 地砖信息悬浮）
 // ---------------------------------------------------------------------------
 
-/// 悬停浮层的**三块内容**（`MainWindow.CellHover.cs:56-63` 的三行）。
+/// 悬停浮层的**三块内容**（`_upstream/CrystalStudio/MainWindow.CellHover.cs:56-63` 的三行）。
 ///
 /// 只给文字，不给几何：排版（宽 350 / 越界翻边 / 四边各夹 8）在
 /// [`crate::cell_hover`] 里算 —— 与本模块「取数 / 绘制分开」的既有分工一致。
@@ -242,13 +242,13 @@ pub struct HoverText {
 ///
 /// # 「可行走」的真值 = [`Cell::is_walkable`]，与上游的红色判定**等价**
 ///
-/// 上游 `MainWindow.CellHover.cs:59` 判 `(cell.BackImage & 0x60000000) != 0`。
+/// 上游 `_upstream/CrystalStudio/MainWindow.CellHover.cs:59` 判 `(cell.BackImage & 0x60000000) != 0`。
 /// 那两个位不是磁盘字节，而是 C# 读 12/14 B 档时**归一出来的**：
 ///
 /// | 磁盘位 | C# 归一 | 出处 |
 /// |---|---|---|
-/// | 背景层 `bk_img & 0x8000` | `BackImage \|= 0x20000000`（并清掉 `0x8000`） | `LegacyMapReader.cs:149-150` |
-/// | 前景层 `fr_img & 0x8000` | `BackImage \|= 0x40000000` | `LegacyMapReader.cs:160-161` |
+/// | 背景层 `bk_img & 0x8000` | `BackImage \|= 0x20000000`（并清掉 `0x8000`） | `_upstream/CrystalStudio/LegacyMapReader.cs:149-150` |
+/// | 前景层 `fr_img & 0x8000` | `BackImage \|= 0x40000000` | `_upstream/CrystalStudio/LegacyMapReader.cs:160-161` |
 ///
 /// ⇒ `(BackImage & 0x60000000) != 0` ⇔ 「背景层带 `0x8000` **或** 前景层带 `0x8000`」
 /// ⇔ `!Cell::is_walkable()`（`mir2-map/src/cell.rs`：两层都不带 `0x8000` 才叫可走）。
@@ -265,7 +265,7 @@ pub fn hover_text(x: u16, y: u16, cell: &Cell, lines: &CellLines) -> HoverText {
             )
         })
         .collect();
-    // 坐标行按上游 `CellHover.cs:58` 的 `{0:N0}` 走千分位。
+    // 坐标行按上游 `_upstream/CrystalStudio/MainWindow.CellHover.cs:58` 的 `{0:N0}` 走千分位。
     // `tx::fill` 只做 `{name}` 字面替换、**不认格式说明符**（见 `ui_text::fill` 的文档），
     // 所以先格成字符串再填 —— 格式化的决定点仍然只有一个（[`千分位`]）。
     let xs = 千分位(i64::from(x));
@@ -282,9 +282,9 @@ pub fn hover_text(x: u16, y: u16, cell: &Cell, lines: &CellLines) -> HoverText {
     }
 }
 
-/// 按 .NET `N0` 的规则把整数格成**带千分位分隔符**的字符串（上游 `MainWindow.CellHover.cs:58`）。
+/// 按 .NET `N0` 的规则把整数格成**带千分位分隔符**的字符串（上游 `_upstream/CrystalStudio/MainWindow.CellHover.cs:58`）。
 ///
-/// 上游原文：`LocalText.Format("Cell {0:N0}, {1:N0}", x, y)`；`LocalText.cs:56` 把它落到
+/// 上游原文：`LocalText.Format("Cell {0:N0}, {1:N0}", x, y)`；`_upstream/CrystalStudio/LocalText.cs:56` 把它落到
 /// `string.Format(CultureInfo.GetCultureInfo(Language), …)` ⇒ 标准数字格式 `N` + 精度 `0`：
 ///
 /// | 输入 | 输出 | 规则 |
@@ -542,7 +542,7 @@ mod tests {
     /// **「可行走」取 `Cell::is_walkable()` 的真值**，两层的高位都要能触发「不可行走」。
     ///
     /// 等价性依据见 [`hover_text`] 的文档（C# 把 `bk 0x8000` 归一成 `0x20000000`、
-    /// 把 `fr 0x8000` 或进 `0x40000000`，`CellHover.cs:59` 判的正是这两位）。
+    /// 把 `fr 0x8000` 或进 `0x40000000`，`_upstream/CrystalStudio/MainWindow.CellHover.cs:59` 判的正是这两位）。
     #[test]
     fn 悬停可行走取两层高位真值() {
         let l = CellLines::unknown();
@@ -586,7 +586,7 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // 千分位（A16：上游 `MainWindow.CellHover.cs:58` 的 `{0:N0}`）
+    // 千分位（A16：上游 `_upstream/CrystalStudio/MainWindow.CellHover.cs:58` 的 `{0:N0}`）
     // -----------------------------------------------------------------------
 
     /// **逐值对照 .NET `N0`**：覆盖派单要求的全部边界

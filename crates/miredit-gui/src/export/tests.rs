@@ -1154,7 +1154,7 @@ fn 兼容链等比缩放不产生黑边() {
 
 /// **同尺寸也要铺不透明黑底**（删掉旧早退分支的直接判据）。
 ///
-/// 上游 `PreviewRaster.cs:19` 的 `opaque: true` 是**无条件** `alpha = 255`；
+/// 上游 `_upstream/CrystalStudio/PreviewRaster.cs:19` 的 `opaque: true` 是**无条件** `alpha = 255`；
 /// `miredit-web` 的 `GET /api/export/minimap` 也没有同尺寸短路
 /// （`routes/export.rs:306-307`「不再有『同尺寸就跳过』的短路」）。
 /// 所以 GUI 这条路径必须一致：同尺寸时**几何不动**（采样点不漂），但全透明像素要变成

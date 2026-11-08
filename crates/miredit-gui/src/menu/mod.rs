@@ -88,7 +88,7 @@ pub enum Overlay {
     },
     /// 「文件 → 导出小地图(M)…」的路径 + 尺寸输入模态（2026-11-05 接线，2026-11-06 扩尺寸）。
     ///
-    /// 官方 `MinimapExportWindow.cs:20-41@6450da90`：路径之外还有
+    /// 官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-41`：路径之外还有
     /// 「预设下拉 Small(¼)/Medium(½)/Large(1:1)（默认 Small）+ 自定义宽高」。
     /// ⇒ 回车后走 [`crate::export::export_minimap_sized`]，尺寸口径由
     /// [`crate::menu::dialog::MinimapDlg::resolve`] 校验后给出（默认 Small = `W*12 × H*8`，
@@ -102,7 +102,7 @@ pub enum Overlay {
     /// 「帮助 → 键盘快捷键…」的只读浮层。
     /// **「编辑 → 单元格属性…」模态**（R12-F1）：三字段（光照 / 门索引 / 门偏移）。
     ///
-    /// 语义照上游 `MainWindow.axaml.cs:740-786`：初值 = 选区**共同值**（有差异或没选区 ⇒
+    /// 语义照上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:740-784`：初值 = 选区**共同值**（有差异或没选区 ⇒
     /// 空框 + [`crate::ui_text::CELL_PROPS_MIXED`] 水印）；提交时**与初值逐字比较**，
     /// 只把改过的字段交给内核（`None` = 这一字段不动 ⇒ 混合值不会被抹平）。
     CellProps {
@@ -189,7 +189,7 @@ impl Overlay {
     }
 
     /// 打开「导出小地图」模态：路径初值 + **默认 Small 预设**
-    /// （官方 `MinimapExportWindow.cs:21` 的默认项）的宽高文本框初值。
+    /// （官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:21` 的默认项）的宽高文本框初值。
     ///
     /// `cells` = 地图格数 `(宽, 高)`，预设像素由
     /// [`crate::export::MinimapSize::resolve`] 算（不在这里另写倍率）。
@@ -505,7 +505,7 @@ pub fn handle_key_with(state: &mut MenuState, key: MenuKey, sub: &SubState) -> K
             // ② **容器项：只展开/收起子菜单，绝不执行父项动作**（审查缺陷 3）
             //
             // 官方那 3 项在 axaml 里没有 `Click`（`file.open_recent` 的容器性见
-            // `MainWindow.RecentMaps.cs:23-40`），鼠标点它们也只走 `Click::Toggled`。
+            // `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:23-40`），鼠标点它们也只走 `Click::Toggled`。
             if let Some((ai, _)) = active_sub {
                 state.toggle_sub(ai);
                 return KeyResult::Changed;
@@ -968,7 +968,7 @@ pub fn dump_lines_with(
                 }
                 Some(model::Sub::Recent) => {
                     // 动态列表：行 = 设置文件里的 `recent`（最近优先）；
-                    // 空 ⇒ 官方空态行（`RecentMaps.cs:39`）
+                    // 空 ⇒ 官方空态行（`_upstream/CrystalStudio/MainWindow.RecentMaps.cs:39`）
                     let empty = sub.recent.is_empty();
                     for (j, (label, exists)) in sub.recent_rows().iter().enumerate() {
                         let (id, state) = if empty {
@@ -1716,8 +1716,8 @@ mod tests {
         assert_eq!(top, item_count(), "顶级行必须是 41 条 parent=-");
         // 分隔线总数 = **12**：
         //   静态 8（实测 axaml 全文 `<Separator />` 只有 8 个：文件 2 / 编辑 2 / 视图 3 / 工具 1）
-        // + 视图动态追加 3（`MainWindow.Localization.cs:15` 语言前 1 条、`axaml.cs:383` 面板前
-        //   1 条、`axaml.cs:387` 锁定前 1 条）= 11，其中视图 3+3=6；
+        // + 视图动态追加 3（`_upstream/CrystalStudio/MainWindow.Localization.cs:15` 语言前 1 条、`_upstream/CrystalStudio/MainWindow.axaml.cs:396` 面板前
+        //   1 条、`_upstream/CrystalStudio/MainWindow.axaml.cs:400` 锁定前 1 条）= 11，其中视图 3+3=6；
         //   **本仓再加 1 条**（2026-11-06）：帮助菜单「关于 Crystal Studio」之前（本仓新增项，
         //   官方没有 About，所以这 1 条没有 XAML 出处 —— 见 `model::HELP_ITEMS` 的文档）= 12。
         // ⚠ 审查报告 §8.1 写「分隔线 12 条（视图 7）」是**多算了一条**（2026-11-05 复核：

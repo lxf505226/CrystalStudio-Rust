@@ -219,7 +219,7 @@ impl CanvasView {
         self.snap();
     }
 
-    /// 把视口中心移到世界坐标（上游 `MapViewport.Minimap.cs:33-42` 的 `CenterOnWorld`，clamp 逐字）。
+    /// 把视口中心移到世界坐标（上游 `_upstream/CrystalStudio/MapViewport.Minimap.cs:33-42` 的 `CenterOnWorld`，clamp 逐字）。
     ///
     /// 上游原文（`_upstream/CrystalStudio/`，文件 sha256 前 8 位 `b301ab1e`）：
     ///
@@ -280,7 +280,7 @@ impl CanvasView {
         self.snap();
     }
 
-    /// **按屏幕像素平移视口**（= 上游 `MapViewport.Minimap.cs:11-22` 的 `PanBy(offset)`）。
+    /// **按屏幕像素平移视口**（= 上游 `_upstream/CrystalStudio/MapViewport.Minimap.cs:11-22` 的 `PanBy(offset)`）。
     ///
     /// 上游：`origin += offset`，而 `origin` 是**屏幕像素**（`VisibleWorldBounds =
     /// (-origin.X / Zoom, -origin.Y / Zoom, …)`）⇒ `W/A/S/D` 每次平移 **48 屏幕像素**，
@@ -302,7 +302,7 @@ impl CanvasView {
 
     /// **「适应地图」的缩放倍数**（`fit_map` 与 resize 重 fit 共用的唯一算法）。
     ///
-    /// 上游 `MapViewport.cs:166@901dbe2f`：
+    /// 上游 `_upstream/CrystalStudio/MapViewport.cs:166`：
     ///
     /// ```csharp
     /// private double FitZoom => Math.Min(1, Math.Min(Math.Max(1, ActualWidth - 80) / (Document.Width * 48.0),
@@ -344,7 +344,7 @@ impl CanvasView {
     /// `CANVAS_MIN_SCALE..=CANVAS_MAX_SCALE`：700×700 的图在 987×815 的画布里只需 0.25×
     /// （33600 px 宽 / 987），再小就没意义了（夹到 0.25 后会有滚动余量，如实可见）。
     ///
-    /// 居中口径同上游 `Fit()`（`MapViewport.cs:167`）：`pan = (map - canvas/scale) / 2`，
+    /// 居中口径同上游 `Fit()`（`_upstream/CrystalStudio/MapViewport.cs:167`）：`pan = (map - canvas/scale) / 2`，
     /// 即整幅图在画布里的左右/上下留白相等 —— 边距只影响**倍数**，不改变居中方式。
     pub fn fit_map(&mut self, canvas: Rect, w: u16, h: u16) {
         if w == 0 || h == 0 || canvas.width() <= 1.0 || canvas.height() <= 1.0 {
@@ -358,7 +358,7 @@ impl CanvasView {
         self.snap();
     }
 
-    /// **窗口尺寸变化后的重 fit**（对齐上游 `OnSizeChanged`，`MapViewport.cs:169-179@901dbe2f`）。
+    /// **窗口尺寸变化后的重 fit**（对齐上游 `OnSizeChanged`，`_upstream/CrystalStudio/MapViewport.cs:169-179`）。
     ///
     /// 上游逻辑逐条：
     ///
@@ -1315,7 +1315,7 @@ mod tests {
     // ───────────────────── A-012：fit 的 80 px 边距 + 窗口尺寸变化后的重 fit ─────────────────────
 
     /// **边距数值**：20×20 的图在 987×815 画布里被**宽度**这条轴限制，
-    /// 那条轴（宽）两侧各留 **≈40 px**（共 80 px，上游 `MapViewport.cs:166` 的 `- 80`）。
+    /// 那条轴（宽）两侧各留 **≈40 px**（共 80 px，上游 `_upstream/CrystalStudio/MapViewport.cs:166` 的 `- 80`）。
     ///
     /// 960×640 的图：`usable=(907, 735)` ⇒ `fit = min(907/960, 735/640) = 0.9448`（宽度轴限制）
     /// ⇒ 上屏宽度 `= 960 × 0.9448 = 907 = 987 - 80` ⇒ 左右各 40 px；高度只占 604.8 ⇒ 上下余量更大。
@@ -1540,7 +1540,7 @@ mod tests {
             v.pan_x,
             v.pan_y
         );
-        // 上游 `MapViewport.Minimap.cs:35`：非有限点**直接忽略**，一个像素都不动
+        // 上游 `_upstream/CrystalStudio/MapViewport.Minimap.cs:35`：非有限点**直接忽略**，一个像素都不动
         let before = (v.pan_x, v.pan_y);
         v.center_on_world(c, (f32::NAN, 0.0), world_size);
         assert_eq!((v.pan_x, v.pan_y), before, "NaN 目标必须被忽略");

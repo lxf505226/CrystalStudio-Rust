@@ -46,14 +46,14 @@ pub struct CanvasCtx<'a> {
     /// 是否已打开地图（决定是否画空态提示）。
     pub has_map: bool,
     /// **单元格网格开关**（`视图 → 单元格网格` / `G` / `--cell-grid` / `--no-cell-grid`，
-    /// 默认**开** —— 官方 `MainWindow.axaml:5` 的 `IsChecked="True"`）。
+    /// 默认**开** —— 官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `IsChecked="True"`）。
     ///
     /// 打开时在**地图位图之上、悬停高亮之下**画世界格 48×32 的 1px 边界线
     /// （[`crate::grid`]）。压在悬停高亮之下是有意的：悬停框是"当前格"的强提示，
     /// 被网格线穿过去会显得断断续续。
     pub grid: bool,
     /// **地图宽（格数）**：网格要按它把格线**裁到地图边界**
-    /// （官方 `CrystalStudio/MapViewport.Presentation.cs:37-39` 的 `Math.Min(Document.Width, …)`）。
+    /// （官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:37-39` 的 `Math.Min(Document.Width, …)`）。
     ///
     /// `0` = 没有地图 ⇒ 网格一条线都不画（[`crate::grid::lines_in`] 把 `0` 当"不画"）。
     pub map_w: u16,
@@ -104,7 +104,7 @@ pub fn zoom_fit_rect(l: &Layout) -> Rect {
 
 /// **「原始大小」**的可点区域（232..288）。
 ///
-/// 上游 `901dbe2f` 在缩放浮层尾部加了 `OriginalSizeButton`（`MainWindow.axaml:22`，
+/// 上游 `901dbe2f` 在缩放浮层尾部加了 `OriginalSizeButton`（`_upstream/CrystalStudio/MainWindow.axaml:25`，
 /// `Click="ResetZoomClick"`）—— 本仓菜单里早就有 `view.actual_size`，
 /// 但**工具栏没有按钮**，这一条就是补那个缺口。点击走的是
 /// [`crate::menu::model::Action::ActualSize`]（与菜单项、`--menu-click` 同一条 action），
@@ -126,7 +126,7 @@ pub fn labels(l: &Layout) -> Vec<Label> {
     //
     // ⚠ 右锚用 `m::TAB_CLOSE_INSET`（**15**），不是标题那个 `TAB_TITLE_INSET`（12）：
     // `×` 外侧还多一道 Button 从基主题继承来的 `Margin=3`
-    // （`EditorControls.axaml:7`；`MainWindow.MapTabs.cs:57` 的关闭钮没覆盖它）——
+    // （`_upstream/CrystalStudio/EditorControls.axaml:7`；`_upstream/CrystalStudio/MainWindow.MapTabs.cs:57` 的关闭钮没覆盖它）——
     // 推导见 [`m::TAB_CLOSE_INSET`] 的文档，两者**不是同一个数，别合并**。
     let tab = l.tab_rect();
     out.push(Label {
@@ -139,8 +139,8 @@ pub fn labels(l: &Layout) -> Vec<Label> {
             pos2(tab.right() - m::TAB_CLOSE_INSET - 13.0, tab.top()),
             tab.max,
         ),
-        // 上游 `close.Theme = QuietButton`（`MainWindow.MapTabs.cs:58`）⇒ 继承 `Button`
-        // 模板的 `Foreground = ThemeE5E9F0`（`EditorControls.axaml:4`，`App.axaml:67`）
+        // 上游 `close.Theme = QuietButton`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:58`）⇒ 继承 `Button`
+        // 模板的 `Foreground = ThemeE5E9F0`（`_upstream/CrystalStudio/EditorControls.axaml:4`，`_upstream/CrystalStudio/App.axaml:67`）
         // = 本板 `ui.text`。**旧值 `text_muted` 是错的**（B2 单订正）：
         // 浅色 `text` `#434D5A` ≠ `text_muted` `#9EA4AB` ⇒ 这一笔在浅色下会变像素，
         // `--shot` 基线随之更新（见回执）；深色 `#E5E9F0` vs `#929CAB` 同样不同。
@@ -199,7 +199,7 @@ pub fn dyn_labels(l: &Layout, d: &DocText) -> Vec<DynLabel> {
     // ① 页签标题：左对齐，右边界留出关闭符的位置（关闭符自 tab.right - 11 往左排，约 9px 宽）
     //
     // 裁剪盒右边界内缩 = `m::TAB_LABEL_MARGIN_R`（上游 `Label.Margin` 的右边距 8，
-    // `MainWindow.MapTabs.cs:54`），与 `tab_strip::draw` 里那行**同一个常量**
+    // `_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`），与 `tab_strip::draw` 里那行**同一个常量**
     // （`tab_strip.rs` 的 `r.right() - m::TAB_TITLE_INSET - m::TAB_LABEL_MARGIN_R`）
     // —— 这里原先写死 `8.0`，两处口径不一致（一处硬编码、一处用常量），本单归位。
     // 值不变 ⇒ 零像素影响。
@@ -253,7 +253,7 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
     // 且都画在**字形之前**（否则 `tab_strip` 补画时会把已经画好的 `×` 盖掉）。
     // 实现各只有一份，两边调同一个函数：
     //
-    // ① **整格**悬停底 `Theme29313E`（`EditorControls.axaml:63`；`:64` 的 `:selected`
+    // ① **整格**悬停底 `Theme29313E`（`_upstream/CrystalStudio/EditorControls.axaml:63`；`:64` 的 `:selected`
     //    只改 `BorderBrush`，两条选择器独立 ⇒ 选中项悬停时同样有这块底）
     //    —— [`crate::tab_strip::paint_tab_hover`]；
     // ② 关闭符悬停底 `Theme394354`（`QuietButton` 继承基模板 `:pointerover`）
@@ -273,8 +273,8 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
             lab.draw(&ps);
         }
     }
-    // 选中页签下划线（上游 `EditorControls.axaml:64` 的 `:selected Border#Chrome`
-    // `BorderBrush = Theme8CA1FF`，`App.axaml:47`）= `ui.tab_selected_underline`。
+    // 选中页签下划线（上游 `_upstream/CrystalStudio/EditorControls.axaml:64` 的 `:selected Border#Chrome`
+    // `BorderBrush = Theme8CA1FF`，`_upstream/CrystalStudio/App.axaml:47`）= `ui.tab_selected_underline`。
     // ⚠ **旧值 `accent_dark` 是错的**（B2 单订正）：浅色两者同值 `#AD7F22`（像素不变），
     // 深色 `#8CA1FF` vs `#8498FF` 才分得出来。
     pt::fill(&ps, l.tab_underline(), t::ui().tab_selected_underline);
@@ -295,16 +295,16 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
     // ② 悬停框是"当前格"的强提示，必须压在网格之上（否则被格线穿过、看着断断续续）；
     // ③ 选区填充/轮廓在更上层（它们描述的是"我要对这块做什么"）。
     if c.grid {
-        // 尺寸按**地图**传：图外一条线都不画（官方 `MapViewport.Presentation.cs:37-39`
+        // 尺寸按**地图**传：图外一条线都不画（官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:37-39`
         // 的 `Math.Min(Document.Width, …)`）。无图时 `map_w/map_h` 是 0 ⇒ `lines_in`
         // 直接返回空集（**不是**"不夹"档，否则会画一片空图）。
         crate::grid::draw_in(&pv, l.viewport, c.view, Some((c.map_w, c.map_h)));
     }
 
     // 悬停格高亮：宽 4、深蓝 `#00008B` @ α0.7（预乘 `rgba_pm(0, 0, 97, 179)`）。
-    // 上游 `MapViewport.cs:144@a78affdf`
+    // 上游 `fluttergo/CrystalStudio@a78affdf` **引入**的 `MapViewport.cs:144`（⚠ 该行号是 `a78affdf` 版内行号，离线不可复核 —— 本地 `_upstream` 快照无 `hoverCellOutline` 符号）
     // `hoverCellOutline = new(new ImmutableSolidColorBrush(Colors.DarkBlue, .7), 4)`，
-    // 绘制点 `:305`（`:350` 调 `DrawHoverCell`）。上游 `:304` 注释
+    // 绘制点 `:305`（`:350` 调 `DrawHoverCell`）。上游 `:304` 注释（⚠ `:304`/`:305`/`:350` 同为 `a78affdf` 版内行号，离线不可复核）
     // `// Screen coordinates keep the stroke four pixels wide at every zoom.`
     // ⇒ 宽是**屏幕像素**、不随缩放变；本仓 `border_w` 吃 f32 宽、不乘 scale，口径一致。
     //
@@ -354,7 +354,7 @@ pub fn draw(p: &Painter, l: &Layout, c: &CanvasCtx<'_>) {
 
 /// 悬停格描边的**绘制矩形**：格矩形外扩 `宽 / 2`。
 ///
-/// 上游 `MapViewport.cs:144@a78affdf` 的 `hoverCellOutline` 是 `Pen`，笔画**居中**
+/// 上游 `fluttergo/CrystalStudio@a78affdf` **引入**的 `MapViewport.cs:144` 的 `hoverCellOutline` 是 `Pen`，笔画**居中**
 /// （宽 4 ⇒ 边外 2 + 边内 2）；本仓 [`pt::border_w`] 只能**内贴**。
 /// 两者合起来才等价：先 `expand(w / 2)` 让矩形边界落到「描边中线」上，
 /// 再按宽 `w` 内贴 ⇒ 外半 `w/2` + 内半 `w/2`。

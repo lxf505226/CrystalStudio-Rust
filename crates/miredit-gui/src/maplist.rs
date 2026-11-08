@@ -4,11 +4,11 @@
 //!
 //! | 上游 | 本模块 |
 //! |---|---|
-//! | `CrystalStudio/MapFileCatalog.cs:12-29` —— 递归枚举 `*.map`，**只建文件索引**（`FilePath` / `RelativePath`），注释原文「只建立文件索引，点击后才解析地图；跳过目录链接，避免重复或循环扫描」 | [`Scanner`] / [`scan_all`]：只 `read_dir` + `entry.metadata()`，**一个字节的地图内容都不读** |
+//! | `_upstream/CrystalStudio/MapFileCatalog.cs:12-29` —— 递归枚举 `*.map`，**只建文件索引**（`FilePath` / `RelativePath`），注释原文「只建立文件索引，点击后才解析地图；跳过目录链接，避免重复或循环扫描」 | [`Scanner`] / [`scan_all`]：只 `read_dir` + `entry.metadata()`，**一个字节的地图内容都不读** |
 //! | `MainWindow.MapBrowser.cs`（整个文件 125 行）—— `ListBox` + 22px 行高 + `FontSize 11` + `Tapped` 才 `OpenMap(entry.FilePath)` | [`MapListPanel`]：行高 [`m::MAPS_ROW_H`] 22、字号 [`m::MAPS_ROW_FONT`] 11、**点击才走 [`crate::menu::action::open_path`]** |
-//! | `MapBrowser.cs:37` —— 行内文字 = `entry.RelativePath`，`SetTip(entry.FilePath)` | 行内文字 = 相对路径（[`MapEntry::rel`]），悬停提示 = 绝对路径 + 大小 + 修改时间 |
-//! | `MapBrowser.cs:115-116` —— 空目录文案 `No .map files in the Map folder.` / 数量 `{0:N0} maps` | [`MapListPanel::status_text`]：空目录与扫描失败都给**中文原因**，不静默 |
-//! | `MapBrowser.cs:92-97` —— `catch (IOException / UnauthorizedAccessException)` ⇒ `Could not read map folder` + 原因 | [`Phase::Failed`]：中文原因 + stderr 诊断行 |
+//! | `_upstream/CrystalStudio/MainWindow.MapBrowser.cs:37` —— 行内文字 = `entry.RelativePath`，`SetTip(entry.FilePath)` | 行内文字 = 相对路径（[`MapEntry::rel`]），悬停提示 = 绝对路径 + 大小 + 修改时间 |
+//! | `_upstream/CrystalStudio/MainWindow.MapBrowser.cs:115-116` —— 空目录文案 `No .map files in the Map folder.` / 数量 `{0:N0} maps` | [`MapListPanel::status_text`]：空目录与扫描失败都给**中文原因**，不静默 |
+//! | `_upstream/CrystalStudio/MainWindow.MapBrowser.cs:92-97` —— `catch (IOException / UnauthorizedAccessException)` ⇒ `Could not read map folder` + 原因 | [`Phase::Failed`]：中文原因 + stderr 诊断行 |
 //!
 //! **排序**：上游是 `OrderBy(RelativePath, OrdinalIgnoreCase)`；本仓按任务书要求改成
 //! **文件名自然序**（[`natural_cmp`]：数字段按数值比较，`n2` 在 `n10` 之前）——
@@ -48,7 +48,7 @@
 //! # 四、面板放哪（**与上游不同的地方，必须显式说明**）
 //!
 //! 上游把这块面板 `docking.Add("Maps", …, Dock.Left, 2)` 放在**左停靠区第一位**
-//! （`MainWindow.axaml.cs:343`）。本仓左停靠区是 `layout.rs` 里的**固定几何**
+//! （`_upstream/CrystalStudio/MainWindow.axaml.cs:349`）。本仓左停靠区是 `layout.rs` 里的**固定几何**
 //! （156 宽、四块面板首尾相接），实测单元格检查器在最坏文案下只剩 **96px** 余量
 //! （`layout::tests::左停靠区余量`）—— 再塞第五块面板必然把检查器最后两行挤出面板下沿
 //! （那就是"遮挡/错位"）。

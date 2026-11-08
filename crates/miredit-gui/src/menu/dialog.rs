@@ -21,7 +21,7 @@
 //!
 //! # 「导出小地图」多一组**尺寸输入**（2026-11-06，N F-R14-1）
 //!
-//! 官方 `MinimapExportWindow.cs:20-41@6450da90` 除了路径，还要「预设下拉 + 自定义宽高」：
+//! 官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-41` 除了路径，还要「预设下拉 + 自定义宽高」：
 //! 预设 `Small (¼) / Medium (½) / Large (1:1)`（除数 `{4,2,1}`，**默认 Small**，选中即把
 //! `document.Width*48/divisor` × `document.Height*32/divisor` 写进两个 TextBox），
 //! 提交前 `Validate`（`int.TryParse` ∧ `MinimapExporter.ValidSize`）。
@@ -112,7 +112,7 @@ pub fn dialog_rects(l: &Layout) -> DialogRects {
 /// （见 [`minimap_rects`]）。
 ///
 /// ⚠ **宽也由调用方给**：导出小地图上游是 `Width = 420` 的独立窗口
-/// （`MinimapExportWindow.cs:15`），而打开/另存为/导出选区上游是系统文件选择器
+/// （`_upstream/CrystalStudio/MinimapExportWindow.cs:15`），而打开/另存为/导出选区上游是系统文件选择器
 /// ⇒ 两者**只共享内边距与按钮尺寸，不共享宽**。
 fn dialog_rects_sized(l: &Layout, panel_w: f32, panel_h: f32) -> DialogRects {
     let panel = Rect::from_center_size(l.content.center(), vec2(panel_w, panel_h));
@@ -153,7 +153,7 @@ pub fn save_as_rects(l: &Layout) -> DialogRects {
 
 // ═══════════════ 「导出小地图」模态：几何 + 尺寸输入（2026-11-06，N F-R14-1） ═══════════════
 //
-// 官方 `MinimapExportWindow.cs:20-41@6450da90` = 预设下拉（Small ¼ / Medium ½ / Large 1:1，
+// 官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-41` = 预设下拉（Small ¼ / Medium ½ / Large 1:1，
 // 除数 {4,2,1}，默认 Small）+ 自定义宽/高 TextBox + `Validate`（`int.TryParse` ∧ `ValidSize`）。
 
 /// 三档预设的**显示顺序**（官方 ComboBox 顺序：Small → Medium → Large）。
@@ -163,7 +163,7 @@ pub const MINIMAP_PRESETS: [MinimapPreset; 3] = [
     MinimapPreset::Large,
 ];
 
-/// 三档预设的显示名（**与官方 `MinimapExportWindow.cs:21` 逐字相同**，不译）。
+/// 三档预设的显示名（**与官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:21` 逐字相同**，不译）。
 pub fn preset_label(p: MinimapPreset) -> &'static str {
     match p {
         MinimapPreset::Small => tx::MINIMAP_PRESET_SMALL,
@@ -227,7 +227,7 @@ pub struct MinimapDlg {
 }
 
 impl MinimapDlg {
-    /// 新开模态：预设 = **Small**（官方 `MinimapExportWindow.cs:21` 的默认项），
+    /// 新开模态：预设 = **Small**（官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:21` 的默认项），
     /// 两个文本框 = 该档算出的像素尺寸。
     pub fn new(cells: (u32, u32)) -> Self {
         let mut dlg = Self {
@@ -261,7 +261,7 @@ impl MinimapDlg {
         self.error.as_deref()
     }
 
-    /// 选一档预设：把该档像素数写进两个文本框（官方 `MinimapExportWindow.cs:36-38`）。
+    /// 选一档预设：把该档像素数写进两个文本框（官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:36-38`）。
     ///
     /// 算不出来（地图格数 × 48/32 溢出 `u32`）时**清空文本框并给出中文原因**，
     /// 不静默留上一个档位的数字。写完立刻跑一次 [`MinimapDlg::refresh`]
@@ -283,7 +283,7 @@ impl MinimapDlg {
         self.refresh(cells);
     }
 
-    /// **活校验**（官方 `MinimapExportWindow.cs:44-51` 的 `Validate()`）：
+    /// **活校验**（官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:44-51` 的 `Validate()`）：
     /// 每次改动文本框/预选后立刻算一遍，合法就清空错误、不合法就把中文原因摆出来，
     /// 同时决定「导出」按钮是不是可用（绘制侧读 [`MinimapDlg::is_valid`]）。
     ///
@@ -367,10 +367,10 @@ pub struct MinimapRects {
 
 /// 导出小地图模态的**内容高 = 面板高**。
 ///
-/// 上游是 `SizeToContent = SizeToContent.Height`（`MinimapExportWindow.cs:16`，高随内容），
+/// 上游是 `SizeToContent = SizeToContent.Height`（`_upstream/CrystalStudio/MinimapExportWindow.cs:16`，高随内容），
 /// egui 无自动测高 ⇒ 内容算式是等价物（与 [`crate::menu::goto::内容高`] 同形）。
 ///
-/// 算式（面板顶为 0）—— 每项对应上游 `StackPanel` 的一个子项（`MinimapExportWindow.cs:18-30`）：
+/// 算式（面板顶为 0）—— 每项对应上游 `StackPanel` 的一个子项（`_upstream/CrystalStudio/MinimapExportWindow.cs:18-30`）：
 ///
 /// | 项 | 值 | 来源 |
 /// |---|---|---|
@@ -391,7 +391,7 @@ pub struct MinimapRects {
 /// ## 订正记录（2026-11-08，删掉提示行）
 ///
 /// 上一版这里还有一项 `提示带 = 12 + 18`，画的是本仓**自加**的说明行
-/// （`EXPORT_MINI_DLG_HINT`）。上游 `MinimapExportWindow.cs:20-30` 的子项里**没有**这一行
+/// （`EXPORT_MINI_DLG_HINT`）。上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30` 的子项里**没有**这一行
 /// ⇒ 该行已删除，那一项换成一行 `MINIMAP_DLG_GAP`（与其余各行同一间距，
 /// 等价于上游 `Spacing = 10`）：`pad = 24` 时 270 → **250**。
 ///
@@ -433,13 +433,13 @@ pub fn minimap_rects(l: &Layout) -> MinimapRects {
     //
     // ⚠ **按钮宽按剩余内宽均分，不写定值**：上游这个控件是
     // `ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch }`
-    // （`MinimapExportWindow.cs:5`）⇒ 它**填满**面板内宽；本仓用三个按钮当它的等价物，
+    // （`_upstream/CrystalStudio/MinimapExportWindow.cs:5`）⇒ 它**填满**面板内宽；本仓用三个按钮当它的等价物，
     // 所以这一行也该填满。定值 150（3×150 + 标签列 + 间距 = 530）在 420 宽的内宽 372 下
     // **必然越界**（A10 实测：第 3 个按钮右边界越过面板右边）。
     // 预设行的顶 = 路径框底 + 一行间距（上游 `Spacing = 10`）。
     //
     // ⚠ 这里原来还有 `+ 12.0 + 18.0`：那是本仓自加的那行提示（`EXPORT_MINI_DLG_HINT`）
-    // 的「距框底 12 + 一行 18」。上游 `MinimapExportWindow.cs:20-30` 的子项里**没有**
+    // 的「距框底 12 + 一行 18」。上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30` 的子项里**没有**
     // 这一行（顺序见 `draw_export_minimap` 的文档），2026-11-08 已删除 ⇒ 用同一行间距。
     let preset_top = base.field.bottom() + m::MINIMAP_DLG_GAP;
     let preset_x = inner_l + m::MINIMAP_DLG_PRESET_COL_W + m::MINIMAP_DLG_LABEL_GAP;
@@ -543,7 +543,7 @@ impl Kind {
 
     /// 输入框下方那句提示（**不是每个模态都有**）。
     ///
-    /// `ExportMinimap` ⇒ `None`：上游 `MinimapExportWindow.cs:20-30` 的子项里
+    /// `ExportMinimap` ⇒ `None`：上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30` 的子项里
     /// 根本没有提示/说明行（顺序：尺寸预设标签 → ComboBox → 宽度标签 → WidthInput →
     /// 高度标签 → HeightInput → error → 按钮行），本仓此前自加的那一行已于 2026-11-08 删除。
     /// 用 `Option` 而不是空串：将来谁想再画这一行，得先显式处理 `None` 这一支。
@@ -742,7 +742,7 @@ pub fn draw_export_selection(p: &Painter, l: &Layout, path: &str) {
 ///
 /// ⚠ **省略号本身也占宽**（2026-11-08 A10 修）：旧版把 `…` 直接 push 到已排满的第二行上，
 /// 于是"第二行"实测宽 = `max_w + w(…)`，**超出错误带**。640 宽时 `max_w` 大、凑巧没露出来；
-/// 面板按上游收窄到 420（`MinimapExportWindow.cs:15`）后 `max_w` = 360，当场越界
+/// 面板按上游收窄到 420（`_upstream/CrystalStudio/MinimapExportWindow.cs:15`）后 `max_w` = 360，当场越界
 /// （实测断言红：`一行超出错误带内宽 360`）。
 /// ⇒ 现在收尾时先逐字回退到「第二行 + `…`」放得下为止，再补省略号。
 fn wrap_two(p: &Painter, text: &str, font: f32, max_w: f32) -> Vec<String> {
@@ -775,13 +775,13 @@ fn wrap_two(p: &Painter, text: &str, font: f32, max_w: f32) -> Vec<String> {
 
 /// 画「导出小地图」模态：路径框 + 三档预设 + 宽/高 + 错误提示（排版见 [`minimap_rects`]）。
 ///
-/// 子项顺序**逐项对齐上游** `MinimapExportWindow.cs:20-30`（实读）：
+/// 子项顺序**逐项对齐上游** `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30`（实读）：
 /// `尺寸预设`标签 → ComboBox → `宽度(像素)`标签 → WidthInput → `高度(像素)`标签 →
 /// HeightInput → `error` → 按钮行。**没有任何提示/说明行** ——
 /// 本仓此前在路径框下自加的那一行已于 2026-11-08 删除（见 [`小地图模态内容高_按`] 的订正记录）。
 ///
 /// 与 [`draw_path_dialog`] 的差别只有中间那三行；标题/按钮的文字与配色同一套。
-/// 尺寸非法时「导出」按钮按官方 `ExportButton.IsEnabled = false`（`MinimapExportWindow.cs:48`）
+/// 尺寸非法时「导出」按钮按官方 `ExportButton.IsEnabled = false`（`_upstream/CrystalStudio/MinimapExportWindow.cs:48`）
 /// 画成灰底灰字 —— 与 `interact_export_minimap` 里「非法不提交」是同一个判据（[`MinimapDlg::is_valid`]）。
 pub fn draw_export_minimap(
     p: &Painter,
@@ -1062,7 +1062,7 @@ pub fn interact_export_minimap(
     if 真点击(ui, r.base.ok, ui.id().with(("export_mini_dlg", "ok"))) && dlg.is_valid(cells) {
         return submit_minimap(path, dlg, cells);
     }
-    // ③ 三档预设：点一下就把该档像素数写进宽高框（官方 `MinimapExportWindow.cs:36-38`）
+    // ③ 三档预设：点一下就把该档像素数写进宽高框（官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:36-38`）
     for (i, preset) in MINIMAP_PRESETS.iter().enumerate() {
         if 真点击(
             ui,
@@ -1123,7 +1123,7 @@ pub fn interact_export_minimap(
         if backspace {
             dlg.focus_mut(path).pop();
         }
-        // 官方每敲一个字符就 `Validate()` 一次（`MinimapExportWindow.cs:31-32`）
+        // 官方每敲一个字符就 `Validate()` 一次（`_upstream/CrystalStudio/MinimapExportWindow.cs:31-32`）
         dlg.refresh(cells);
     }
     DialogAction::None
@@ -1187,7 +1187,7 @@ mod tests {
     /// 两个模态的文案**各不相同**且都来自 `ui_text`（标题/提示/主按钮各一条）。
     ///
     /// ⚠ 2026-11-08 改口径：`Kind::hint()` 现在返回 `Option<&str>`（`ExportMinimap` 没有提示行
-    /// —— 上游 `MinimapExportWindow.cs:20-30` 就没有），所以这两条断言由
+    /// —— 上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30` 就没有），所以这两条断言由
     /// `== 常量` 变成 `== Some(常量)`。**测的还是同一件事**：这两个模态的提示来自哪条常量。
     #[test]
     fn 两个模态的文案各自独立() {
@@ -1339,7 +1339,7 @@ mod tests {
             }
         }
         // **上游口径守卫**（2026-11-08）：导出小地图模态**没有**提示行 ——
-        // 上游 `MinimapExportWindow.cs:20-30` 的子项里没有任何提示/说明行（实读）。
+        // 上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30` 的子项里没有任何提示/说明行（实读）。
         assert_eq!(
             Kind::ExportMinimap.hint(),
             None,
@@ -1382,7 +1382,7 @@ mod tests {
     // ══════════ 导出小地图的尺寸输入（2026-11-06，N F-R14-1） ══════════
 
     /// **默认预设 = Small**，且两个文本框 = `W*48/4 × H*32/4`
-    /// （官方 `MinimapExportWindow.cs:21-22` 的默认项 + `:36-38` 的除数 `4`）。
+    /// （官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:21-22` 的默认项 + `:36-38` 的除数 `4`）。
     ///
     /// 同时钉住「默认 Small ≡ CLI 缺省 `MinimapSize::Default`」：两条口径算出的像素
     /// **逐位相同**（`W*48/4 == W*12`、`H*32/4 == H*8`，48/32 都能被 4 整除，无余数）。
@@ -1429,7 +1429,7 @@ mod tests {
                 "{preset:?} 提交口径不对"
             );
         }
-        // 三档的除数就是官方 `{4,2,1}`（`MinimapExportWindow.cs:21`）
+        // 三档的除数就是官方 `{4,2,1}`（`_upstream/CrystalStudio/MinimapExportWindow.cs:21`）
         assert_eq!(
             (
                 MinimapPreset::Small.divisor(),
@@ -1563,7 +1563,7 @@ mod tests {
         );
     }
 
-    /// **活校验 + 导出按钮可用性**（官方 `MinimapExportWindow.cs:31-32,44-51`：
+    /// **活校验 + 导出按钮可用性**（官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:31-32,44-51`：
     /// 每敲一个字符 `Validate()` 一次，`ExportButton.IsEnabled = valid`）。
     ///
     /// 这条挡的是"只有点了导出才知道错"那种迟钝 UX：文本框一变，错误与按钮态**当场**跟着变。
@@ -1599,7 +1599,7 @@ mod tests {
         assert!(大.is_valid((700, 700)));
         assert!(大.error().is_none());
     }
-    /// 三档预设的显示名**与官方 `MinimapExportWindow.cs:21` 逐字相同**。
+    /// 三档预设的显示名**与官方 `_upstream/CrystalStudio/MinimapExportWindow.cs:21` 逐字相同**。
     #[test]
     fn 三档预设标签与官方文案一致() {
         assert_eq!(preset_label(MinimapPreset::Small), "Small (¼)");
@@ -1672,7 +1672,7 @@ mod tests {
         //
         // **为什么必须改**：那条断言把「小地图与路径模态**同宽**」当成了不变式，
         // 而上游两者**本来就是两个独立窗口** ——
-        // `MinimapExportWindow.cs:15` 是真 `Window { Width = 420 }`，
+        // `_upstream/CrystalStudio/MinimapExportWindow.cs:15` 是真 `Window { Width = 420 }`，
         // 打开/另存为/导出选区走的是**系统文件选择器**
         // （`EditorDialogs.cs` `StorageProvider.OpenFilePickerAsync`，宽高由系统给）。
         // 本仓此前让它们共用 640 只是"当时只有一个宽常量"的**实现巧合**，不是真值。
@@ -1837,7 +1837,7 @@ mod tests {
         }
 
         // ③ **提示行已删除**（2026-11-08）：原守卫是「提示行必须放得进面板内宽 372」，
-        // 而这一行本身是本仓自加的（上游 `MinimapExportWindow.cs:20-30` 没有）
+        // 而这一行本身是本仓自加的（上游 `_upstream/CrystalStudio/MinimapExportWindow.cs:20-30` 没有）
         // ⇒ 守卫失去被测对象，随之删除；替代守卫是几何面的两条等式断言
         // （见 `小地图模态几何自洽`：预设行紧接路径框一个 GAP、错误带底到按钮顶恰好一个 GAP），
         // 若有人把 `+12+18` 那一段加回来，那两条必红。

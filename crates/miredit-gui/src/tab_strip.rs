@@ -7,13 +7,13 @@
 //!
 //! | 项 | 上游出处 | 真值 |
 //! |---|---|---|
-//! | 标签栏容器 | `MainWindow.MapTabs.cs:32-37` | `StackPanel Horizontal` + `ScrollViewer`（横向 `Auto`、纵向 `Disabled`）；底色 `Theme1C2028` = `#1C2028`（`App.axaml:8`） |
-//! | 标签项样式 | `EditorControls.axaml:58-66` `PaletteTabItem` | `Padding="8,7"`、`FontSize=11`、未选中前景 `Muted` `#929CAB`；`Border#Chrome` 背景 `Transparent`、`BorderThickness="0,0,0,2"` |
-//! | 悬停 | `EditorControls.axaml:63` | `:pointerover Border#Chrome` 背景 `Theme29313E` = `#29313E`（`App.axaml:14`） |
-//! | 选中 | `EditorControls.axaml:64-65` | 底边 `Theme8CA1FF` = `#8CA1FF`（`App.axaml:47`，厚 2）；前景 `ThemeE5E9F0` = `#E5E9F0`（`App.axaml:67`）+ `FontWeight=SemiBold` |
-//! | 标签内容 | `MainWindow.MapTabs.cs:53-62` | 标题 `Label.Margin="4,2,8,2"`、居中；关闭钮 `×`(U+00D7) `Padding="4,0,4,0"`、透明底、无边框 |
-//! | 标题文本 | `MainWindow.MapTabs.cs:120` | `string.Concat(MapDisplayName(map), dirty ? " *" : "")` —— 脏标记是**直接拼接 `" *"`**，不是模板 |
-//! | 未命名地图 | `MainWindow.MapTabs.cs:125-131` | 有 `Path` ⇒ `Path.GetFileName(path)`；无 `Path` ⇒ `Untitled {n}`（见 [`crate::ui_text::TAB_TITLE_UNTITLED_TMPL`]，本仓**暂不可达**） |
+//! | 标签栏容器 | `_upstream/CrystalStudio/MainWindow.MapTabs.cs:32-37` | `StackPanel Horizontal` + `ScrollViewer`（横向 `Auto`、纵向 `Disabled`）；底色 `Theme1C2028` = `#1C2028`（`_upstream/CrystalStudio/App.axaml:8`） |
+//! | 标签项样式 | `_upstream/CrystalStudio/EditorControls.axaml:58-66` `PaletteTabItem` | `Padding="8,7"`、`FontSize=11`、未选中前景 `Muted` `#929CAB`；`Border#Chrome` 背景 `Transparent`、`BorderThickness="0,0,0,2"` |
+//! | 悬停 | `_upstream/CrystalStudio/EditorControls.axaml:63` | `:pointerover Border#Chrome` 背景 `Theme29313E` = `#29313E`（`_upstream/CrystalStudio/App.axaml:14`） |
+//! | 选中 | `_upstream/CrystalStudio/EditorControls.axaml:64-65` | 底边 `Theme8CA1FF` = `#8CA1FF`（`_upstream/CrystalStudio/App.axaml:47`，厚 2）；前景 `ThemeE5E9F0` = `#E5E9F0`（`_upstream/CrystalStudio/App.axaml:67`）+ `FontWeight=SemiBold` |
+//! | 标签内容 | `_upstream/CrystalStudio/MainWindow.MapTabs.cs:53-62` | 标题 `Label.Margin="4,2,8,2"`、居中；关闭钮 `×`(U+00D7) `Padding="4,0,4,0"`、透明底、无边框 |
+//! | 标题文本 | `_upstream/CrystalStudio/MainWindow.MapTabs.cs:120` | `string.Concat(MapDisplayName(map), dirty ? " *" : "")` —— 脏标记是**直接拼接 `" *"`**，不是模板 |
+//! | 未命名地图 | `_upstream/CrystalStudio/MainWindow.MapTabs.cs:125-131` | 有 `Path` ⇒ `Path.GetFileName(path)`；无 `Path` ⇒ `Untitled {n}`（见 [`crate::ui_text::TAB_TITLE_UNTITLED_TMPL`]，本仓**暂不可达**） |
 //!
 //! **本段只对齐"绘制层"**：横向滚动 / 关闭动作 / 右键菜单 4 项 / 拖拽重排 / 0 标签自动新建
 //! 都不在本单（见回执「明确不做」）。
@@ -85,14 +85,14 @@ use crate::ui_text as tx;
 ///
 /// - 高度恒 `metrics::TAB_H`（30），贴页签条顶部（与 `Layout::tab_rect` 同口径）；
 /// - **相邻标签边界相接、没有 gap**：上游相邻 `Border#Chrome` 背景 `Transparent`、
-///   `BorderThickness="0,0,0,2"`（`EditorControls.axaml:60`），`StackPanel Orientation="Horizontal"`
-///   里没有 Margin（`MainWindow.MapTabs.cs:32`）⇒ 视觉间隔全部来自标签**内部**的
-///   `Padding="8,7"`（`:59`）与 `Label.Margin="4,2,8,2"`（`MapTabs.cs:54`）。
+///   `BorderThickness="0,0,0,2"`（`_upstream/CrystalStudio/EditorControls.axaml:60`），`StackPanel Orientation="Horizontal"`
+///   里没有 Margin（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:32`）⇒ 视觉间隔全部来自标签**内部**的
+///   `Padding="8,7"`（`:59`）与 `Label.Margin="4,2,8,2"`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`）。
 ///   （旧版这里有个自定的 `TAB_GAP = 2`，已删，见 `metrics` 的删除说明。）
 /// - 宽度 `min(TAB_W, 可用宽/n)`：`TAB_W` 是参考标题 `Untitled 1 ×` 的**实测自然宽** 98
 ///   （截图 x164..262，见 `metrics::TAB_W`）；放不下时等分收窄、**不设最小宽下限**
 ///   （旧版自定的 `TAB_MIN_W = 40` 已删）。上游此时是横向滚动
-///   （`MapTabs.cs:34` `HorizontalScrollBarVisibility="Auto"`），本单不做滚动。
+///   （`_upstream/CrystalStudio/MainWindow.MapTabs.cs:34` `HorizontalScrollBarVisibility="Auto"`），本单不做滚动。
 ///
 /// `n == 1` 时返回的唯一矩形与 [`Layout::tab_rect`] **逐值相同**（有断言钉住）。
 pub fn rects(l: &Layout, n: usize) -> Vec<Rect> {
@@ -128,7 +128,7 @@ pub fn rects(l: &Layout, n: usize) -> Vec<Rect> {
 ///
 /// ⚠ **B2 单已修掉的两处旧值**（`canvas.rs`，同一写域）：单标签态那张由 `canvas.rs` 画，
 /// 原先 ① 关闭符前景取 `text_muted`、② 选中下划线取 `accent_dark`；现在按上游换成
-/// `ui.text`（`QuietButton` ⇒ `Button` 前景 `ThemeE5E9F0`，`EditorControls.axaml:4`）与
+/// `ui.text`（`QuietButton` ⇒ `Button` 前景 `ThemeE5E9F0`，`_upstream/CrystalStudio/EditorControls.axaml:4`）与
 /// `ui.tab_selected_underline`（`Theme8CA1FF`，`:64`）。
 /// ⇒ 同一张标签在「只有 1 张」与「有 2 张」时这两笔**同色**了。
 /// ⚠ 其中**关闭符那一笔在浅色下会变像素**（`text` `#434D5A` ≠ `text_muted` `#9EA4AB`），
@@ -141,7 +141,7 @@ pub fn 要画的标签(tabs: &Tabs) -> Vec<usize> {
 
 /// 标签矩形 `r` 上**关闭符的命中盒**（`r` 取自 [`rects`] 的某一项）。
 ///
-/// # 横向：上游 `MainWindow.MapTabs.cs:57` 的按钮盒
+/// # 横向：上游 `_upstream/CrystalStudio/MainWindow.MapTabs.cs:57` 的按钮盒
 ///
 /// ```csharp
 /// var close = new Button { Content = ("\u00d7"), Padding = new Thickness(4, 0, 4, 0), … };
@@ -152,7 +152,7 @@ pub fn 要画的标签(tabs: &Tabs) -> Vec<usize> {
 ///
 /// ⚠ 这里是 **`TAB_CLOSE_INSET`（15）**，不是标题那个 `TAB_TITLE_INSET`（12）：
 /// `×` 外侧还多一道 Button 从基主题继承来的 `Margin=3`
-/// （`EditorControls.axaml:7`；`MainWindow.MapTabs.cs:57` 的关闭钮没覆盖它）。
+/// （`_upstream/CrystalStudio/EditorControls.axaml:7`；`_upstream/CrystalStudio/MainWindow.MapTabs.cs:57` 的关闭钮没覆盖它）。
 /// 推导见 [`m::TAB_CLOSE_INSET`] 的文档 —— 两者**不是同一个数，别合并**。
 ///
 /// # 纵向：**整格高**（本仓放大的命中盒，见下）
@@ -191,10 +191,10 @@ pub fn body_rect(r: Rect) -> Rect {
 
 /// **关闭符的悬停底**（上游 `QuietButton` 继承的 `:pointerover` 底）。
 ///
-/// 上游真值：`EditorControls.axaml:17` 的 `QuietButton` 是
+/// 上游真值：`_upstream/CrystalStudio/EditorControls.axaml:17` 的 `QuietButton` 是
 /// `BasedOn="{StaticResource {x:Type Button}}"`、只把 `Background`/`BorderBrush`
 /// 覆盖成 `Transparent` ⇒ 基模板 `:pointerover /template/ Border#Chrome` 的
-/// `Background = Theme394354`（`:12`，`App.axaml:26` = `#394354`）**照样生效**，
+/// `Background = Theme394354`（`:12`，`_upstream/CrystalStudio/App.axaml:26` = `#394354`）**照样生效**，
 /// 圆角取同一个模板的 `CornerRadius="5"`（`:9`）。
 ///
 /// 只在指针**压住这张标签的关闭符命中盒**时画，画在 [`close_button_rect`] 里
@@ -223,12 +223,12 @@ pub fn paint_close_hover(p: &Painter, r: Rect) -> bool {
 ///
 /// # 上游真值：`:pointerover` 与 `:selected` 是两条**独立**选择器
 ///
-/// `EditorControls.axaml:63`：
+/// `_upstream/CrystalStudio/EditorControls.axaml:63`：
 /// `Style Selector="^:pointerover /template/ Border#Chrome"` ⇒ `Background = Theme29313E`
-/// （`App.axaml:14` = `#29313E` = 本板 `ui.tab_hover_bg`）；
-/// `EditorControls.axaml:64`：
+/// （`_upstream/CrystalStudio/App.axaml:14` = `#29313E` = 本板 `ui.tab_hover_bg`）；
+/// `_upstream/CrystalStudio/EditorControls.axaml:64`：
 /// `Style Selector="^:selected /template/ Border#Chrome"` ⇒ 只改 `BorderBrush = Theme8CA1FF`
-/// （`App.axaml:47`），**不动 `Background`**。
+/// （`_upstream/CrystalStudio/App.axaml:47`），**不动 `Background`**。
 ///
 /// 两条选择器改的是**不同属性**、且 Avalonia 里 `:pointerover` 与 `:selected` 可以同时成立
 /// ⇒ **选中项悬停时同样有 `#29313E` 整格底**，只是**额外**多一条 2px 选中下划线
@@ -270,13 +270,13 @@ pub fn paint_tab_hover(p: &Painter, r: Rect) -> bool {
 ///
 /// | 画什么 | 取色 | 上游出处 |
 /// |---|---|---|
-/// | 标签常态底 | `ui.tab_strip_bg` `#1C2028` | `Border#Chrome Background="Transparent"`（`EditorControls.axaml:60`）透出容器底 `Theme1C2028`（`MainWindow.MapTabs.cs:36` / `App.axaml:8`）|
-/// | 标签悬停底 | `ui.tab_hover_bg` `#29313E` | `:pointerover /template/ Border#Chrome`（`EditorControls.axaml:63` / `App.axaml:14`）|
-/// | 选中底边 2px | `ui.tab_selected_underline` `#8CA1FF` | `:selected` 的 `BorderBrush`（`EditorControls.axaml:64` / `App.axaml:47`）+ `BorderThickness="0,0,0,2"`（`:60`）|
-/// | 选中标题 | `ui.text` `#E5E9F0` | `:selected Foreground`（`EditorControls.axaml:65` / `App.axaml:67`）|
-/// | 未选中标题 | `ui.text_muted` `#929CAB` | `Foreground={DynamicResource Muted}`（`EditorControls.axaml:59` / `App.axaml:70`）|
-/// | 关闭符 `×` | `ui.text` `#E5E9F0` | `close.Theme = QuietButton`（`MainWindow.MapTabs.cs:58`）⇒ `Button` 默认前景 `ThemeE5E9F0`（`EditorControls.axaml:4`）|
-/// | 关闭符悬停底 | `ui.close_hover_bg` `#394354` | `QuietButton` 继承基模板 `:pointerover /template/ Border#Chrome` 的 `Background` = `Theme394354`（`EditorControls.axaml:17` + `:12` / `App.axaml:26`）；圆角 5 取同一模板的 `CornerRadius`（`:9`）|
+/// | 标签常态底 | `ui.tab_strip_bg` `#1C2028` | `Border#Chrome Background="Transparent"`（`_upstream/CrystalStudio/EditorControls.axaml:60`）透出容器底 `Theme1C2028`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:36` / `_upstream/CrystalStudio/App.axaml:8`）|
+/// | 标签悬停底 | `ui.tab_hover_bg` `#29313E` | `:pointerover /template/ Border#Chrome`（`_upstream/CrystalStudio/EditorControls.axaml:63` / `_upstream/CrystalStudio/App.axaml:14`）|
+/// | 选中底边 2px | `ui.tab_selected_underline` `#8CA1FF` | `:selected` 的 `BorderBrush`（`_upstream/CrystalStudio/EditorControls.axaml:64` / `_upstream/CrystalStudio/App.axaml:47`）+ `BorderThickness="0,0,0,2"`（`:60`）|
+/// | 选中标题 | `ui.text` `#E5E9F0` | `:selected Foreground`（`_upstream/CrystalStudio/EditorControls.axaml:65` / `_upstream/CrystalStudio/App.axaml:67`）|
+/// | 未选中标题 | `ui.text_muted` `#929CAB` | `Foreground={DynamicResource Muted}`（`_upstream/CrystalStudio/EditorControls.axaml:59` / `_upstream/CrystalStudio/App.axaml:70`）|
+/// | 关闭符 `×` | `ui.text` `#E5E9F0` | `close.Theme = QuietButton`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:58`）⇒ `Button` 默认前景 `ThemeE5E9F0`（`_upstream/CrystalStudio/EditorControls.axaml:4`）|
+/// | 关闭符悬停底 | `ui.close_hover_bg` `#394354` | `QuietButton` 继承基模板 `:pointerover /template/ Border#Chrome` 的 `Background` = `Theme394354`（`_upstream/CrystalStudio/EditorControls.axaml:17` + `:12` / `_upstream/CrystalStudio/App.axaml:26`）；圆角 5 取同一模板的 `CornerRadius`（`:9`）|
 pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
     let rects = rects(l, tabs.len());
     let ps = p.with_clip_rect(l.tab_strip);
@@ -310,14 +310,14 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
 
         // 底色：常态 = 容器底（上游 `Border#Chrome` 背景是 `Transparent`，透出的就是它）；
         // `:pointerover` = `Theme29313E`。**没有"活跃/非活跃"两档底色** ——
-        // 上游选中态只改底边 `BorderBrush` 与前景，不改 Background（`EditorControls.axaml:60-65`）
+        // 上游选中态只改底边 `BorderBrush` 与前景，不改 Background（`_upstream/CrystalStudio/EditorControls.axaml:60-65`）
         // ⇒ 活跃那张悬停时**也**换成悬停底（与 `canvas::draw` 调的是同一个函数）。
         if !paint_tab_hover(&ps, *r) {
             pt::fill(&ps, *r, ui.tab_strip_bg);
         }
 
         // 标题：左内边距与 `canvas::dyn_labels` 的 `canvas.tab_title` 同口径；
-        // 右边界按上游 `Label.Margin` 的右边距 8 内缩（`MainWindow.MapTabs.cs:54`）。
+        // 右边界按上游 `Label.Margin` 的右边距 8 内缩（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`）。
         let 左 = r.left() + m::TAB_TITLE_INSET;
         let 右 = (r.right() - m::TAB_TITLE_INSET - m::TAB_LABEL_MARGIN_R).max(左 + 1.0);
         let clip = Rect::from_min_max(pos2(左, r.top()), pos2(右, r.bottom()));
@@ -330,8 +330,8 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
                 pos2(左, r.center().y),
                 Align2::LEFT_CENTER,
                 clip,
-                // 上游选中 `ThemeE5E9F0`（`EditorControls.axaml:65`）= 本板 `text`；
-                // 未选中 `Muted` `#929CAB`（`:59` / `App.axaml:70`）= 本板 `text_muted`（深色逐字节相同）。
+                // 上游选中 `ThemeE5E9F0`（`_upstream/CrystalStudio/EditorControls.axaml:65`）= 本板 `text`；
+                // 未选中 `Muted` `#929CAB`（`:59` / `_upstream/CrystalStudio/App.axaml:70`）= 本板 `text_muted`（深色逐字节相同）。
                 if 活跃 { ui.text } else { ui.text_muted },
             ),
         );
@@ -339,9 +339,9 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
         lab.draw(&ps);
 
         // 关闭符（与 `canvas.tab_close` 同位置同字号；**命中盒与关闭动作在 [`interact`]**）。
-        // 上游 `close.Theme = QuietButton` ⇒ 前景 `ThemeE5E9F0` = `ui.text`（`EditorControls.axaml:4`）。
+        // 上游 `close.Theme = QuietButton` ⇒ 前景 `ThemeE5E9F0` = `ui.text`（`_upstream/CrystalStudio/EditorControls.axaml:4`）。
         // 悬停底先画、字形后画（底在字下面）：上游 `:pointerover` 只换 `Border#Chrome` 的
-        // `Background`，前景不变（`EditorControls.axaml:12` 只设 Background/BorderBrush）。
+        // `Background`，前景不变（`_upstream/CrystalStudio/EditorControls.axaml:12` 只设 Background/BorderBrush）。
         //
         // 右锚用 `TAB_CLOSE_INSET`（15）而不是标题的 `TAB_TITLE_INSET`（12）—— 见 [`m::TAB_CLOSE_INSET`]。
         paint_close_hover(&ps, *r);
@@ -357,9 +357,9 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
         // 选中底边：只画在**活跃**那一张的底部（`canvas::draw` 只在第 0 张画，
         // `active != 0` 时它那条已经被上面的底色铺盖掉了）。
         //
-        // 厚 2 = 上游 `BorderThickness="0,0,0,2"`（`EditorControls.axaml:60`）的**底边**；
+        // 厚 2 = 上游 `BorderThickness="0,0,0,2"`（`_upstream/CrystalStudio/EditorControls.axaml:60`）的**底边**；
         // 那个 Border 填满整个标签项、标签项又填满 `GridLength.Auto` 那一行
-        // （`MainWindow.MapTabs.cs:28`）⇒ 下划线**贴页签条底**，不是贴 `r.bottom()`。
+        // （`_upstream/CrystalStudio/MainWindow.MapTabs.cs:28`）⇒ 下划线**贴页签条底**，不是贴 `r.bottom()`。
         //
         // ⚠ 修前这里写的是 `r.bottom() - TAB_UNDERLINE_H`。本仓 `TAB_H`(30) < `TABSTRIP_H`(38)
         // ⇒ `r.bottom() = 条底 - 8` ⇒ 多标签态那条下划线比单标签态（`Layout::tab_underline()`）
@@ -378,7 +378,7 @@ pub fn draw(p: &Painter, l: &Layout, tabs: &Tabs, app: &MireditApp) {
 /// 标签条的一次点击**落在哪**（三态：主体 / 关闭符 / 不响应）。
 ///
 /// 上游只有两个控件：`TabItem` 的 header（点它由 `SelectionChanged` 切图，
-/// `MainWindow.MapTabs.cs:38-42`）与它里面的关闭 `Button`（`:57-61`）。
+/// `_upstream/CrystalStudio/MainWindow.MapTabs.cs:38-42`）与它里面的关闭 `Button`（`:57-61`）。
 /// 本仓是**每帧派生式**、结构上没有 `SelectionChanged` 事件 ⇒ 这里把
 /// "点哪儿"如实回报给宿主，由宿主按 [`Tabs::dirty_of`] 决定要不要进确认态
 /// （上游靠"先选中再判脏"，本仓**不许照抄那个时序**，见 `app::request_close_tab`）。
@@ -522,7 +522,7 @@ mod tests {
     ///
     /// ⚠ B1-FIX 调整（唯一一处改断言的用例，硬约束允许「改常量来源不改断言意图」）：
     /// 旧版靠自定 `TAB_GAP = 2` 让两张矩形**分离**，于是 `!a.intersects(b)` 成立。
-    /// 现在按上游**没有 gap**、两张**边界相接**（`EditorControls.axaml:60` 无 Margin），
+    /// 现在按上游**没有 gap**、两张**边界相接**（`_upstream/CrystalStudio/EditorControls.axaml:60` 无 Margin），
     /// 而 `emath` 的 `Rect::intersects` 是**闭区间**判据（`rect.rs:250-255` 用 `<=`），
     /// 相接的矩形会被判成"相交" ⇒ 改判**内部**不重叠（各内缩 0.5px），
     /// 断言意图（两张标签不重叠、按顺序右排）一字未改，强度只增不减
@@ -553,9 +553,9 @@ mod tests {
     /// ②b **相邻标签边界相接、没有自定间隙**（B1-FIX：删掉 `metrics::TAB_GAP` 的可执行证据）。
     ///
     /// 上游没有 gap：相邻 `Border#Chrome` 背景 `Transparent`、`BorderThickness="0,0,0,2"`
-    /// （`EditorControls.axaml:60`），`StackPanel Orientation="Horizontal"` 里没有 Margin
-    /// （`MainWindow.MapTabs.cs:32`）⇒ 视觉间隔全部在**标签内部**由 `Padding="8,7"`（`:59`）
-    /// 与 `Label.Margin="4,2,8,2"`（`MapTabs.cs:54`）撑出。
+    /// （`_upstream/CrystalStudio/EditorControls.axaml:60`），`StackPanel Orientation="Horizontal"` 里没有 Margin
+    /// （`_upstream/CrystalStudio/MainWindow.MapTabs.cs:32`）⇒ 视觉间隔全部在**标签内部**由 `Padding="8,7"`（`:59`）
+    /// 与 `Label.Margin="4,2,8,2"`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`）撑出。
     #[test]
     fn 相邻标签边界相接无自定间隙() {
         let l = Layout::compute(窗());
@@ -585,7 +585,7 @@ mod tests {
     /// ②c **标签多到放不下时宽度不设下限**（B1-FIX：删掉 `metrics::TAB_MIN_W` 的可执行证据）。
     ///
     /// 旧版自定下限 40（注释自承"推导…留 8px"）。上游没有最小宽：标签宽就是内容宽，
-    /// 放不下由 `ScrollViewer HorizontalScrollBarVisibility="Auto"`（`MapTabs.cs:34`）横向滚动
+    /// 放不下由 `ScrollViewer HorizontalScrollBarVisibility="Auto"`（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:34`）横向滚动
     /// —— 滚动不在本单范围，本仓退化为等分收窄且**不收口**。
     #[test]
     fn 标签多时宽度不设下限() {
@@ -621,9 +621,9 @@ mod tests {
     /// 不是本模块的中间变量 ⇒ "算了没画"或"画了但色不对"都会红。
     ///
     /// 三色上游出处（见 [`draw`] 的表格）：
-    /// - 容器底 `#1C2028`：`MainWindow.MapTabs.cs:36` `Theme1C2028`（`App.axaml:8`）；
-    /// - 悬停底 `#29313E`：`EditorControls.axaml:63` `Theme29313E`（`App.axaml:14`）；
-    /// - 选中底边 `#8CA1FF`：`EditorControls.axaml:64` `Theme8CA1FF`（`App.axaml:47`）。
+    /// - 容器底 `#1C2028`：`_upstream/CrystalStudio/MainWindow.MapTabs.cs:36` `Theme1C2028`（`_upstream/CrystalStudio/App.axaml:8`）；
+    /// - 悬停底 `#29313E`：`_upstream/CrystalStudio/EditorControls.axaml:63` `Theme29313E`（`_upstream/CrystalStudio/App.axaml:14`）；
+    /// - 选中底边 `#8CA1FF`：`_upstream/CrystalStudio/EditorControls.axaml:64` `Theme8CA1FF`（`_upstream/CrystalStudio/App.axaml:47`）。
     ///
     /// 断言取**当前生效**的色板（默认浅色）⇒ 深色侧靠 `theme` 自己的用例守（那里逐字节钉死两套）。
     #[test]
@@ -791,12 +791,12 @@ mod tests {
 
     /// **B 单**：`active == 0` 时第 0 张（活跃那张）的**整格悬停底**必须与其它张同源。
     ///
-    /// # 上游真值（`EditorControls.axaml:63` + `:64`）
+    /// # 上游真值（`_upstream/CrystalStudio/EditorControls.axaml:63` + `:64`）
     ///
     /// `:63` `^:pointerover /template/ Border#Chrome` ⇒ `Background = Theme29313E`
-    /// （`App.axaml:14` = `#29313E`）；
+    /// （`_upstream/CrystalStudio/App.axaml:14` = `#29313E`）；
     /// `:64` `^:selected /template/ Border#Chrome` ⇒ **只**改 `BorderBrush = Theme8CA1FF`
-    /// （`App.axaml:47`），不动 `Background`。
+    /// （`_upstream/CrystalStudio/App.axaml:47`），不动 `Background`。
     ///
     /// 两条选择器改**不同属性**、且在 Avalonia 里 `:pointerover` 与 `:selected` 可同时成立
     /// ⇒ **选中项悬停时同样有 `#29313E` 整格底**，只是**额外**多一条 2px 选中下划线
@@ -892,10 +892,10 @@ mod tests {
     /// # 上游真值
     ///
     /// 下划线 = `Border#Chrome` 的 `BorderThickness="0,0,0,2"` **底边**
-    /// （`EditorControls.axaml:60`；选中态 `:64` 只把 `BorderBrush` 换成 `Theme8CA1FF`）。
+    /// （`_upstream/CrystalStudio/EditorControls.axaml:60`；选中态 `:64` 只把 `BorderBrush` 换成 `Theme8CA1FF`）。
     /// 那个 `Border` 是 `PaletteTabItem` 模板的根、只吃 `Padding="{TemplateBinding Padding}"`
     /// ⇒ **Border 盒子 = 标签项盒子**；标签项又填满 `GridLength.Auto` 那一行
-    /// （`MainWindow.MapTabs.cs:28`）⇒ Border 底边 = 标签项底边 = **页签条底边**。
+    /// （`_upstream/CrystalStudio/MainWindow.MapTabs.cs:28`）⇒ Border 底边 = 标签项底边 = **页签条底边**。
     ///
     /// 参考截图 `layout/refs/crystalstudio-main-runtime-1500x950.png` 实测同结论：
     /// 页签条 `y66..103`（38 行）、选中下划线 `y102..103`（**末 2 行**）、`y104` 起是画布底。
@@ -1227,10 +1227,10 @@ mod tests {
     ///
     /// # 两个常量不是同一个数（A12-b 订正）
     ///
-    /// * 标题侧 **12** = `Padding` 左 8 + `Label.Margin` 左 4（`EditorControls.axaml:59` +
-    ///   `MainWindow.MapTabs.cs:54`）；
+    /// * 标题侧 **12** = `Padding` 左 8 + `Label.Margin` 左 4（`_upstream/CrystalStudio/EditorControls.axaml:59` +
+    ///   `_upstream/CrystalStudio/MainWindow.MapTabs.cs:54`）；
     /// * `×` 侧 **15** = `Padding` 右 8 + Button `Margin` **3** + Button `Padding` 右 4
-    ///   （`EditorControls.axaml:7` 的基主题 `Margin=3`，`MapTabs.cs:57` 的关闭钮**没有**覆盖它）。
+    ///   （`_upstream/CrystalStudio/EditorControls.axaml:7` 的基主题 `Margin=3`，`_upstream/CrystalStudio/MainWindow.MapTabs.cs:57` 的关闭钮**没有**覆盖它）。
     ///
     /// A12-a 单曾用一个 12 同时表达两侧 ⇒ `×` 右偏 3px（A12-b 订正）。
     ///
@@ -1436,7 +1436,7 @@ mod tests {
 
     /// ③c **关闭符命中盒 = 上游按钮盒（字形 advance + 上下左右 padding）**，且与主体不重叠。
     ///
-    /// 上游: `MainWindow.MapTabs.cs:57`
+    /// 上游: `_upstream/CrystalStudio/MainWindow.MapTabs.cs:57`
     /// `new Button { Content = "\u00d7", Padding = new Thickness(4, 0, 4, 0), … }`
     /// ⇒ 按钮盒宽 = 4 + 字形宽 + 4、高 = 字形行高（上下 padding 0）。
     /// 字形宽/行高**上游不可得**（Avalonia + Segoe UI 的度量），本仓取**实际上屏字体**的实测值，

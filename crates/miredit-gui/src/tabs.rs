@@ -2,7 +2,7 @@
 //!
 //! # 架构（Lead 裁定，台账 §8.55，不许另选）
 //!
-//! 上游 `MapViewport.cs:147-161` 的 `CaptureEditorState/RestoreEditorState` 同款：
+//! 上游 `_upstream/CrystalStudio/MapViewport.cs:147-161` 的 `CaptureEditorState/RestoreEditorState` 同款：
 //! 切标签时把 [`crate::app::MireditApp`] 里**随标签走**的字段整体换进/换出
 //! [`TabState`] 槽，而不是把 240+ 个 `self.doc.doc` / `self.view` / `self.edit`
 //! 访问点硬改成 Vec 索引。现有访问点**一行都不动**，单标签行为逐值不变。
@@ -57,7 +57,7 @@
 //!    （B 段加 Clone/浅拷贝入口），**禁止**改成全局 `self.doc.assets`
 //!    或为每标签重跑 `load_assets()`。
 //!
-//! # 三条硬约束（上游 `MapViewport.cs:149-152` CancelInteraction 同款）
+//! # 三条硬约束（上游 `_upstream/CrystalStudio/MapViewport.cs:149-152` CancelInteraction 同款）
 //!
 //! - `activate` 前收尾 `minimap_drag = None; sel_drag = None; armed = None`，
 //!   防止把「正在拖一半」的交互状态带进另一张图；
@@ -241,7 +241,7 @@ impl Tabs {
     /// 切换到第 `idx` 张标签。
     ///
     /// 步骤（用 `Vec::remove/insert` 取出槽位，规避两个 `&mut items[..]` 的借用冲突）：
-    /// 0. **CancelInteraction**（上游 `MapViewport.cs:149-152`）：收尾
+    /// 0. **CancelInteraction**（上游 `_upstream/CrystalStudio/MapViewport.cs:149-152`）：收尾
     ///    `minimap_drag` / `sel_drag` / `armed`，不带半成品交互进另一张图；
     /// 1. 把 `app.*` 的当前真值 `capture` 进旧 `items[active]`（该槽变成真快照）；
     /// 2. 把 `items[idx]` 的真快照 `restore` 进 `app.*`（该槽变成占位）；
@@ -372,14 +372,14 @@ impl Tabs {
     /// 而不是画一个 `—` 假名字；一张"没有文档的标签"在 B 段不存在，
     /// 唯一可能出现的场合是占位槽被误传进来 —— 那时 `None` 正好把它挡住）。
     ///
-    /// # 文案口径 = 上游 `MainWindow.MapTabs.cs:120` / `:125-131`
+    /// # 文案口径 = 上游 `_upstream/CrystalStudio/MainWindow.MapTabs.cs:120` / `:125-131`
     ///
     /// - 名字：有 `Path` ⇒ `Path.GetFileName(path)`；本仓 `DocState.file_name` 就是它
     ///   （`mapdoc.rs:456` 的 `file_name_of`，与内核 `Document::file_name` 同口径）。
     /// - 脏标记：上游 `(dirty ? " *" : "")` —— 直接拼接，见
     ///   [`crate::ui_text::TAB_TITLE_DIRTY_TMPL`]（`{name} *`，逐字节等价）。
     /// - ⚠ 上游的**无 Path 分支**（`Untitled {n}` / `Untitled stamp {n}`，
-    ///   `MapTabs.cs:128-130`）在本仓**暂不可达**：没有"新建空白地图"入口，
+    ///   `_upstream/CrystalStudio/MainWindow.MapTabs.cs:128-130`）在本仓**暂不可达**：没有"新建空白地图"入口，
     ///   `DocState.doc` 为 `None` 时本函数走 `?` 返回 `None`（标签条整张不画），
     ///   所有文档都从 `.map` 文件装载 ⇒ 恒有 `Path`。文案真值已备在
     ///   [`crate::ui_text::TAB_TITLE_UNTITLED_TMPL`]，等入口落地时直接用，别另写格式。
@@ -418,7 +418,7 @@ impl Tabs {
     ///
     /// # 上游真值（逐条，2026-11-08 实读 `_upstream/CrystalStudio/`）
     ///
-    /// `MainWindow.MapTabs.cs:119`
+    /// `_upstream/CrystalStudio/MainWindow.MapTabs.cs:119`
     /// ```csharp
     /// bool dirty = map.CategoryDirty || (ReferenceEquals(map, activeMap) ? Viewport.History.Dirty : map.State.History.Dirty);
     /// ```
@@ -448,7 +448,7 @@ impl Tabs {
     ///
     /// # 上游真值：整窗关闭必须遍历**所有**标签
     ///
-    /// `MainWindow.axaml.cs:424-430`（`OnClosing`）
+    /// `_upstream/CrystalStudio/MainWindow.axaml.cs:424-430`（`OnClosing`）
     /// ```csharp
     /// foreach (var tab in mapTabs.Items.Cast<TabItem>().ToArray())
     /// {

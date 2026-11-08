@@ -1,6 +1,6 @@
 //! 工具 → **检查地图**（A-015 / R32-R33）：几何 + 绘制 + 输入 + `--check-map` 自动化。
 //!
-//! 上游：`CrystalStudio/MapCheck.cs:1-101`（三项检查）+ `MainWindow.MapCheck.cs:1-58`
+//! 上游：`_upstream/CrystalStudio/MapCheck.cs:1-101`（三项检查）+ `_upstream/CrystalStudio/MainWindow.MapCheck.cs:1-58`
 //! （760×480 对话框：summary / ListBox / Locate / Close / 陈旧提示）+ `MainWindow.axaml`
 //! 的 Tools 组（`CheckMap` 夹在生成器组与 `Identify` 之间，带分隔线）。
 //!
@@ -185,7 +185,7 @@ pub fn 可见行数(list: Rect) -> usize {
 
 /// 汇总行（官方 `"{total} findings; showing {shown}. …"`）。
 ///
-/// `stale` ⇒ 换整句「地图已变化，请重新检查。」（官方 `MainWindow.MapCheck.cs:43`）。
+/// `stale` ⇒ 换整句「地图已变化，请重新检查。」（官方 `_upstream/CrystalStudio/MainWindow.MapCheck.cs:43`）。
 #[must_use]
 pub fn summary_text(report: &MapCheckReport, stale: bool) -> String {
     if stale {

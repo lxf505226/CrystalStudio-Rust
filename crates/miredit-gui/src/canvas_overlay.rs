@@ -279,7 +279,7 @@ mod tests {
 
 /// 落位预览的**绘制数据**（`app` 每帧算好交给画布；A-011）。
 ///
-/// 上游对照 `MapViewport.StampRendering.cs:58-109`：
+/// 上游对照 `_upstream/CrystalStudio/MapViewport.StampRendering.cs:58-109`：
 /// ① 内容按 `opacity` 半透明贴（`:61` 的 `PushOpacity`）；
 /// ② 再描轮廓（`DrawStampOutline`）；
 /// ③ `blocked` 非空才逐格画红/琥珀诊断（`:64-108`）。
@@ -299,10 +299,10 @@ pub struct PreviewData {
 
 /// 诊断描边的宽度（**屏幕**像素）。
 ///
-/// 上游 `MapViewport.StampRendering.cs:103` 给的是 `ScenePen(brush, 2/Math.Max(Zoom, 0.4))`
+/// 上游 `_upstream/CrystalStudio/MapViewport.StampRendering.cs:103` 给的是 `ScenePen(brush, 2/Math.Max(Zoom, 0.4))`
 /// —— 那是**场景（世界）单位**：预览画在 `DrawMapScene` 里，外层已经压了
 /// `PushTransform(SceneTranslation(origin))` + `PushTransform(SceneScale(Zoom, Zoom))`
-/// （`MapViewport.cs:236`，`StampRendering.cs:58` 的调用点在那之内），
+/// （`_upstream/CrystalStudio/MapViewport.cs:236`，`_upstream/CrystalStudio/MapViewport.StampRendering.cs:58` 的调用点在那之内），
 /// 所以世界单位 × Zoom = 屏幕像素：
 ///
 /// ```text
@@ -409,7 +409,7 @@ mod preview_tests {
 
     /// **描边宽 = `2/max(zoom,0.4) × zoom`**（世界单位 × Zoom）。
     ///
-    /// 上游 `StampRendering.cs:103` 的 Pen 宽在场景坐标系里（`MapViewport.cs:236` 压了
+    /// 上游 `_upstream/CrystalStudio/MapViewport.StampRendering.cs:103` 的 Pen 宽在场景坐标系里（`_upstream/CrystalStudio/MapViewport.cs:236` 压了
     /// `SceneScale(Zoom)`）⇒ 屏幕上：≥0.4× 恒 2 px、0.25× 只有 1.25 px（**不是** 5 px）。
     #[test]
     fn 描边宽按世界单位换算到屏幕() {

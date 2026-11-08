@@ -92,13 +92,13 @@ pub struct Layout {
 
     /// 10 个工具按钮的矩形（顺序同 `icons::TOOLS`）。
     pub tool_buttons: [Rect; 10],
-    /// **工具条上的「裁剪」按钮**（A-015；上游 `MainWindow.axaml:16` 的 `CropButton`）。
+    /// **工具条上的「裁剪」按钮**（A-015；上游 `_upstream/CrystalStudio/MainWindow.axaml:16` 的 `CropButton`）。
     ///
     /// 放在 10 个工具槽之后的**空格子**（第 3 行第 3 列 —— 10 个工具只用掉 4+4+2，
     /// 这一格原本空着）⇒ 不动 `tool_buttons` 的类型、不动面板高度、不改任何工具槽语义。
     ///
     /// ⚠ **与上游的视觉位置不同（有意差异，R54 记档）**：官方 `CropButton`
-    /// （`MainWindow.axaml:16`）在左侧工具列的**独立一行**（32×32 `QuietButton`，带 2px margin），
+    /// （`_upstream/CrystalStudio/MainWindow.axaml:16`）在左侧工具列的**独立一行**（32×32 `QuietButton`，带 2px margin），
     /// 不在 4 列图标网格里；本仓为了不动 `[Rect; 10]` 与面板高度，把它放进网格里那颗
     /// **空着的格子**。位置不同、语义相同（都调同一条裁剪动作）。
     pub crop_button: Rect,
@@ -123,7 +123,7 @@ impl Layout {
     ///
     /// # 为什么是"让出一列"而不是"浮层盖上去"
     ///
-    /// 上游把地图列表做成停靠面板（`MainWindow.axaml.cs:343` 的 `Dock.Left`），
+    /// 上游把地图列表做成停靠面板（`_upstream/CrystalStudio/MainWindow.axaml.cs:349` 的 `Dock.Left`），
     /// 停靠面板**不盖画布**。本仓照这个语义：开着就把画布往右推，
     /// 关着就把那 268px 还回去 —— 两种状态下 `viewport` 都是"画布矩形"这一个概念，
     /// 没有第二份坐标（浮层方案会让"画布矩形"与"看得见的地图矩形"变成两个东西）。
@@ -313,9 +313,9 @@ impl Layout {
     ///
     /// ⚠ **纵向不跟标签矩形走**（2026-11-08 多标签下划线单订正）：
     /// 上游下划线是 `Border#Chrome` 的 `BorderThickness="0,0,0,2"` 的**底边**
-    /// （`EditorControls.axaml:60`，选中态 `:64` 只把 `BorderBrush` 换成 `Theme8CA1FF`），
+    /// （`_upstream/CrystalStudio/EditorControls.axaml:60`，选中态 `:64` 只把 `BorderBrush` 换成 `Theme8CA1FF`），
     /// 而那个 `Border` 是 `PaletteTabItem` 模板的根（`:60`）、只吃 `Padding`，
-    /// 标签项又填满 `GridLength.Auto` 那一行（`MainWindow.MapTabs.cs:28`）
+    /// 标签项又填满 `GridLength.Auto` 那一行（`_upstream/CrystalStudio/MainWindow.MapTabs.cs:28`）
     /// ⇒ **Border 底边 = 标签项底边 = 页签条底边**。
     ///
     /// 本仓 `TAB_H`(30) < `TABSTRIP_H`(38) ⇒ `tab_rect().bottom()` 离条底还有 8px，

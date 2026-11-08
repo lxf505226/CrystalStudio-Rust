@@ -377,7 +377,7 @@ pub fn paint_tool_icon(painter: &Painter, idx: usize, box_rect: Rect, color: Col
 /// 为什么不用字/字形：32×32 的按钮里塞两个汉字会糊，而本项目不额外带图标字体
 /// ⇒ 直接画几何（与 `paint_tool_icon` 的线段/路径同一套 `Painter` 原语）。
 ///
-/// 语义与官方 `CropButton`（`MainWindow.axaml:16`，32×32 `QuietButton`）一致：
+/// 语义与官方 `CropButton`（`_upstream/CrystalStudio/MainWindow.axaml:16`，32×32 `QuietButton`）一致：
 /// 看到的就是"框住一块再切掉外面"。
 pub fn paint_crop_icon(painter: &Painter, box_rect: Rect, color: Color32) {
     let 线宽 = (box_rect.width() * 0.09).max(1.0);

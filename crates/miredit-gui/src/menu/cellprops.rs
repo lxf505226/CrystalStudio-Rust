@@ -1,6 +1,6 @@
 //! 「单元格属性」模态（R12-F1）：几何 + 绘制 + 输入。
 //!
-//! 上游：`CrystalStudio/MainWindow.axaml.cs:740-786`（`OpenCellProperties`）——
+//! 上游：`_upstream/CrystalStudio/MainWindow.axaml.cs:740-784`（`OpenCellProperties`）——
 //! 一个 340 宽的自适应高对话框、三个 0–255 的文本框、水印 `Mixed — leave unchanged`、
 //! 非法值给一句提示且**不提交**，「应用」时**与初值逐字比较**、只把改过的字段交给
 //! `ApplyMetadata`（见 [`crate::cell_props`] 的纯函数与 `miredit_core::EditSession::apply_metadata`）。

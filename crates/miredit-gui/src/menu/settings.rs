@@ -4,7 +4,7 @@
 //!
 //! 本仓**没有** `settings.json`（仓库根下全仓 `grep` 过，只有 `Cargo.toml` /
 //! `layout/` 等），所以不能"复用已有的设置文件"。官方 CrystalStudio 用的是
-//! `EditorPaths.ProfileDirectory` 下的 `appearance.json`（`ThemeService.Avalonia.cs:11`），
+//! `EditorPaths.ProfileDirectory` 下的 `appearance.json`（`_upstream/CrystalStudio/ThemeService.Avalonia.cs:11`），
 //! 那是**它的**用户配置目录；本仓是独立程序，按 Windows 惯例落到
 //! `%LOCALAPPDATA%\miredit\settings.json`（首次写入时创建目录）。
 //!
@@ -12,10 +12,10 @@
 //!
 //! | 字段 | 官方出处 | 本仓落点 |
 //! |---|---|---|
-//! | `dark` | `ThemeService.Avalonia.cs:11` 的 `appearance.json` | 本文件 |
-//! | `recent` | `RecentMapStore.cs:13-14`：`%LOCALAPPDATA%\CrystalStudio\recent-maps.json` | **并入本文件** |
+//! | `dark` | `_upstream/CrystalStudio/ThemeService.Avalonia.cs:11` 的 `appearance.json` | 本文件 |
+//! | `recent` | `_upstream/CrystalStudio/RecentMapStore.cs:13-14`：`%LOCALAPPDATA%\CrystalStudio\recent-maps.json` | **并入本文件** |
 //!
-//! 官方把最近地图**单独存一个文件**（`recent-maps.json`，`RecentMapStore.cs:13-14`）；
+//! 官方把最近地图**单独存一个文件**（`recent-maps.json`，`_upstream/CrystalStudio/RecentMapStore.cs:13-14`）；
 //! 本仓只有一份用户配置，为免多一个文件，把列表并进 `settings.json` 的 `recent` 数组。
 //! **这是有意偏离**（不是抄漏），理由：本仓只有一个设置文件，两个字段同生共死，
 //! 分两处写反而会出现"深色写成功、最近列表写失败"的半截状态。
@@ -33,14 +33,14 @@
 //! * **最近优先**：`recent[0]` 是最后打开的那张（官方 `maps.Insert(0, path)`，`:36`）；
 //! * **去重**：同一路径只留一条；Windows 路径大小写不敏感，官方用
 //!   `StringComparer.OrdinalIgnoreCase`（`:26` / `:35`），本仓同口径（[`same_path`]）；
-//! * **上限**：官方 `Limit = 20`（`RecentMapStore.cs:8`），**本仓取 10**
+//! * **上限**：官方 `Limit = 20`（`_upstream/CrystalStudio/RecentMapStore.cs:8`），**本仓取 10**
 //!   （[`RECENT_LIMIT`]）—— 2026-11-05 的单子明确要求 10 条，属**有意偏离**，不是抄漏；
 //! * **只记成功打开的**：只有真把文档换掉之后才记（[`crate::menu::action::open_path`]），
 //!   打开失败一个字节都不写（官方 `RememberMap` 也只在 `OpenMap` / 保存成功后调，
-//!   `MainWindow.axaml.cs:458/462/501`）。
+//!   `_upstream/CrystalStudio/MainWindow.axaml.cs:472/479/528`）。
 //!
 //! ⚠ 与官方的**第二处**有意偏离：官方 `Load()` 会丢掉扩展名不是 `.map` 的条目
-//! （`RecentMapStore.cs:23`）；本仓**不按扩展名过滤** —— 本仓的 `Document::load` 是
+//! （`_upstream/CrystalStudio/RecentMapStore.cs:23`）；本仓**不按扩展名过滤** —— 本仓的 `Document::load` 是
 //! **九格式内容判别**（不看扩展名），按扩展名过滤会把"内容真的是地图但名字不叫 .map"
 //! 的文件从历史里剔掉，那是假信息。见 [`clean_recent`]。
 
@@ -50,7 +50,7 @@ use crate::ui_text as tx;
 
 /// 最近地图列表的上限。
 ///
-/// 官方 `RecentMapStore.cs:8` 是 `Limit = 20`；**本仓取 10**（2026-11-05 单子要求）。
+/// 官方 `_upstream/CrystalStudio/RecentMapStore.cs:8` 是 `Limit = 20`；**本仓取 10**（2026-11-05 单子要求）。
 /// 这是一处**有意偏离**：改这个数只影响"留几条历史"，不影响任何地图数据。
 pub const RECENT_LIMIT: usize = 10;
 
@@ -340,14 +340,14 @@ pub fn normalize_path(p: &str) -> String {
 /// 两个路径是不是**同一个文件**（Windows 口径：大小写不敏感）。
 ///
 /// 官方用 `string.Equals(p, path, StringComparison.OrdinalIgnoreCase)`
-/// （`RecentMapStore.cs:35`），本仓先字面绝对化再比，语义更严一点（相对/绝对写法也能对上）。
+/// （`_upstream/CrystalStudio/RecentMapStore.cs:35`），本仓先字面绝对化再比，语义更严一点（相对/绝对写法也能对上）。
 pub fn same_path(a: &str, b: &str) -> bool {
     normalize_path(a).eq_ignore_ascii_case(&normalize_path(b))
 }
 
 /// 清洗列表：去空串、去重（大小写不敏感）、截到 [`RECENT_LIMIT`]，**保持原顺序**。
 ///
-/// ⚠ **不按扩展名过滤**（与官方 `RecentMapStore.cs:23` 有意不同）：
+/// ⚠ **不按扩展名过滤**（与官方 `_upstream/CrystalStudio/RecentMapStore.cs:23` 有意不同）：
 /// 本仓的 `Document::load` 是九格式**内容**判别，扩展名不是判据；
 /// 按扩展名剔条目会把"内容真是地图、名字不叫 .map"的历史项悄悄删掉 —— 那是假信息。
 pub fn clean_recent(items: Vec<String>) -> Vec<String> {

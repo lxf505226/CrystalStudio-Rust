@@ -122,14 +122,14 @@ fn 门2门3_真实印章贴0map副本_逐字节核对与撤销() {
         if src.fr != 0 {
             assert_eq!(b.fr_img & 0x7FFF, src.fr, "({x},{y}) 物体图号");
         }
-        // 门 / 门偏移：**非 0 才搬**（`PlacedStamps.cs:93`）
+        // 门 / 门偏移：**非 0 才搬**（`_upstream/CrystalStudio/PlacedStamps.cs:93`）
         if src.door != 0 {
             assert_eq!(b.door_index, src.door, "({x},{y}) 门索引");
             assert_eq!(b.door_offset, src.door_offset, "({x},{y}) 门偏移");
         } else {
             assert_eq!(b.door_index, a.door_index, "({x},{y}) 印章没门 ⇒ 原值不动");
         }
-        // 光照：非 0 才搬（`PlacedStamps.cs:94`）
+        // 光照：非 0 才搬（`_upstream/CrystalStudio/PlacedStamps.cs:94`）
         if src.light != 0 {
             assert_eq!(b.light, src.light, "({x},{y}) 光照");
         } else {

@@ -63,7 +63,7 @@
 //!
 //! **@acfbbf8a 回源订正（2026-11-06）**：上游新增小地图尺寸面板，官方尺寸口径已可得
 //! ⇒ 小地图**缺省**改走 [`export_minimap_sized`] + [`MinimapSize::Default`]
-//! （`W*12 × H*8`，官方 `MinimapExporter.cs:20`）；三档预设与显式像素见
+//! （`W*12 × H*8`，官方 `_upstream/CrystalStudio/MinimapExporter.cs:20`）；三档预设与显式像素见
 //! [`MinimapPreset`] / [`MinimapSize`]，官方 `ValidSize` 的 Rust 等价换算见
 //! [`MINIMAP_MAX_PIXELS`]，官方 16 级 mip 到本仓 4 档的有据映射见 [`pick_official_scale`]。
 //!
@@ -71,7 +71,7 @@
 //! 由 [`export_minimap`] 原样保留，护栏与逐字节输出都不变；它**不再是官方缺省口径**。
 //!
 //! ⚠ **订正（2026-11-08）**：上一句里的「逐字节输出都不变」**只对护栏与选档成立**，
-//! 对**走了第二段**的发次已不成立 —— 第二段按上游 `PreviewRaster.cs:15-19,35-38`
+//! 对**走了第二段**的发次已不成立 —— 第二段按上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38`
 //! 从面积平均换成了「等比 + 居中 + 不透明黑底 + 最近邻」，见下一小节。
 //! 原文保留作历史引用（它说的是 2026-11-06 那次上移/接线没有改字节，与本次无关）。
 //!
@@ -105,16 +105,16 @@
 //! **实为**：那段论证只回答了「哪个**面积平均**入口能调」，
 //! 而「第二段该不该是面积平均」这个**前提本身就是错的**。上游导出成图的最终合成是
 //! `PreviewRaster.Create(drawings, area, width, height, …, padding: 0, opaque: true)`
-//! （调用点 `MinimapExporter.cs:56-57`），它是**等比 + 居中 + 不透明黑底 + 最近邻**：
+//! （调用点 `_upstream/CrystalStudio/MinimapExporter.cs:56-57`），它是**等比 + 居中 + 不透明黑底 + 最近邻**：
 //!
 //! | 口径 | 上游位置 | 原式 |
 //! |---|---|---|
-//! | 等比缩放比 | `PreviewRaster.cs:15` | `scale = Math.Min((width-padding*2)/area.Width, (height-padding*2)/area.Height)` |
-//! | 居中偏移 | `PreviewRaster.cs:16-17` | `offsetX=(width-area.Width*scale)/2-area.X*scale`（`offsetY` 同形）|
-//! | 不透明黑底 | `PreviewRaster.cs:19` | `if(opaque) for(int i=3;i<output.Length;i+=4) output[i]=255;`（RGB 保 0）|
-//! | 最近邻取样 | `PreviewRaster.cs:35,38` | `sy=(int)((y+.5-top)*pixels.Height/h)`、`sx=(int)((x+.5-left)*pixels.Width/w)` |
+//! | 等比缩放比 | `_upstream/CrystalStudio/PreviewRaster.cs:15` | `scale = Math.Min((width-padding*2)/area.Width, (height-padding*2)/area.Height)` |
+//! | 居中偏移 | `_upstream/CrystalStudio/PreviewRaster.cs:16-17` | `offsetX=(width-area.Width*scale)/2-area.X*scale`（`offsetY` 同形）|
+//! | 不透明黑底 | `_upstream/CrystalStudio/PreviewRaster.cs:19` | `if(opaque) for(int i=3;i<output.Length;i+=4) output[i]=255;`（RGB 保 0）|
+//! | 最近邻取样 | `_upstream/CrystalStudio/PreviewRaster.cs:35,38` | `sy=(int)((y+.5-top)*pixels.Height/h)`、`sx=(int)((x+.5-left)*pixels.Width/w)` |
 //!
-//! 面积平均只出现在上游的 **mip 预缩**（`OverviewPixels.cs:7-42` 的 `Reduce`），
+//! 面积平均只出现在上游的 **mip 预缩**（`_upstream/CrystalStudio/OverviewPixels.cs:7-42` 的 `Reduce`），
 //! 作用在**逐帧解码**阶段 —— 本仓对应物是第一段 `try_render_region_scaled_with` 的
 //! 缩小档（`resample::盒式_流式`），**保持不动**。
 //! 第二段（导出成图）已按上游改为
@@ -206,21 +206,21 @@ pub use miredit_render::tiled::{
 
 /// 小地图**本仓兼容链**的目标长边（像素）。选档时要求输出两边都不超过它；
 /// 最小档仍超 ⇒ 再走一次**第二段最终合成**（[`downscale_to_fit`]：等比 + 居中 +
-/// 不透明黑底 + 最近邻，对齐上游 `PreviewRaster.cs:15-19,35-38`）把整幅落到它以内。
+/// 不透明黑底 + 最近邻，对齐上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38`）把整幅落到它以内。
 ///
 /// ⚠ **原判断「原版不可得 ⇒ 自定值」已失效，@acfbbf8a 回源订正（2026-11-06）**：
 /// 官方尺寸口径见 `I:\cs-new\MinimapExporter.cs` + `MinimapExportWindow.cs`：
 ///
 /// 1. **默认输出尺寸**：`width = document.Width * 12`、`height = document.Height * 8`
-///    （`MinimapExporter.cs:20`），**不是 2048 长边**；
+///    （`_upstream/CrystalStudio/MinimapExporter.cs:20`），**不是 2048 长边**；
 /// 2. **三档预设**：以 `Width*48` / `Height*32` 为基准除以 `{4, 2, 1}`，选中预设时
 ///    `checked(document.Width * 48 / divisor)` / `checked(document.Height * 32 / divisor)`
-///    （`MinimapExportWindow.cs:36-38`）；
+///    （`_upstream/CrystalStudio/MinimapExportWindow.cs:36-38`）；
 /// 3. **合法尺寸判据**：`w > 0 && h > 0 && (long)w*h <= Array.MaxLength / 4`
-///    （`MinimapExporter.cs:15-16`）；本仓等价换算、并叠加更严的既有护栏，见 [`MINIMAP_MAX_PIXELS`]；
+///    （`_upstream/CrystalStudio/MinimapExporter.cs:15-16`）；本仓等价换算、并叠加更严的既有护栏，见 [`MINIMAP_MAX_PIXELS`]；
 /// 4. **精度/换算公式**：`scale = min(width/(W*48.0), height/(H*32.0))`、
 ///    `level = scale >= 1 ? 0 : clamp((int)floor(log2(1/scale)), 0, 16)`
-///    （`MinimapExporter.cs:47-48`）。**官方用 16 级 overview mip，本仓只有 4 档**
+///    （`_upstream/CrystalStudio/MinimapExporter.cs:47-48`）。**官方用 16 级 overview mip，本仓只有 4 档**
 ///    ⇒ [`pick_official_scale`] 按「最接近且不越界」做**有据映射，不是自定值**。
 ///
 /// ⇒ 2048 仅保留给本仓旧开关 `--minimap-max-side` 的兼容链，**官方缺省不再经过它**；
@@ -229,9 +229,9 @@ pub use miredit_render::tiled::{
 /// 第二段是 render crate 的最终合成入口 —— 本模块一行滤镜都没有。
 ///
 /// ⚠ **订正（2026-11-08）**：原文这句是「第二段是 render crate 的**面积平均缩放**」。
-/// 实为：第二段按上游 `PreviewRaster.cs:15-19,35-38` 是
+/// 实为：第二段按上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38` 是
 /// **等比 + 居中 + 不透明黑底 + 最近邻**（[`miredit_render::fit_centered_opaque`]），
-/// 面积平均只在上游 mip 预缩 `OverviewPixels.cs:7-42`。原文保留作历史引用。
+/// 面积平均只在上游 mip 预缩 `_upstream/CrystalStudio/OverviewPixels.cs:7-42`。原文保留作历史引用。
 pub const MINIMAP_MAX_SIDE: u32 = 2048;
 
 /// `--minimap-max-side` 允许的最小值。
@@ -289,7 +289,7 @@ pub struct ExportReport {
     /// 第二段是否**真的改了尺寸**（小地图才可能 `true`）。
     ///
     /// ⚠ **订正（2026-11-08）**：原文档写的是「是否走了第二段**面积平均缩放**」。
-    /// 第二段已按上游 `PreviewRaster.cs:15-19,35-38` 换成
+    /// 第二段已按上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38` 换成
     /// [`miredit_render::fit_centered_opaque`]（等比 + 居中 + 不透明黑底 + 最近邻），
     /// 且**只要给了目标尺寸就一定会跑**（同尺寸时 `scale == 1`、`left == top == 0`，
     /// 但 `opaque: true` 的 alpha 覆盖照样落）⇒ 本字段不能再表示「第二段跑没跑」，
@@ -580,7 +580,7 @@ pub fn export_selection(
 ///   即 [`render_tiled`] 里的 `try_render_region_scaled_with`；
 /// - **第二段**只是「把一张已经渲好的 RGBA 图整体落到目标宽高」，不再碰任何地图语义 ——
 ///   这里复用 `miredit_render::preview_raster::fit_centered_opaque`
-///   （等比 / 居中 / 不透明黑底 / 最近邻，逐字对齐上游 `PreviewRaster.cs:15-19,35-38`）。
+///   （等比 / 居中 / 不透明黑底 / 最近邻，逐字对齐上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38`）。
 ///   ⇒ 本模块**仍然一行滤镜都没写**。
 ///
 /// # 为什么是 `fit_centered_opaque` 而不是 `compare::resize_to`
@@ -601,9 +601,9 @@ pub fn export_selection(
 /// > 峰值 ≈ 源图 + 目标图（`8400×5600×4 = 188 MB` + `2046×1364×4 = 11 MB`）。
 ///
 /// **实为**：原文只论证了「哪个**面积平均**入口能调」，但「第二段该不该是面积平均」
-/// 这个前提是错的 —— 上游导出成图的最终合成（调用点 `MinimapExporter.cs:56-57` →
-/// `PreviewRaster.cs:15-19,35-38`）是**最近邻**，面积平均只在上游的 mip 预缩
-/// `OverviewPixels.cs:7-42`（作用在逐帧解码阶段，本仓对应物是第一段的缩小档）。
+/// 这个前提是错的 —— 上游导出成图的最终合成（调用点 `_upstream/CrystalStudio/MinimapExporter.cs:56-57` →
+/// `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38`）是**最近邻**，面积平均只在上游的 mip 预缩
+/// `_upstream/CrystalStudio/OverviewPixels.cs:7-42`（作用在逐帧解码阶段，本仓对应物是第一段的缩小档）。
 /// 已按上游改为 `preview_raster::fit_centered_opaque`（crate 根也有同名 re-export）。
 ///
 /// 内存上两者同量级：`fit_centered_opaque` 额外只有**目标图 + 一张横向取样表**
@@ -642,7 +642,7 @@ fn downscale_to_fit(
     // 原文理由是「官方默认 8400×5600 与 Quarter 原生输出恰好同尺寸：resize_to 只会
     // clone，这时回执不能虚报『两段式 yes』」。换成 `fit_centered_opaque` 后**必须删掉**：
     // `compare::resize_to` 在同尺寸时确实 `return img.clone()`（`compare.rs:155-157`），
-    // 但上游 `PreviewRaster.cs:19` 的 `opaque: true` 是**无条件**把 alpha 写成 255
+    // 但上游 `_upstream/CrystalStudio/PreviewRaster.cs:19` 的 `opaque: true` 是**无条件**把 alpha 写成 255
     // （RGB 保 0 ⇒ 不透明黑底）—— 同尺寸时 `scale == 1`、`left == top == 0` 只是
     // **几何恒等**，底色这一步照样要落。跳过它会让 GUI 与 `miredit-web` 的
     // `GET /api/export/minimap`（那边明确没有同尺寸短路，见
@@ -678,7 +678,7 @@ fn downscale_to_fit(
 /// 缺省 [`RenderOptions::default()`] = 闭门 + 白天 ⇒ 与**门态/光照接线前**逐字节相同。
 ///
 /// ⚠ **订正（2026-11-08）**：上面这句「逐字节相同」只对**没走第二段**的发次成立。
-/// 第二段已按上游 `PreviewRaster.cs:15-19,35-38` 换成
+/// 第二段已按上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38` 换成
 /// [`miredit_render::fit_centered_opaque`]（等比 + 居中 + 不透明黑底 + 最近邻），
 /// 它会把源里 alpha < 255 的像素铺成不透明黑 ⇒ 走第二段的发次与 2026-11-08 之前
 /// **必然不同字节**（那正是对齐上游要改的东西）。原文保留作历史引用。
@@ -724,13 +724,13 @@ pub fn export_minimap(
 /// 「…→ `compare::resize_to` 精确落到指定宽高。」与
 /// 「第二段只做公开的**面积平均缩放** —— **有据映射，不是自定值**」。
 /// **实为**：上游 `PreviewRaster.Create` 的最终合成是
-/// **最近邻 + 等比居中 + 不透明黑底**（`PreviewRaster.cs:15-19,35-38`，调用点
-/// `MinimapExporter.cs:56-57` 传的就是 `padding: 0, opaque: true`）；
-/// 面积平均只在上游的 mip 预缩 `OverviewPixels.cs:7-42`。
+/// **最近邻 + 等比居中 + 不透明黑底**（`_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38`，调用点
+/// `_upstream/CrystalStudio/MinimapExporter.cs:56-57` 传的就是 `padding: 0, opaque: true`）；
+/// 面积平均只在上游的 mip 预缩 `_upstream/CrystalStudio/OverviewPixels.cs:7-42`。
 /// 已按上游改入口，原文保留作历史引用。
 ///
 /// 官方 `PreviewRaster.Create` 从 **overview mip 精灵** 重绘到任意 `width×height`
-/// （`MinimapExporter.cs:46-57`）；本仓没有 mip 精灵缓存，故第一段按最接近且不越界的
+/// （`_upstream/CrystalStudio/MinimapExporter.cs:46-57`）；本仓没有 mip 精灵缓存，故第一段按最接近且不越界的
 /// 档位出整幅 RGBA，第二段做上游那条最终合成 —— **有据映射，不是自定值**，
 /// 也不改 render crate 的任何常量。门态 + 光照档位整份 `RenderOptions` 透传，
 /// 缺省仍是闭门 + 白天。

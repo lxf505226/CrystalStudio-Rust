@@ -1,12 +1,12 @@
 //! 单元格属性模态的**取数与校验**（R12-F1：光照 / 门索引 / 门偏移）。
 //!
 //! 上游真值：
-//! * 对话框与「只写改过的字段」：`CrystalStudio/MainWindow.axaml.cs:740-786`
+//! * 对话框与「只写改过的字段」：`_upstream/CrystalStudio/MainWindow.axaml.cs:740-784`
 //!   （`OpenCellProperties`：三字段初值 = `CommonMetadata(...)?.ToString() ?? ""`，
 //!   提交时 `box.Text == initialValues[box] ? null : parsed`）；
-//! * 选区共同值：`MapViewport.cs:567-578`（`CommonMetadata`：按 `area` clamp 后遍历，
+//! * 选区共同值：`_upstream/CrystalStudio/MapViewport.cs:567-578`（`CommonMetadata`：按 `area` clamp 后遍历，
 //!   任两格不同 ⇒ `null`）；
-//! * 落笔：`MapViewport.cs:579-597`（`ApplyMetadata`，实现在
+//! * 落笔：`_upstream/CrystalStudio/MapViewport.cs:579-597`（`ApplyMetadata`，实现在
 //!   [`miredit_core::EditSession::apply_metadata`]）。
 //!
 //! 本模块只有**纯函数**（不画、不碰会话），好让 `cargo test --lib` 不开窗就能验：
@@ -164,7 +164,7 @@ pub fn 解析输入(s: &str) -> 取值 {
 
 /// 与初值**逐字**比较后决定写什么：没改动 ⇒ [`取值::不动`]；改动了 ⇒ [`解析输入`]。
 ///
-/// 为什么逐字比较（而不是比值）：上游比的也是 `TextBox.Text` 原文（`MainWindow.axaml.cs:777-779`），
+/// 为什么逐字比较（而不是比值）：上游比的也是 `TextBox.Text` 原文（`_upstream/CrystalStudio/MainWindow.axaml.cs:777-779`），
 /// 于是"Mixed 的空框仍是空框"⇒ 不动，「把 Mixed 填成 9」⇒ 写 9，
 /// 「把已经相同的 9 再敲一遍 9」⇒ 原文没变 ⇒ **不写**（不产生无意义的撤销步）。
 #[must_use]

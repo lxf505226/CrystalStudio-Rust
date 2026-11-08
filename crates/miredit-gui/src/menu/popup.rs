@@ -14,7 +14,7 @@
 //!
 //! # 分隔线
 //!
-//! 位置**照官方**：`MainWindow.axaml:5` 里每个 `<Separator />` 落在哪两项之间，
+//! 位置**照官方**：`_upstream/CrystalStudio/MainWindow.axaml:5` 里每个 `<Separator />` 落在哪两项之间，
 //! 本模块就在那一项前面画一条（判据在 [`crate::menu::model::Item::sep_before`]）。
 //!
 //! # 子菜单（2026-11-05）
@@ -27,7 +27,7 @@
 //!   `Deng.ttf` 里 U+2713 都没字形（见 [`draw_check`] 的注释），箭头同样不赌字体；
 //! * 子面板的**行数**由 [`crate::menu::model::Sub`] 决定：静态子项按表；
 //!   动态列表（最近打开）按 [`crate::menu::model::SubState::recent_rows`]，
-//!   空列表时就是官方 `RecentMaps.cs:39` 那条灰行；
+//!   空列表时就是官方 `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:39` 那条灰行；
 //! * 子面板**不越出窗口**：右边放不下就翻到父项左侧（Avalonia/Windows 的行为），
 //!   翻过去之后**左/上/下三条边同样夹**到窗口内（审查第 7 轮缺陷 6；窗口小到装不下时
 //!   先把面板尺寸缩到窗口大小，保证矩形整块落在 `Layout::content` 里）。
@@ -46,7 +46,7 @@
 //! `Path.GetFileName`、可点性 = 官方 `File.Exists(path)`；点一行 / 回车走
 //! [`crate::menu::Click::RunRecent`] / [`crate::menu::KeyResult::RunRecent`]（带 0 基下标）
 //! ⇒ [`crate::menu::action::open_recent_index`] ⇒ 与「打开地图…」**同一个**
-//! [`crate::menu::action::open_path`]。只有列表为空时才画官方 `RecentMaps.cs:39`
+//! [`crate::menu::action::open_path`]。只有列表为空时才画官方 `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:39`
 //! 那条灰行（`action == None` ⇒ 点了什么都不做）。
 
 use egui::{pos2, vec2, Align2, Painter, Rect};
@@ -163,7 +163,7 @@ fn sub_geom(
         Sub::Recent => {
             // 动态列表（2026-11-05 起真数据）：行数/文案由 `SubState::recent_rows` 给，
             // 真源 = 设置文件里的 `recent`（最近优先）；**空列表**才退化成官方
-            // `RecentMaps.cs:39` 那条灰行（`text` = 空态文案、`on = false`）。
+            // `_upstream/CrystalStudio/MainWindow.RecentMaps.cs:39` 那条灰行（`text` = 空态文案、`on = false`）。
             let st = SubState {
                 recent: recent.to_vec(),
                 ..SubState::default()

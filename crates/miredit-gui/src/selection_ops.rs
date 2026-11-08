@@ -15,11 +15,11 @@
 //!
 //! | 键 | 动作 | 官方依据 |
 //! |---|---|---|
-//! | `Ctrl+C` | 复制选区 | `CrystalStudio/RegionCopy.cs:101`（`CopySelection`）+ `MapViewport.cs` 的 `Key.C` 分支 |
-//! | `Ctrl+X` | 剪切选区 | `RegionCopy.cs:102`（`CutSelection`） |
-//! | `Ctrl+V` | 粘贴：传**鼠标格**，落点 = 按源奇偶重算的锚点（`Clipboard::anchor`）| `RegionCopy.cs:70`（`Anchor`）+ `:121-122`（先 `Anchor` 再 `CanPaste`）+ `:72-91`（`Paste`）+ 粘贴后提示 "Ctrl+V to paste again"（`:123`）|
-//! | `Delete` | 删除选区内容 | `RegionCopy.cs:45-69`（`CutSource`）+ `MapViewport.cs:546`（`ClearSelection`）|
-//! | `Ctrl+Shift+V` | **填充选区** | ⚠ **无官方依据** —— 官方填充只有"工具 `F` + 点击"（`MainWindow.axaml.cs:861`），`MapViewport.cs` 里没有给 `FillSelection` 绑任何键。本仓为选区补这一个键，显式记档（[`tx::SEL_KEYS_HINT`] 里也写了"本仓自定"）|
+//! | `Ctrl+C` | 复制选区 | `_upstream/CrystalStudio/RegionCopy.cs:101`（`CopySelection`）+ `MapViewport.cs` 的 `Key.C` 分支 |
+//! | `Ctrl+X` | 剪切选区 | `_upstream/CrystalStudio/RegionCopy.cs:102`（`CutSelection`） |
+//! | `Ctrl+V` | 粘贴：传**鼠标格**，落点 = 按源奇偶重算的锚点（`Clipboard::anchor`）| `_upstream/CrystalStudio/RegionCopy.cs:70`（`Anchor`）+ `:121-122`（先 `Anchor` 再 `CanPaste`）+ `:72-91`（`Paste`）+ 粘贴后提示 "Ctrl+V to paste again"（`:123`）|
+//! | `Delete` | 删除选区内容 | `_upstream/CrystalStudio/RegionCopy.cs:45-69`（`CutSource`）+ `_upstream/CrystalStudio/MapViewport.cs:598`（`ClearSelection`）|
+//! | `Ctrl+Shift+V` | **填充选区** | ⚠ **无官方依据** —— 官方填充只有"工具 `F` + 点击"（`_upstream/CrystalStudio/MainWindow.axaml.cs:989`），`MapViewport.cs` 里没有给 `FillSelection` 绑任何键。本仓为选区补这一个键，显式记档（[`tx::SEL_KEYS_HINT`] 里也写了"本仓自定"）|
 //!
 //! # 三、回执只出一句，且**成功/拒绝分色**
 //!
@@ -241,7 +241,7 @@ pub fn apply(
 ///
 /// 为什么要显示坐标而不是只显示 `W×H`：同一张图上"复制了哪一块"是用户下一步粘贴时
 /// 唯一的参照（粘贴锚点 = 鼠标格**按源奇偶对齐后**的格，不是源位置，也不是点击点本身 ——
-/// 见内核 `Clipboard::anchor` 与 `RegionCopy.cs:70`）。
+/// 见内核 `Clipboard::anchor` 与 `_upstream/CrystalStudio/RegionCopy.cs:70`）。
 pub fn status_text(sel: Option<Selection>, clip: Option<&Clipboard>) -> Option<String> {
     let clip_dims = clip.map(|c| (c.width(), c.height()));
     match (sel, clip_dims) {

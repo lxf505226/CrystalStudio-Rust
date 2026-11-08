@@ -178,7 +178,7 @@ pub struct Cli {
     /// 不是另写一条"只影响绘制"的旁路；也**不产生回执**（回执会改状态栏文字，
     /// 那样开/关两张图的像素差就不止落在格线上了 —— 见验收口径）。
     ///
-    /// ⚠ 2026-11-05 起网格**默认开**（官方 `MainWindow.axaml:5` 的 `IsChecked="True"`）
+    /// ⚠ 2026-11-05 起网格**默认开**（官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `IsChecked="True"`）
     /// ⇒ 本开关退化成"幂等的显式开"，**关的手段是 [`Cli::no_cell_grid`]**。
     /// 两者都判在 [`Cli::cell_grid_enabled`] 里，别在别处各写一套优先级。
     pub cell_grid: bool,
@@ -350,7 +350,7 @@ impl Cli {
     /// ```text
     /// --no-cell-grid  ⇒ false        （"关"最明确，两个都给时它赢）
     /// --cell-grid     ⇒ true         （显式开；默认已开 ⇒ 幂等）
-    /// 默认            ⇒ true         （官方 MainWindow.axaml:5 的 IsChecked="True"）
+    /// 默认            ⇒ true         （官方 _upstream/CrystalStudio/MainWindow.axaml:5 的 IsChecked="True"）
     /// ```
     pub fn cell_grid_enabled(&self) -> bool {
         // 三档优先级里只有"关"能翻盘：`--cell-grid` 与默认同值（都是开），
@@ -1283,7 +1283,7 @@ mod tests {
     }
 
     /// `--cell-grid` / `--no-cell-grid` 是**无值开关**，且优先级 `--no-cell-grid` > `--cell-grid`
-    /// > 默认 `true`（官方 `MainWindow.axaml:5` 的 `IsChecked="True"`）。
+    /// > 默认 `true`（官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的 `IsChecked="True"`）。
     ///
     /// 为什么单测这一条：它是"网格开/关两张图做像素差"的唯一无人值守入口，
     /// 一旦被写成要带值（或误把下一个参数当值吞掉），验收脚本会静默拍出两张一样的图。

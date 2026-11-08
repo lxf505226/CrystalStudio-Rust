@@ -5,10 +5,10 @@
 //! | 环节 | 出处 | 内容 |
 //! |---|---|---|
 //! | 菜单开关 | `MainWindow.axaml` 的 `ViewMenu` 段（`CellHoverToggle`） | `ToggleType="CheckBox"`、**没写 `IsChecked`**（缺省不勾）；位置在深色模式之后、单元格网格之前，且**它前面有一条分隔线** |
-//! | 触发 | `CellHover.cs:9-19` | 指针移动 / 悬停 / 文档变化 / 窗口失焦 ⇒ 刷新；指针移出视口 ⇒ 隐藏 |
+//! | 触发 | `_upstream/CrystalStudio/MainWindow.CellHover.cs:9-19` | 指针移动 / 悬停 / 文档变化 / 窗口失焦 ⇒ 刷新；指针移出视口 ⇒ 隐藏 |
 //! | 显示条件 | `:31-42` | 开关勾上 **且** 指针在视口内 **且** 该格在地图内；任一不满足 ⇒ 隐藏（**不画空框**） |
 //! | 内容 | `:56-63` | ① 坐标行（`:58` 的 `"Cell {0:N0}, {1:N0}"` ⇒ **千分位**，见 [`crate::cellinfo::千分位`]） ② 可行走行（不可行走用**红**） ③ 六组「标题: 值」 |
-//! | 几何 | `MainWindow.axaml:87` + `CellHover.cs:45-53` | 宽 **350** / Padding **12** / CornerRadius **6**；面板放在指针 **+16 右 / +8 下**，右侧越界就**翻到左侧**，四边各夹 **8**；最大高 = 窗口高 **−16** |
+//! | 几何 | `_upstream/CrystalStudio/MainWindow.axaml:87` + `_upstream/CrystalStudio/MainWindow.CellHover.cs:45-53` | 宽 **350** / Padding **12** / CornerRadius **6**；面板放在指针 **+16 右 / +8 下**，右侧越界就**翻到左侧**，四边各夹 **8**；最大高 = 窗口高 **−16** |
 //!
 //! # 二、本仓实现的三段（取数 / 排版 / 绘制分开，与既有模块同一纪律）
 //!
@@ -34,7 +34,7 @@
 //!
 //! # 四、**不持久化**
 //!
-//! 上游 `CellHoverToggle` 只是运行期勾选态（`CellHover.cs:31` 每帧读 `IsChecked`），
+//! 上游 `CellHoverToggle` 只是运行期勾选态（`_upstream/CrystalStudio/MainWindow.CellHover.cs:31` 每帧读 `IsChecked`），
 //! `SettingsStore` 里没有它。本仓同口径：开关只在内存里
 //! （[`crate::menu::settings::Settings`] 仍然只有 `dark` + `recent` 两个字段）。
 
@@ -91,7 +91,7 @@ impl Panel {
         match kind {
             Row::Coord => t::ui().text,
             Row::Detail => t::ui().text_muted,
-            // 官方 `CellHover.cs:61`：不可行走 = `Brushes.Red`，可行走 = `ThemeE5E9F0`
+            // 官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:61`：不可行走 = `Brushes.Red`，可行走 = `ThemeE5E9F0`
             Row::Walkable => t::ui().text,
         }
     }
@@ -116,7 +116,7 @@ impl Panel {
     }
 }
 
-/// **位置算式**（官方 `CellHover.cs:47-53` 的逐条翻译），纯几何、可单测。
+/// **位置算式**（官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:47-53` 的逐条翻译），纯几何、可单测。
 ///
 /// ```text
 /// left = anchor.x + 16                 // :49
@@ -331,7 +331,7 @@ mod tests {
         assert_eq!(p.rows[0].0, Row::Coord);
         assert_eq!(p.rows[1].0, Row::Walkable);
         assert!(p.rows[2..].iter().all(|(k, _)| *k == Row::Detail));
-        // 面板在指针**右下**（+16 / +8），指针自身不在框内 —— 官方 `CellHover.cs:49,53` 同款
+        // 面板在指针**右下**（+16 / +8），指针自身不在框内 —— 官方 `_upstream/CrystalStudio/MainWindow.CellHover.cs:49,53` 同款
         assert!(
             p.rect.left() >= anchor.x + m::HOVER_OFFSET_X - 0.01,
             "面板必须在指针右侧：{p:?}"

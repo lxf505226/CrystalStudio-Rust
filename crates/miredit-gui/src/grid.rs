@@ -14,8 +14,8 @@
 //! 而 1× 时视口只看得到约 21×26 格 ⇒ 每帧只画 40~50 条线，与地图多大无关。
 //!
 //! 枚举完再按**地图范围**夹两次（[`lines_in`] 的 `map` 参数），两处都照官方
-//! `CrystalStudio/MapViewport.Presentation.cs:37-39@901dbe2f`（枚举窗口）与
-//! `:58-61@901dbe2f`（线段端点）：
+//! `_upstream/CrystalStudio/MapViewport.Presentation.cs:37-39`（枚举窗口）与
+//! `:58-61`（线段端点）：
 //!
 //! 1. **夹枚举**：`Math.Max(0, …)` / `Math.Min(Document.Width/Height, …)`
 //!    ⇒ 图外那些格边界根本不进列表；
@@ -35,7 +35,7 @@
 //!
 //! 上游 `901dbe2f`（2026-11-05 07:17）把 `MapViewport.Presentation.cs` 的网格整段换了：
 //! **删掉了 `if (GridVisible && Zoom >= .4)` 的 0.4 门槛**，改成「永远画 + 抽稀」
-//! （`:51-61@901dbe2f`）：
+//! （`:51-61`）：
 //!
 //! ```text
 //! if (GridVisible)
@@ -73,7 +73,7 @@
 //!
 //! # 四、笔宽 = `1/Zoom`（屏上恒 1px）与整像素对齐
 //!
-//! 官方 `:57@901dbe2f` 的笔宽是**世界单位** `1 / Zoom` ⇒ 乘回 `Zoom` 后**屏幕恒 1px**
+//! 官方 `:57` 的笔宽是**世界单位** `1 / Zoom` ⇒ 乘回 `Zoom` 后**屏幕恒 1px**
 //! （旧版是固定 0.6，那行已被 `901dbe2f` 删除）。本仓画的是屏幕空间矩形，
 //! 故直接取 [`crate::metrics::GRID_LINE_W`] = **1 屏幕像素**，不随缩放变粗。
 //! 每条线的屏幕坐标**四舍五入到整像素**：egui 的矩形是浮点，1px 的线若落在 x=100.5
@@ -82,7 +82,7 @@
 //!
 //! # 五、默认**开**（照官方 `IsChecked="True"`）
 //!
-//! 官方 `CrystalStudio/MainWindow.axaml:5` 的「单元格网格」是
+//! 官方 `_upstream/CrystalStudio/MainWindow.axaml:5` 的「单元格网格」是
 //! `ToggleType="CheckBox"` + `IsChecked="True"` ⇒ **默认勾选**。
 //!
 //! 本仓 2026-11-05 之前默认**关**，理由两条（都还成立，但已不足以压过"与官方形态一致"）：
@@ -117,12 +117,12 @@ pub struct Lines {
     pub ys: Vec<f32>,
     /// 本帧的**抽稀步长** `step`（1 = 每格一条、2 = 隔一格一条…）。
     ///
-    /// 由 [`step_for`] 按当前缩放算出（官方 `:55-56@901dbe2f`）。诊断行
+    /// 由 [`step_for`] 按当前缩放算出（官方 `:55-56`）。诊断行
     /// [`tx::DIAG_GRID`] 里那个「每 N 格一条」就是这个值 —— 验收靠它核对抽稀真的生效。
     pub step: u32,
     /// 竖线要画的**纵向屏幕范围** `(上, 下)` —— 已被地图夹过。
     ///
-    /// 为什么线不能横贯整个画布：官方 `MapViewport.Presentation.cs:59@901dbe2f`
+    /// 为什么线不能横贯整个画布：官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:59`
     /// `dc.DrawLine(pen, new(x * 48, y0 * 32), new(x * 48, y1 * 32))` 里
     /// **线段的两个端点也是夹过的格下标**（`y0 = Math.Max(0, …)`、`y1 = Math.Min(Height, …)`）。
     /// 只夹"枚举哪些格"而不夹"每条线画多长"，图外照样会拖出一条条整屏的线
@@ -146,7 +146,7 @@ impl Lines {
 
 /// 抽稀步长 `step` —— **唯一判据**（绘制与测试共用）。
 ///
-/// 官方 `MapViewport.Presentation.cs:55-56@901dbe2f`：
+/// 官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:55-56`：
 /// `int step = 1; while (step * 32 * Zoom < 8) step *= 2;`
 /// —— 屏幕上相邻两条线**至少 8px**。
 ///
@@ -177,7 +177,7 @@ fn line_pos(origin: f32, pan: f32, scale: f32, world: f32) -> f32 {
     (origin + (world - pan) * scale).round()
 }
 
-/// 把世界格下标向上取整到 `step` 的整数倍（官方 `:58`/`:60@901dbe2f`
+/// 把世界格下标向上取整到 `step` 的整数倍（官方 `:58`/`:60`
 /// 的 `(x0 + step - 1) / step * step`）。
 ///
 /// 用 `div_euclid` 而不是 `/`：兼容档（[`lines`]，不知道地图多大）允许下标为负，
@@ -202,7 +202,7 @@ pub fn lines(view: &CanvasView, canvas: Rect) -> Lines {
 
 /// [`lines`] 的**带地图范围**版本：只画 `[0, map_w] × [0, map_h]` 内的格边界。
 ///
-/// 夹范围这一步照官方 `CrystalStudio/MapViewport.Presentation.cs:37-39@901dbe2f`：
+/// 夹范围这一步照官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:37-39`：
 ///
 /// ```text
 /// int x0 = Math.Max(0, (int)Math.Floor(-origin.X / Zoom / 48));   // 左边界夹到 0
@@ -214,7 +214,7 @@ pub fn lines(view: &CanvasView, canvas: Rect) -> Lines {
 /// 视口整块在地图外时（比如把图拖出屏幕）返回空集，而不是画一片空白格。
 ///
 /// **抽稀**（模块文档 §三）在夹完范围之后做：起点先按 `ceil_to_step` 对齐到 `step` 的倍数，
-/// 再 `+= step` 前进（官方 `:58`/`:60@901dbe2f` 的循环头）。
+/// 再 `+= step` 前进（官方 `:58`/`:60` 的循环头）。
 ///
 /// 三档语义（**不许混**）：
 /// * `None` —— 不知道地图多大 ⇒ 不夹（老行为，兼容档）；
@@ -251,7 +251,7 @@ pub fn lines_in(view: &CanvasView, canvas: Rect, map: Option<(u16, u16)>) -> Lin
             return Lines::default();
         }
     }
-    // 抽稀步长（官方 `:55-56@901dbe2f`）：屏幕上相邻两条线至少 8px
+    // 抽稀步长（官方 `:55-56`）：屏幕上相邻两条线至少 8px
     let step = step_for(view.scale) as i32;
     let si0 = ceil_to_step(i0, step);
     let sj0 = ceil_to_step(j0, step);
@@ -286,7 +286,7 @@ pub fn lines_in(view: &CanvasView, canvas: Rect, map: Option<(u16, u16)>) -> Lin
         }
         j += step;
     }
-    // 线段端点也要夹（官方 `:59`/`:61@901dbe2f` 的 `DrawLine` 端点就是夹过的格下标，
+    // 线段端点也要夹（官方 `:59`/`:61` 的 `DrawLine` 端点就是夹过的格下标，
     // 而且取的是**夹过的窗口端点** `y0/y1`、`x0/x1`，不是抽稀后的起点 —— 别顺手改）。
     let y_span = (
         line_pos(canvas.top(), view.pan_y, view.scale, j0 as f32 * m::CELL_H)
@@ -320,7 +320,7 @@ pub fn draw(p: &Painter, canvas: Rect, view: &CanvasView) {
     draw_in(p, canvas, view, None);
 }
 
-/// [`draw`] 的**带地图范围**版本：图外一条线都不画（官方 `Presentation.cs:37-39@901dbe2f`）。
+/// [`draw`] 的**带地图范围**版本：图外一条线都不画（官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:37-39`）。
 ///
 /// `map = Some((w, h))` 按地图夹范围；`Some((0, _))` / `Some((_, 0))` = **没有地图**
 /// ⇒ 一条线都不画；`None` = 不知道地图多大 ⇒ 不夹（老行为）。三档语义见 [`lines_in`]。
@@ -509,7 +509,7 @@ mod tests {
 
     /// **抽稀步长四档**（锁定新语义：`step` 而不是 0.4 阈值）。
     ///
-    /// 依据 = 官方 `MapViewport.Presentation.cs:55-56@901dbe2f`
+    /// 依据 = 官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:55-56`
     /// `while (step * 32 * Zoom < 8) step *= 2`，`<` 不含等号 ⇒ 0.25× 仍是 1。
     ///
     /// ⚠ 这条取代了旧的 `缩放阈值判据`：旧用例守的是"阈值必须是官方 0.4"，而上游
@@ -699,7 +699,7 @@ mod tests {
         }
     }
 
-    /// **格线裁到地图边界**：官方 `Presentation.cs:37-39@901dbe2f` 把枚举窗口夹成
+    /// **格线裁到地图边界**：官方 `_upstream/CrystalStudio/MapViewport.Presentation.cs:37-39` 把枚举窗口夹成
     /// `Math.Max(0, …) … Math.Min(Document.Width/Height, …)` ⇒ 图外一条线都不画。
     ///
     /// 判据三条：① 带地图范围时，最右/最下的线正好落在**地图右下边界**上，再往外没有线；
@@ -749,7 +749,7 @@ mod tests {
             all.ys.len(),
             ls.ys.len()
         );
-        // ②b **线段长度也要夹**（官方 `:59`/`:61@901dbe2f` 的 `DrawLine` 端点就是夹过的格下标）：
+        // ②b **线段长度也要夹**（官方 `:59`/`:61` 的 `DrawLine` 端点就是夹过的格下标）：
         //     只夹"枚举哪些格"、不夹"每条线多长"，图外照样会拖出整屏的线
         //     （2026-11-05 截图取证实测：图外 20361 px 差异，全来自这半条判据）。
         assert!(
@@ -918,7 +918,7 @@ mod tests {
 
     /// **线宽恒 1px**：在 0.5 与 0.1 两档下量**同一条线**（世界 `x = 0` 那条竖线）的屏幕宽度。
     ///
-    /// 官方口径是**世界单位**笔宽 `1 / Zoom`（`MapViewport.Presentation.cs:57@901dbe2f`），
+    /// 官方口径是**世界单位**笔宽 `1 / Zoom`（`_upstream/CrystalStudio/MapViewport.Presentation.cs:57`），
     /// 乘回 `Zoom` 后**屏幕恒 1px** —— 所以两档必须量出同一个数（旧版固定 0.6 已随上游删除）。
     #[test]
     fn 两档缩放线宽都恒一像素() {

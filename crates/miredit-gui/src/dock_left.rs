@@ -5,7 +5,7 @@
 //!
 //! # 工具选项面板：胶囊与滑块都是**真值**（2026-11-04 审计 P0-5 收口）
 //!
-//! - 胶囊文字 = 当前工具 + 当前笔刷尺寸（`7×7` / `填充`，官方 `MainWindow.axaml.cs:932` 的三分支），
+//! - 胶囊文字 = 当前工具 + 当前笔刷尺寸（`7×7` / `填充`，官方 `_upstream/CrystalStudio/MainWindow.axaml.cs:1068` 的三分支），
 //!   由 [`crate::screen_text::pill_text`] 装配，**不是写死的 `3×3`**；
 //! - 金色滑块的位置 = 当前尺寸在 3..=31 里的比例（[`thumb_rect`]），尺寸 3 时正好落在
 //!   参考截图那个位置，所以视觉基准不变；
@@ -263,7 +263,7 @@ fn draw_dyn_sel(p: &Painter, l: &Layout, d: &DocText, prefix: &str) {
 
 /// 画笔胶囊的**外框尺寸 = 上游算式**（A17，2026-11-08；推导见 [`m::PILL_MIN_W`]）。
 ///
-/// 上游 `CrystalStudio/MainWindow.axaml:6`：
+/// 上游 `_upstream/CrystalStudio/MainWindow.axaml:6`：
 /// `<Border CornerRadius="4" Padding="5,2"><TextBlock x:Name="BrushSizeLabel"
 ///   Text="3×3" MinWidth="35" TextAlignment="Center" FontWeight="SemiBold" /></Border>`
 /// ⇒ 宽 = `max(MinWidth 35, 文字宽) + Padding 5×2`；高 = `文字高 + Padding 2×2`。
@@ -297,7 +297,7 @@ fn pill_text_size(p: &Painter, text: &str) -> egui::Vec2 {
 ///
 /// **尺寸按上游算式现算**（宽 `max(35, 文字宽)+10`、高 `文字高+4`），
 /// 不再用固定 45×22 —— 原值「截图实测 `x92..136` 宽 44~45、高 22」保留作历史引用，
-/// 2026-11-08 按上游 `MainWindow.axaml:6` 改为动态。
+/// 2026-11-08 按上游 `_upstream/CrystalStudio/MainWindow.axaml:6` 改为动态。
 /// `PILL_X`（左偏移 84）**不参与算式**，仍是布局偏移。
 fn pill_rect(p: &Painter, l: &Layout, d: &DocText) -> Rect {
     let c = l.p_tool_options.content;
@@ -476,7 +476,7 @@ pub fn dyn_labels(p: &Painter, l: &Layout, d: &DocText) -> Vec<DynLabel> {
     // ⓪ 工具选项胶囊：`7×7` / `填充`（**运行期数据**，见 [`crate::screen_text::pill_text`]）
     //
     //    胶囊外框**按上游算式现算**（[`pill_rect`]）：宽 `max(35, 文字宽)+10`、高 `文字高+4`
-    //    —— 上游 `MainWindow.axaml:6` 里没有固定宽高，45×22 是截图里「内容撑出来」的结果。
+    //    —— 上游 `_upstream/CrystalStudio/MainWindow.axaml:6` 里没有固定宽高，45×22 是截图里「内容撑出来」的结果。
     let pill = pill_rect(p, l, d);
     out.push(DynLabel::new(
         "tool_options.pill",
@@ -628,7 +628,7 @@ fn draw_tool_options(p: &Painter, l: &Layout, d: &DocText) {
     // 不再另画一个灰 thumb（早期版本多画一块灰 thumb，实测会与色块粘成一条双色条）。
     //
     // **本版起它的横向位置是真实数据**：按当前笔刷尺寸在 3..=31 里的位置摆放
-    // （官方滑块 `Minimum=3 Maximum=31`，`MainWindow.axaml:6`）。
+    // （官方滑块 `Minimum=3 Maximum=31`，`_upstream/CrystalStudio/MainWindow.axaml:6`）。
     // 尺寸 = 3（缺省）时它正好落在参考截图那个位置（左端），所以视觉基准不变。
     let swatch = thumb_rect(l, d);
     pt::fill_round(p, swatch, 2.0, t::ui().color_swatch);
@@ -640,7 +640,7 @@ fn draw_tool_options(p: &Painter, l: &Layout, d: &DocText) {
     );
     pt::fill(p, track, t::ui().panel_header);
 
-    // ③ 胶囊底（上游 `MainWindow.axaml:6`：`CornerRadius="4" Padding="5,2"` + `MinWidth="35"`）；
+    // ③ 胶囊底（上游 `_upstream/CrystalStudio/MainWindow.axaml:6`：`CornerRadius="4" Padding="5,2"` + `MinWidth="35"`）；
     //    尺寸**按算式现算**（[`pill_rect`]），原「45×22（截图 y=280 行 `x92..136` 为 `#ECEEF0`）」
     //    保留作历史引用 —— 2026-11-08 按上游算式改为动态。
     //    胶囊里的字是动态的，由 `draw_dyn_sel(p, l, d, "tool_options.")` 画。
@@ -1009,7 +1009,7 @@ mod tests {
 
     /// **胶囊文字放得进胶囊**：最大尺寸 `31×31` 也必须完整显示（否则会被截成 `…`）。
     ///
-    /// 胶囊宽不再是固定 45（原为截图实测 `x92..136`，2026-11-08 按上游 `MainWindow.axaml:6`
+    /// 胶囊宽不再是固定 45（原为截图实测 `x92..136`，2026-11-08 按上游 `_upstream/CrystalStudio/MainWindow.axaml:6`
     /// 的算式改为动态：`max(MinWidth 35, 文字宽) + Padding 5×2`）—— 这条钉住
     /// "尺寸到顶也不溢出、不被截断"。
     #[test]
@@ -1047,7 +1047,7 @@ mod tests {
         }
     }
 
-    /// **A17：胶囊尺寸 = 上游算式**（`MainWindow.axaml:6`）—— 5 组输入，期望值**手算**。
+    /// **A17：胶囊尺寸 = 上游算式**（`_upstream/CrystalStudio/MainWindow.axaml:6`）—— 5 组输入，期望值**手算**。
     ///
     /// 上游：`<Border CornerRadius="4" Padding="5,2">` 套 `<TextBlock MinWidth="35" …/>`
     /// ⇒ 宽 = `max(35, 文字宽) + 5 + 5`、高 = `文字高 + 2 + 2`。

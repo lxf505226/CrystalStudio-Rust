@@ -516,7 +516,7 @@ impl MiniMap {
 /// 小地图的两块矩形：`(地图区, 视口框)`；没打开地图 ⇒ `None`（**一个框都不画**）。
 ///
 /// - **地图区**：按 `map.width × map.height` 的**世界像素**等比缩放进 `block.shrink(6)`
-///   （保持长宽比、居中）—— 上游 `MapMinimap.Avalonia.cs:19-21` 的 `MapBounds` 用
+///   （保持长宽比、居中）—— 上游 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:19-21` 的 `MapBounds` 用
 ///   `(ActualWidth - 12) / w` 定倍数、`(ActualWidth - w*scale) / 2` 定位置，
 ///   `-12` 是两边合计 ⇒ 等价于每边内缩 [`m::MINIMAP_FIT_INSET`] = 6。
 ///   所以地图区是"这张图的形状"，不是装饰；返回值就是后续绘制/交互要用的**实际**矩形。
@@ -562,7 +562,7 @@ pub fn minimap_rects(block: Rect, mini: &MiniMap) -> Option<(Rect, Rect)> {
     Some((map, vb))
 }
 
-/// 小地图像素 → 世界像素（上游 `MapMinimap.Avalonia.cs:70-75` 的 `WorldAt` **逐字**）。
+/// 小地图像素 → 世界像素（上游 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:70-75` 的 `WorldAt` **逐字**）。
 ///
 /// 上游原文（`_upstream/CrystalStudio/`，文件 sha256 前 8 位 `11f92126`）：
 ///
@@ -649,7 +649,7 @@ pub struct MiniDraw {
 
 /// 画小地图：**有地图** ⇒ 按真实几何画地图区（+ 内容图）+ 视口框；
 /// **没地图** ⇒ 只画空块 + 如实文案。
-/// 视口框的三层绘制计划（上游 `MapMinimap.Avalonia.cs:61-67`）：**顺序即语义**。
+/// 视口框的三层绘制计划（上游 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:61-67`）：**顺序即语义**。
 ///
 /// 每项 = `(向外扩张量, 环宽, 颜色)`；`环宽 == 0` 表示"填充层"。
 ///
@@ -757,7 +757,7 @@ fn draw_minimap(p: &Painter, l: &Layout, mini: &MiniMap, art: &MiniArt<'_>) -> M
 
     // 视口框：位置/大小全部来自真实 pan/scale/地图尺寸。
     //
-    // 上游 `MapMinimap.Avalonia.cs:61-68` 的顺序（逐字）：
+    // 上游 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:61-68` 的顺序（逐字）：
     //   ① `fill(ARGB(35,255,255,255))` ② `Pen(Black, 4)` ③ `Pen(White, 2)`
     //   最后 `:68` 才给地图区描 1px 外框（所以外框画在视口框**之后**）。
     //
@@ -1343,7 +1343,7 @@ mod tests {
         assert!(minimap_rects(block, &MiniMap::new(Some((0, 0)), (0, 0, 10, 10))).is_none());
     }
 
-    /// **视口框按上游三层顺序与环宽绘制**（`MapMinimap.Avalonia.cs:61-67`）。
+    /// **视口框按上游三层顺序与环宽绘制**（`_upstream/CrystalStudio/MapMinimap.Avalonia.cs:61-67`）。
     ///
     /// 这条钉的是**顺序**（先填充后描边）、**环宽**（4 外 2 内）、**颜色**（半透明白 / 纯黑 /
     /// 纯白，上游硬编码 `Pens.Black/White` 不走主题）。像素级位置不验（`border_w` 是内贴、
@@ -1493,7 +1493,7 @@ mod tests {
         }
     }
 
-    /// `minimap_world_at`：四角 / 中心 / 区外四方向 / 空矩形（上游 `MapMinimap.Avalonia.cs:70-75`）。
+    /// `minimap_world_at`：四角 / 中心 / 区外四方向 / 空矩形（上游 `_upstream/CrystalStudio/MapMinimap.Avalonia.cs:70-75`）。
     ///
     /// 用**真实**的 `minimap_rects` 输出当 `map`（不是另编一个矩形），
     /// 于是"四角 ⇒ 世界四角"同时验证了 fit 与换算两段的组合。
