@@ -1458,7 +1458,7 @@ dependencies = [
 
 [[package]]
 name = "mir2-assets"
-version = "20261107.0.0"
+version = "2026.11.8+a"
 dependencies = [
  "flate2",
  "image",
@@ -1467,15 +1467,15 @@ dependencies = [
 
 [[package]]
 name = "mir2-format"
-version = "20261107.0.0"
+version = "2026.11.8+a"
 
 [[package]]
 name = "mir2-map"
-version = "20261107.0.0"
+version = "2026.11.8+a"
 
 [[package]]
 name = "mir2-stamp"
-version = "20261107.0.0"
+version = "2026.11.8+a"
 dependencies = [
  "serde",
  "serde_json",
@@ -1483,7 +1483,7 @@ dependencies = [
 
 [[package]]
 name = "miredit-core"
-version = "20261107.0.0"
+version = "2026.11.8+a"
 dependencies = [
  "mir2-assets",
  "mir2-format",
@@ -1493,7 +1493,7 @@ dependencies = [
 
 [[package]]
 name = "miredit-gui"
-version = "20261107.0.0"
+version = "2026.11.8+a"
 dependencies = [
  "ab_glyph",
  "eframe",
@@ -1508,7 +1508,7 @@ dependencies = [
 
 [[package]]
 name = "miredit-render"
-version = "20261107.0.0"
+version = "2026.11.8+a"
 dependencies = [
  "mir2-assets",
  "mir2-map",
@@ -1519,7 +1519,7 @@ dependencies = [
 
 [[package]]
 name = "miredit-web"
-version = "20261107.0.0"
+version = "2026.11.8+a"
 dependencies = [
  "axum",
  "mir2-assets",

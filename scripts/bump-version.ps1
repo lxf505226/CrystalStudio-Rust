@@ -8,37 +8,62 @@
     三种用法（互斥）：
 
       -Check
-          只读校验：根 [workspace.package].version 可读且是合法**日期版本**（<YYYYMMDD>.<轮次>.<修正>）；
-          crates/ 下 8 个 crate 都是 version.workspace = true；vendor/wil2atlas 作为
-          vendored 上游例外单独报（不参与比对）。一致 ⇒ 退出码 0，不一致 ⇒ 退出码 1。
+          只读校验：根 [workspace.package].version 可读且是合法版本号（形态见下）；crates/ 下
+          8 个 crate 都是 version.workspace = true；vendor/wil2atlas 作为 vendored 上游例外
+          单独报（不参与比对）。一致 ⇒ 退出码 0，不一致 ⇒ 退出码 1。
+          另做「不倒退」一致性校验（现行方案才判，跨方案/无标题只提示）：当前版本的日期段
+          不得早于 CHANGELOG 里上一版，同日字母不得重复、不得倒退。
+          ⚠ build metadata 不参与 SemVer 比较 ⇒ **不再**用「三段数值严格递增」当判据。
 
-      -Part patch|minor|major
-          日期版本递增（VERSIONING.md §二）：
-            patch  ⇒ <日期>.<轮次>.<修正+1>（同一轮内再推一次，只修不增）
-            minor  ⇒ <日期>.<轮次+1>.0        （当天另起一轮，通常夹带新能力）
-            major  ⇒ <今天日期>.0.0           （换一天；若今天日期与当前日期相同则拒绝，
-                                                避免同一天靠 major 重复发版）
-          三段都严格递增、可比大小；日期段用系统当天（yyyyMMdd，精确校验合法日历日）。
+      -Part same-day|next-day
+          现行方案递增（VERSIONING.md §2.1）：
+            same-day ⇒ 同日字母 +1：2026.11.8+a → 2026.11.8+b → … → +z
+                        当前版本没有字母 ⇒ +a（用户口径：当天第 1 个也带 a）
+                        当前版本日期段不是今天 ⇒ 拒绝（换天请用 next-day）
+                        已经是 +z ⇒ 拒绝（当天 26 个用尽，次日再发）
+            next-day  ⇒ 换天：<今天日期>+a
+                        当前版本日期段已经是今天 ⇒ 拒绝（同日请用 same-day）
 
-      -Set <YYYYMMDD>.<轮次>.<修正>
-          显式设成指定日期版本（严格格式校验；date 必须是合法日历日，轮次/修正不带前导零）。
+          旧三段档位 patch / minor / major 仍可传，但**只是兼容别名**，会先打印映射再按新语义走：
+            patch  ⇒ same-day   （旧义「同轮内再修」= 同一天再推一次）
+            minor  ⇒ same-day   （旧义「当天另起一轮」= 同一天再推一次；新方案里「轮次」就是字母）
+            major  ⇒ next-day   （旧义「换一天」）
+          ⚠ 旧方案里 patch 与 minor 的区别（轮内修正 vs 另起一轮）在新方案下**没有对应语义**，
+          两者合并成「同日字母 +1」；脚本每次用到旧别名都会打印这条映射，不静默。
+
+      -Set <版本号>
+          显式设成指定版本（严格格式校验）。用于方案切换首版、或手工纠偏。
+          接受现行方案 2026.11.8+a 与历史 20261108.0.0；不接受预发布形态（含 `-`）。
+
+    版本号三种合法形态（都受 -Check 接受）：
+      1) 现行方案（2026-11-08 用户拍板）  年.月.日[+单个小写字母]   例 2026.11.8+a
+         用户要的形态是 2026.11.08a，但 cargo 两种写法都拒：
+           `2026.11.8a`  ⇒ unexpected character 'a' after patch version number
+           `2026.11.08a` ⇒ invalid leading zero in patch version number（报的是前导零，不是字母）
+         所以同日字母走 build metadata：`2026.11.8+a`。git tag 不受 SemVer 约束，
+         用用户要的形态：`v2026.11.08a`（见 Get-TagName）。
+      2) 历史 8 位日期（2026-11-07 ~ 2026-11-08 用过）  <YYYYMMDD>.<轮次>.<修正>  例 20261108.0.0
+      3) 更早的 0.x.y  例 0.7.0
+      2)/3) 只作为**切换起点**被容忍，不再用它递增（要切到现行方案请 -Set 2026.11.8+a）。
 
     -Part / -Set 只做两件事：
       1) 改根 Cargo.toml 的 [workspace.package].version（只改这一行，别的文件不碰）；
-      2) 把 CHANGELOG.md 的 `## [Unreleased]` 改成 `## [<日期版本>] - <系统当天日期>`，
+      2) 把 CHANGELOG.md 的 `## [Unreleased]` 改成 `## [<版本号>] - <系统当天日期>`，
          并在顶部重建一个空的 `## [Unreleased]`。
     脚本不伪造变更条目、不碰 git、不打 tag、不跑测试；写完会复读复核，最后打印发布清单。
 
-    规则出处：VERSIONING.md §5.1（档位判据）、§5.2（判定算法）、§5.3（本脚本）、§六（发布清单）。
+    规则出处：VERSIONING.md §二（版本号格式与递增）、§5.1（档位判据）、§5.2（判定算法）、
+    §5.3（本脚本）、§六（发布清单）。
 
 .PARAMETER Check
     只校验，不写盘。
 
 .PARAMETER Part
-    递增哪一段：patch / minor / major。
+    递增档位：same-day（同日字母 +1）/ next-day（换天，字母回到 a）。
+    旧别名 patch / minor ⇒ same-day，major ⇒ next-day（兼容保留，每次会打印映射）。
 
 .PARAMETER Set
-    目标版本号，形如 1.2.3。
+    目标版本号，形如 2026.11.8+a（现行方案）/ 20261108.0.0（历史 8 位日期）。
 
 .PARAMETER Root
     项目根目录。缺省 = 本脚本所在目录（scripts/）的上一级。仅供从别处调用或用夹具测试时使用。
@@ -47,10 +72,10 @@
     pwsh -File scripts/bump-version.ps1 -Check
 
 .EXAMPLE
-    pwsh -File scripts/bump-version.ps1 -Part minor
+    pwsh -File scripts/bump-version.ps1 -Part same-day
 
 .EXAMPLE
-    pwsh -File scripts/bump-version.ps1 -Set 20261107.0.0
+    pwsh -File scripts/bump-version.ps1 -Set 2026.11.8+a
 
 .NOTES
     退出码：0 = 成功；1 = 校验失败或前置条件不满足（含「根 Cargo.toml 缺 [workspace.package]」）。
@@ -62,7 +87,6 @@ param(
     [switch]$Check,
 
     [Parameter(ParameterSetName = 'Part', Mandatory = $true)]
-    [ValidateSet('patch', 'minor', 'major')]
     [string]$Part,
 
     [Parameter(ParameterSetName = 'Set', Mandatory = $true)]
@@ -88,16 +112,24 @@ $ExpectedCrateCount = 8
 # vendored 的上游解码器子集：保留它自己的版本，不随本仓 bump（VERSIONING.md §二/§3.1）
 $VendoredManifest = 'vendor/wil2atlas/Cargo.toml'
 
-# 日期版本：<YYYYMMDD>.<当天轮次>.<轮内修正>（VERSIONING.md §二，2026-11-07 用户拍板）
-#   - 第一段是 8 位合法日历日；后两段是不带前导零的十进制整数
-#   - 示例：20261107.0.0 → 20261107.0.1（同轮再修）→ 20261107.1.0（另起一轮）→ 20261108.0.0（换天）
-#   - 仍是合法 SemVer 三段数字（Cargo 接受），但语义不再是 0.x 的 major/minor/patch
+# ── 现行方案（2026-11-08 用户拍板，VERSIONING.md §二）：年.月.日[+单个小写字母] ──
+#   - 三段都不带前导零（cargo 会拒 `2026.11.08`：invalid leading zero in patch version number）
+#   - 日期段必须是合法日历日（2026.2.30 挡掉）
+#   - 附加段只允许**单个小写字母** a-z：a = 当天第 1 个发布，b = 第 2 个 … z = 第 26 个
+#   - cargo 不接受 `2026.11.8a`（unexpected character 'a' after patch version number），
+#     所以同日字母必须走 build metadata：`2026.11.8+a`
+#   - 示例：2026.11.8+a → 2026.11.8+b（同日再发）→ 2026.11.9+a（换天）
+$DayVersionPattern = '^([0-9]{4})\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:\+([a-z]))?$'
+$DayDateFormat = 'yyyy.M.d'
+
+# ── 历史 8 位日期方案（2026-11-07 ~ 2026-11-08 用过）：<YYYYMMDD>.<当天轮次>.<轮内修正> ──
+#   只作为**切换起点**被 -Check 容忍；不再用它递增（要切到现行方案请 -Set 2026.11.8+a）。
+#   旧 tag / 旧 CHANGELOG 小节按用户拍板「不清理」，原样保留。
 $DateVersionPattern = '^([0-9]{8})\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 $DatePartFormat = 'yyyyMMdd'
 
-# 历史 0.x.y 三段版本号（2026-11-07 之前的旧方案）。
-# 只作为**切换起点**被 -Check 容忍；不许再用 -Part 递增（要切必须 -Set 到日期版本）。
-# 旧 tag / 旧 CHANGELOG 小节按用户拍板「不清理」，原样保留。
+# ── 更早的 0.x.y 三段版本号（2026-11-07 之前） ──
+#   同样只作为切换起点被 -Check 容忍；-Set 不接受它（只能切到现行方案）。
 $LegacyVersionPattern = '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$'
 
 # 新 [Unreleased] 下的占位说明。逐字比对：下次 bump 时只清掉这一行，人写的备注一律保留。
@@ -154,7 +186,7 @@ function Assert-NoBom {
 # ───────────────────────────── TOML 读取（只认当前仓库用到的两种写法） ─────────────────────────────
 
 # 取指定表里的 version 键。返回 $null（表或键不存在），或：
-#   Kind = 'literal'    ⇒ version = "20261107.0.0"（写死，符合单一真源）
+#   Kind = 'literal'    ⇒ version = "2026.11.8+a"（写死，符合单一真源）
 #   Kind = 'workspace'  ⇒ version.workspace = true（正确写法）
 #   Value = 版本号 / 'workspace'；Line = 行号（1 起）
 function Get-TomlVersionEntry {
@@ -186,13 +218,28 @@ function Get-TomlVersionEntry {
     return $null
 }
 
-# ───────────────────────── 日期版本校验 / 递增 ─────────────────────────
+# ─────────────────── 版本号校验 / 解析 / 递增 / 不倒退判据 ───────────────────
 
-function Test-SemVerCore {
+# 现行方案：年.月.日[+单个小写字母]；日期段必须是合法日历日（2026.2.30 挡掉）
+function Test-DayVersion {
+    param([string]$Text)
+    $m = [regex]::Match($Text, $DayVersionPattern)
+    if (-not $m.Success) { return $false }
+    $parsed = [datetime]::MinValue
+    return [datetime]::TryParseExact(
+        "$($m.Groups[1].Value).$($m.Groups[2].Value).$($m.Groups[3].Value)",
+        $DayDateFormat,
+        [System.Globalization.CultureInfo]::InvariantCulture,
+        [System.Globalization.DateTimeStyles]::None,
+        [ref]$parsed
+    )
+}
+
+# 历史 8 位日期方案：8 位日期必须能按 yyyyMMdd 精确解析成合法日历日（20261132 挡掉）
+function Test-DateVersion {
     param([string]$Text)
     $m = [regex]::Match($Text, $DateVersionPattern)
     if (-not $m.Success) { return $false }
-    # 8 位日期必须能按 yyyyMMdd 精确解析成合法日历日（20261132 之类要挡掉）
     $parsed = [datetime]::MinValue
     return [datetime]::TryParseExact(
         $m.Groups[1].Value,
@@ -208,49 +255,176 @@ function Test-LegacyVersion {
     return [regex]::IsMatch($Text, $LegacyVersionPattern)
 }
 
-# -Check 的合法形状：日期版本（新方案）或历史 0.x.y（仅切换起点，不递增）
+# -Check 的合法形状：现行方案 / 历史 8 位日期 / 更早的 0.x.y（后两者只当切换起点）
 function Test-AcceptedVersion {
     param([string]$Text)
-    return (Test-SemVerCore $Text) -or (Test-LegacyVersion $Text)
+    return (Test-DayVersion $Text) -or (Test-DateVersion $Text) -or (Test-LegacyVersion $Text)
 }
 
-function Get-SemVerParts {
+# 把合法版本号解析成可比较的结构（非法 ⇒ $null）：
+#   Kind       'day'（现行方案）/ 'date8'（历史 8 位）/ 'legacy'（0.x.y）
+#   Date       日期段（[datetime]，仅 day / date8 有；legacy 为 $null）
+#   Letter     同日字母序号：无字母 = 0，a = 1 … z = 26（仅 day 有）
+#   LetterText 同日字母原文：'' 或 'a'..'z'
+function Get-VersionInfo {
     param([string]$Text)
-    $m = [regex]::Match($Text, $DateVersionPattern)
-    if (-not $m.Success) { return $null }
-    return [pscustomobject]@{
-        Date   = $m.Groups[1].Value
-        Round  = [int]$m.Groups[2].Value
-        Fix    = [int]$m.Groups[3].Value
+
+    if (Test-DayVersion $Text) {
+        $m = [regex]::Match($Text, $DayVersionPattern)
+        $parsed = [datetime]::MinValue
+        [void][datetime]::TryParseExact(
+            "$($m.Groups[1].Value).$($m.Groups[2].Value).$($m.Groups[3].Value)",
+            $DayDateFormat,
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::None,
+            [ref]$parsed
+        )
+        $letterText = ''
+        $letter = 0
+        if ($m.Groups[4].Success) {
+            $letterText = $m.Groups[4].Value
+            $letter = [int][char]$letterText[0] - [int][char]'a' + 1
+        }
+        return [pscustomobject]@{
+            Kind = 'day'; Text = $Text; Date = $parsed; Letter = $letter; LetterText = $letterText
+        }
     }
+
+    if (Test-DateVersion $Text) {
+        $m = [regex]::Match($Text, $DateVersionPattern)
+        $parsed = [datetime]::MinValue
+        [void][datetime]::TryParseExact(
+            $m.Groups[1].Value,
+            $DatePartFormat,
+            [System.Globalization.CultureInfo]::InvariantCulture,
+            [System.Globalization.DateTimeStyles]::None,
+            [ref]$parsed
+        )
+        return [pscustomobject]@{
+            Kind = 'date8'; Text = $Text; Date = $parsed; Letter = 0; LetterText = ''
+        }
+    }
+
+    if (Test-LegacyVersion $Text) {
+        return [pscustomobject]@{
+            Kind = 'legacy'; Text = $Text; Date = $null; Letter = 0; LetterText = ''
+        }
+    }
+
+    return $null
+}
+
+# 版本形态的中文名（给 -Check / -Set 的输出用）
+function Get-VersionKindLabel {
+    param([string]$Kind)
+    switch ($Kind) {
+        'day' { return '现行方案 年.月.日[+字母]' }
+        'date8' { return '历史 8 位日期' }
+        'legacy' { return '更早的 0.x.y' }
+        default { return "未知形态（$Kind）" }
+    }
+}
+
+# git tag 名不受 SemVer 约束，用用户要的形态：v<yyyy>.<MM>.<dd><字母>（月日补零）
+#   现行方案 2026.11.8+a ⇒ v2026.11.08a；2026.11.8 ⇒ v2026.11.08
+#   历史形态原样加 v 前缀：20261108.0.0 ⇒ v20261108.0.0 / 0.7.0 ⇒ v0.7.0
+function Get-TagName {
+    param([string]$Version)
+
+    $info = Get-VersionInfo $Version
+    if ($null -ne $info -and $info.Kind -eq 'day') {
+        return ('v{0}.{1:00}.{2:00}{3}' -f $info.Date.Year, $info.Date.Month, $info.Date.Day, $info.LetterText)
+    }
+    return "v$Version"
+}
+
+# 现行方案的「不倒退」判据（VERSIONING.md §2.3）：
+#   ⚠ build metadata 不参与 SemVer 比较 ⇒ **不能**再用「三段数值严格递增」判据；
+#   改为：① 日期段不得倒退  ② 同日字母不得重复、不得倒退
+# 返回 $null = 通过（或跨方案不比大小）；否则返回中文原因。
+function Test-VersionNotBackwards {
+    param([string]$NewVersion, [string]$RefVersion)
+
+    $n = Get-VersionInfo $NewVersion
+    $r = Get-VersionInfo $RefVersion
+    if ($null -eq $n -or $null -eq $r) { return $null }
+    # 跨方案（含历史 8 位日期 / 0.x.y）不判大小：方案切换是人的显式动作，不比数值
+    if ($n.Kind -ne 'day' -or $r.Kind -ne 'day') { return $null }
+
+    if ($n.Date -lt $r.Date) {
+        return "目标版本 $NewVersion 的日期段（$($n.Date.ToString('yyyy-MM-dd'))）早于参照版本 $RefVersion 的日期段（$($r.Date.ToString('yyyy-MM-dd'))）—— 日期段不得倒退"
+    }
+    if ($n.Date -eq $r.Date) {
+        if ($n.Letter -eq $r.Letter) {
+            return "目标版本 $NewVersion 与参照版本 $RefVersion 同日同字母（'$($n.LetterText)'）—— 同日字母不得重复"
+        }
+        if ($n.Letter -lt $r.Letter) {
+            return "目标版本 $NewVersion 的字母 '$($n.LetterText)' 小于参照版本 $RefVersion 的字母 '$($r.LetterText)' —— 同日字母不得倒退"
+        }
+    }
+    return $null
+}
+
+# 当天字母的下一档：'' ⇒ 'a'（当天第 1 个也带字母）；'a' ⇒ 'b'；… 'z' ⇒ 用尽（拒绝）
+function Get-NextLetter {
+    param([string]$Current)
+
+    if ([string]::IsNullOrEmpty($Current)) { return 'a' }
+    if ($Current -eq 'z') {
+        Stop-Failure '当天字母已经用到 z，无法再同日递增' @(
+            '现行方案用单个小写字母区分同日发布（a = 第 1 个 … z = 第 26 个）。',
+            '当天 26 个用尽后请次日发布（-Part next-day），或按实际需要重新规划发布节奏。'
+        )
+    }
+    return [string][char]([int][char]$Current[0] + 1)
 }
 
 function Get-NextVersion {
     param([string]$Current, [string]$Kind)
 
-    $v = Get-SemVerParts $Current
-    if ($null -eq $v -or -not (Test-SemVerCore $Current)) {
-        Stop-Failure "当前版本号 '$Current' 不是合法日期版本，拒绝按 -Part 递增" @(
-            '2026-11-07 起版本号改为 <YYYYMMDD>.<轮次>.<修正>；',
-            '旧 0.x.y 只能作为切换起点，请用 -Set <YYYYMMDD>.0.0 显式切到日期版本。'
+    # 旧三段档位：兼容保留，但只当别名，先打印映射再按新语义走（不静默换义）
+    $legacyAlias = @{ 'patch' = 'same-day'; 'minor' = 'same-day'; 'major' = 'next-day' }
+    if ($legacyAlias.ContainsKey($Kind)) {
+        Write-Line "[递增] ⚠ -Part $Kind 是旧三段方案的档位名，现行方案下没有对应语义；按别名映射成 $($legacyAlias[$Kind]) 执行"
+        Write-Line '         patch / minor ⇒ same-day（同一天再推一次，字母 +1）；major ⇒ next-day（换天）'
+        $Kind = $legacyAlias[$Kind]
+    }
+
+    $info = Get-VersionInfo $Current
+    if ($null -eq $info -or $info.Kind -ne 'day') {
+        Stop-Failure "当前版本号 '$Current' 不是现行方案（年.月.日[+字母]），拒绝按 -Part 递增" @(
+            '2026-11-08 起版本号改为「年.月.日 + 同日字母」（例 2026.11.8+a）；',
+            '历史 20261108.0.0 / 0.x.y 只能作为切换起点，请用 -Set 2026.11.8+a 显式切到现行方案。'
         )
     }
-    $today = (Get-Date).ToString($DatePartFormat, [System.Globalization.CultureInfo]::InvariantCulture)
+    $todayDate = (Get-Date).Date
 
     switch ($Kind) {
-        'patch' { return "$($v.Date).$($v.Round).$($v.Fix + 1)" }
-        'minor' { return "$($v.Date).$($v.Round + 1).0" }
-        'major' {
-            if ($today -eq $v.Date) {
-                Stop-Failure '今天已经用这个日期发过版，-Part major 拒绝' @(
-                    "当前版本 $Current 的日期段就是今天（$today）。",
-                    '同一天要再推一次请用 -Part minor（另起一轮）或 -Part patch（轮内修正）；',
-                    '换一天再发时脚本会自动把日期段改成当天。'
+        'same-day' {
+            if ($info.Date -ne $todayDate) {
+                Stop-Failure '-Part same-day 只用于同一天内再发一次' @(
+                    "当前版本 $Current 的日期段是 $($info.Date.ToString('yyyy-MM-dd'))，不是今天（$($todayDate.ToString('yyyy-MM-dd'))）。",
+                    '换天发布请用 -Part next-day（日期段改成今天、字母回到 a）；',
+                    '要给历史某天补一个字母（例如补 2026.11.8+b）请用 -Set 显式指定。'
                 )
             }
-            return "$today.0.0"
+            $nextLetter = Get-NextLetter $info.LetterText
+            return "$($info.Date.Year).$($info.Date.Month).$($info.Date.Day)+$nextLetter"
         }
-        default { Stop-Failure "未知的递增段 '$Kind'" }
+        'next-day' {
+            if ($info.Date -eq $todayDate) {
+                Stop-Failure '今天已经用这个日期发过版，-Part next-day 拒绝' @(
+                    "当前版本 $Current 的日期段就是今天（$($todayDate.ToString('yyyy-MM-dd'))）。",
+                    '同一天要再推一次请用 -Part same-day（字母 +1）。'
+                )
+            }
+            return "$($todayDate.Year).$($todayDate.Month).$($todayDate.Day)+a"
+        }
+        default {
+            Stop-Failure "未知的递增档位 '$Kind'" @(
+                '可选：same-day / next-day（VERSIONING.md §2.1）；旧别名 patch / minor / major 也认。'
+            )
+        }
     }
 }
 
@@ -301,7 +475,7 @@ function Invoke-Precheck {
         $info.RootVersion = $entry.Value
         $info.RootLine = $entry.Line
         if (-not (Test-AcceptedVersion $entry.Value)) {
-            $problems.Add("根 Cargo.toml:$($entry.Line) 的 version = ""$($entry.Value)"" 既不是日期版本（<YYYYMMDD>.<轮次>.<修正>）也不是历史 0.x.y 切换起点")
+            $problems.Add("根 Cargo.toml:$($entry.Line) 的 version = ""$($entry.Value)"" 既不是现行方案（年.月.日[+字母]，例 2026.11.8+a）也不是历史 8 位日期 / 0.x.y 切换起点")
         }
     }
 
@@ -358,6 +532,27 @@ function Invoke-Precheck {
     return [pscustomobject]@{ Problems = $problems; Info = $info }
 }
 
+# ─────────────── CHANGELOG 版本历史（-Check 的「不倒退」参照点） ───────────────
+
+# 按出现顺序（新 → 旧）取出 CHANGELOG.md 里所有「带日期的版本标题」的版本号。
+# 没有 CHANGELOG.md ⇒ $null（上层据此跳过一致性校验并提示，不判红）。
+function Get-ChangelogVersions {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+    $text = Get-FileText $Path
+    # ⚠ 结果变量不叫 $matches：那是 PowerShell 自动变量（变量名大小写不敏感），赋值会盖掉它
+    $found = [regex]::Matches($text, '(?m)^##\s*\[([^\]\r\n]+)\]\s*-\s*\d{4}-\d{2}-\d{2}\s*$')
+    $list = New-Object System.Collections.Generic.List[string]
+    foreach ($m in $found) {
+        $v = $m.Groups[1].Value.Trim()
+        if ($v -ne 'Unreleased') { $list.Add($v) }
+    }
+    # ⚠ 必须用 `,$list` 返回：直接 `return $list` 会被 PowerShell 展开，
+    #    只剩 1 个标题时调用方拿到的是 string（没有 .Count），StrictMode 下直接抛错。
+    return , $list
+}
+
 # ───────────────────────────── -Check ─────────────────────────────
 
 function Invoke-Check {
@@ -375,6 +570,21 @@ function Invoke-Check {
         Write-Line "[检查] 当前版本（[$WorkspaceTable].version）：<缺失>"
     }
 
+    if ($null -ne $info.RootVersion) {
+        $rootInfo = Get-VersionInfo $info.RootVersion
+        if ($null -ne $rootInfo) {
+            Write-Line "[检查] 版本形态：$(Get-VersionKindLabel $rootInfo.Kind)；git tag 形态 = $(Get-TagName $info.RootVersion)"
+            if ($rootInfo.Kind -eq 'day') {
+                if ($rootInfo.Letter -eq 0) {
+                    Write-Line '[检查] 同日字母：<无字母>（本仓发布一律带字母；无字母 = 当天第 0 档）'
+                }
+                else {
+                    Write-Line "[检查] 同日字母：$($rootInfo.LetterText)（当天第 $($rootInfo.Letter) 个发布）"
+                }
+            }
+        }
+    }
+
     Write-Line "[检查] crates/ 下共 $($info.Crates.Count) 个 crate（期望 $ExpectedCrateCount 个）："
     foreach ($c in $info.Crates) {
         switch ($c.Kind) {
@@ -386,6 +596,43 @@ function Invoke-Check {
 
     $vendoredText = if ($null -ne $info.VendoredVersion) { $info.VendoredVersion } else { '<未读到>' }
     Write-Line "[检查] $VendoredManifest：version = $vendoredText（vendored 上游解码器，保留自身上游版本，不随本仓 bump）"
+
+    # ④ 现行方案的「不倒退」一致性（build metadata 不参与 SemVer 比较 ⇒ 不按三段数值比）
+    #    参照点 = CHANGELOG.md 里紧挨在当前版本下面那个版本标题（= 上一次发布）
+    $orderNote = $null
+    if ($null -ne $info.RootVersion) {
+        $changelogVersions = Get-ChangelogVersions -Path (Join-Path $RootPath 'CHANGELOG.md')
+        if ($null -eq $changelogVersions) {
+            $orderNote = '未找到 CHANGELOG.md ⇒ 跳过「日期段不得倒退 / 同日字母不得重复」一致性校验'
+        }
+        else {
+            $occurrences = @($changelogVersions | Where-Object { $_ -eq $info.RootVersion }).Count
+            if ($occurrences -gt 1) {
+                $pre.Problems.Add("CHANGELOG.md 里版本标题 [$($info.RootVersion)] 出现了 $occurrences 次 —— 同日字母不得重复")
+            }
+            $idx = -1
+            for ($i = 0; $i -lt $changelogVersions.Count; $i++) {
+                if ($changelogVersions[$i] -eq $info.RootVersion) { $idx = $i; break }
+            }
+            if ($idx -lt 0) {
+                $orderNote = "CHANGELOG.md 里还没有 [$($info.RootVersion)] 标题 ⇒ 跳过与上一版的「不倒退」比较（-Part / -Set 会一并写入）"
+            }
+            elseif ($idx + 1 -lt $changelogVersions.Count) {
+                $prevVersion = $changelogVersions[$idx + 1]
+                $orderProblem = Test-VersionNotBackwards -NewVersion $info.RootVersion -RefVersion $prevVersion
+                if ($null -ne $orderProblem) {
+                    $pre.Problems.Add("根版本 $($info.RootVersion) 相对 CHANGELOG 上一版 $prevVersion 不合法：$orderProblem")
+                }
+                else {
+                    $prevInfo = Get-VersionInfo $prevVersion
+                    if ($null -ne $prevInfo -and $prevInfo.Kind -ne 'day') {
+                        $orderNote = "上一版 $prevVersion 是 $(Get-VersionKindLabel $prevInfo.Kind) ⇒ 跨方案不比大小，按方案切换处理"
+                    }
+                }
+            }
+        }
+    }
+    if ($null -ne $orderNote) { Write-Line "[检查] ⚠ $orderNote" }
 
     if ($pre.Problems.Count -eq 0) {
         Write-Line ''
@@ -432,7 +679,7 @@ function New-WorkspaceVersionText {
     return ($lines -join $nl)
 }
 
-# CHANGELOG.md：把 `## [Unreleased]` 搬成 `## [<日期版本>] - 今天`，并在最上面重建空的 `## [Unreleased]`
+# CHANGELOG.md：把 `## [Unreleased]` 搬成 `## [<版本号>] - 今天`，并在最上面重建空的 `## [Unreleased]`
 # 返回 @{ Text = 新全文; HadEntries = 这次是否真有条目; Today = 用到的日期 }
 # 纪律：只搬标题、只清掉脚本自己写的那句占位说明，绝不编造/改动任何变更条目
 function New-ChangelogText {
@@ -587,8 +834,13 @@ function Assert-PostWrite {
 function Show-ReleaseChecklist {
     param([string]$Version, [string]$OldVersion)
 
+    # tag 名与版本号**故意不同形态**：cargo 只认 build metadata（2026.11.8+a），
+    # 而 tag 不受 SemVer 约束、按用户要的形态写成 v2026.11.08a（VERSIONING.md §二）。
+    $tagName = Get-TagName $Version
+
     Write-Line ''
     Write-Line '──────────────────────── 发布清单（VERSIONING.md §六，按顺序执行） ────────────────────────'
+    Write-Line "版本号 = $Version（进 Cargo.toml / Cargo.lock / CHANGELOG）；tag = $tagName（两者形态不同是故意的）"
     Write-Line '1. 门禁三条（必须全绿；本仓不跑 cargo fmt）：'
     Write-Line '     cargo test --workspace'
     Write-Line '     cargo clippy --all-targets -- -D warnings'
@@ -600,16 +852,17 @@ function Show-ReleaseChecklist {
     Write-Line '     miredit-gui --version                       # 必须输出 Crystal Studio <版本>（VERSIONING.md §3.2）；「关于」对话框若已落地，版本串必须与这里一致'
     Write-Line '3. 干净构建（一次性 target 目录，别塞进仓库树）：'
     Write-Line '     CARGO_TARGET_DIR=<独立目录> cargo build --release --workspace'
-    Write-Line "     git archive --format=zip --prefix=CrystalStudio-$Version/ v$Version -o CrystalStudio-$Version.zip"
+    Write-Line "     git archive --format=zip --prefix=CrystalStudio-$Version/ $tagName -o CrystalStudio-$Version.zip"
     Write-Line '4. 提交并打 tag（tag 打在发布提交上，不是之前的提交）：'
     Write-Line '     git add -A'
-    Write-Line ('     git commit -m "发布 v{0}：<一句话摘要>"' -f $Version)
-    Write-Line ('     git tag -a v{0} -m "Crystal Studio v{0}"' -f $Version)
+    Write-Line ('     git commit -m "发布 {0}：<一句话摘要>"' -f $tagName)
+    Write-Line ('     git tag -a {0} -m "Crystal Studio {0}"' -f $tagName)
     Write-Line '     git push origin main --tags'
-    Write-Line "5. GitHub Release：仓 lxf505226/CrystalStudio-Rust，标题 Crystal Studio v$Version，正文取 CHANGELOG 该版小节（不向上游提 PR）"
-    Write-Line "6. Docker 镜像 tag：v$Version / X.Y / latest（crystalstudio/miredit、crystalstudio/miredit-front）"
+    Write-Line "5. GitHub Release：仓 lxf505226/CrystalStudio-Rust，标题 Crystal Studio $tagName，正文取 CHANGELOG 该版小节（不向上游提 PR）"
+    Write-Line "6. Docker 镜像 tag：$tagName / latest（crystalstudio/miredit、crystalstudio/miredit-front）"
+    Write-Line '   ⚠ 镜像 tag 不能用版本号原文：Docker 标签字符集不含 `+`（本机无 docker CLI，未实测），所以用 tag 名形态。'
     Write-Line '   ⚠ 现状 compose 用 :dev，且整套编排尚未在 CI 或任何机器上实跑验证（docker/README.md）'
-    Write-Line '7. 收尾复核：tag 指向的提交上 /api/health 版本 = tag 版本；CHANGELOG 无占位日期；工作树干净'
+    Write-Line '7. 收尾复核：tag 指向的提交上 /api/health 版本 = 版本号；CHANGELOG 无占位日期；工作树干净'
     Write-Line ''
     Write-Line "本次改动：根 Cargo.toml 的 [$WorkspaceTable].version：$OldVersion → $Version；CHANGELOG.md 新增 [ $Version ] 小节并重建空 [Unreleased]。"
     Write-Line '未做：变更条目（人写）、门禁、tag、Release、镜像 —— 这些都在上面清单里。'
@@ -656,16 +909,36 @@ if ($PSBoundParameters.ContainsKey('Part')) {
     $why = "按 -Part $Part 递增"
 }
 else {
-    if ($Set -match '[-+]') {
-        Stop-Failure "-Set 只接受正式三段日期版本 <YYYYMMDD>.<轮次>.<修正>" @(
+    if ($Set -match '-') {
+        Stop-Failure '-Set 不接受预发布形态（版本号里带 `-`）' @(
             "实得：$Set",
-            '预发布 -rc.N 与构建元数据 +g<sha> 由发布流程另定（VERSIONING.md §二），本脚本不处理。'
+            '现行方案用 build metadata 区分同日发布（2026.11.8+a）；预发布段 `-a` 在 SemVer 里排序**小于**正式版，语义正好反了（VERSIONING.md §二）。'
         )
     }
-    if (-not (Test-SemVerCore $Set)) {
-        Stop-Failure "-Set 的值不是合法日期版本：$Set" @(
-            '要求：<YYYYMMDD>.<轮次>.<修正>，日期 8 位且是合法日历日，后两段十进制整数不带前导零（例：20261107.0.0 / 20261107.1.2）。'
+    if (-not ((Test-DayVersion $Set) -or (Test-DateVersion $Set))) {
+        Stop-Failure "-Set 的值不是合法版本号：$Set" @(
+            '现行方案要求：年.月.日[+单个小写字母]，例 2026.11.8 / 2026.11.8+a / 2026.11.8+b；',
+            '  三段都不带前导零（2026.11.08 会被 cargo 拒绝：invalid leading zero in patch version number）；',
+            '  日期段必须是合法日历日；附加字母只允许单个 a-z（a = 当天第 1 个发布）。',
+            '历史形态 20261108.0.0 仍可 -Set（复现旧版用）；更早的 0.x.y 不再接受。'
         )
+    }
+    # 目标 == 当前 时留给下面的「目标版本与当前版本相同」统一报错（更具体）
+    $refuse = $null
+    if ($Set -ne $current) {
+        $refuse = Test-VersionNotBackwards -NewVersion $Set -RefVersion $current
+    }
+    if ($null -ne $refuse) {
+        Stop-Failure "-Set 被拒绝：$refuse" @(
+            "当前版本：$current；目标版本：$Set",
+            '判据见 VERSIONING.md §2.3：日期段不得倒退 + 同日字母不得重复/倒退。',
+            '（build metadata 不参与 SemVer 比较，故不再按三段数值比大小。）'
+        )
+    }
+    $setInfo = Get-VersionInfo $Set
+    $curInfo = Get-VersionInfo $current
+    if ($setInfo.Kind -ne $curInfo.Kind) {
+        Write-Line "[递增] ⚠ 方案切换：$current（$(Get-VersionKindLabel $curInfo.Kind)）→ $Set（$(Get-VersionKindLabel $setInfo.Kind)），按方案切换处理，不比较数值大小"
     }
     $target = $Set
     $why = '按 -Set 显式设置'

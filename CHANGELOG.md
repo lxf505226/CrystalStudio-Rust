@@ -11,10 +11,20 @@
 
 ## [Unreleased]
 
+> 暂无条目。新改动先记在这里，发布时整体搬进下一个版本标题。
+
+## [2026.11.8+a] - 2026-11-08
+
 ### 内部
 
+- **引用体系重构（16 笔，152 文件次，+2609/−2591）**：R1 补全 2 处文件名并登记 15 处消息串残留；R2/R5/R6-a 处理 `layout` 裸引用（219 条实测 98 条坏、改 97 条；151 处变步长重锚，起点坏 14→0）；R3 对 `docs/地图格式规格.md` 537 处按符号锚重锚（改 472 / 保持 65），并揭穿「两个批次混装」；R4 与收尾批去 `@acfbbf8a`（gui 14→0、core+render 66→7）、去 `@901dbe2f`（3→0）、单前缀按真实根归一；其余按 crate 逐批（`metrics.rs`/`theme.rs`、gui 39 文件、render 13 文件、core 15 文件、format/map、assets、stamp、`Document.cs` 印章段）去 `@sha` + 补全文件名 + 修坐标。
+- **引用订正（7 笔，20 文件次，+78/−54）**：D6 8 处（含 2 处基准文件判错）、d7 6 处行号（通读另报 11 处同类，只报不改）、d9 selection 12 处 + theme 1 处、d10 stamp 闸门 + edit 路径 3 处（含 1 处指向不存在的文件）、d11 12 处既存漂移清零 + 生产真值并列（15+/15−）；R6-b/c/d 3 处（含 2 处有意订正的 assert 消息），`lighting.rs` 一处引用加「上游 wil2atlas 的」限定并去掉不可复核 sha。
+- **地图格式规格旧口径订正（5 笔，`docs/地图格式规格.md`，+200/−81）**：§二「17 字节」两处（`+22/−0`）、四块「17/40 字节」旧口径（`+73/−0`）各加显式订正块、原文零删除；「40 口径」8 处 + 12 簇同缺陷面残留（`+43/−33`）；§十二「15 主档 + 17 备档双实现」两处（`+34/−2`）；另 4 块旧口径按用户裁定改方案 B。
 - **Docker 编排首次实跑验证（2026-11-08，飞牛 NAS）**：`docker build -f docker/Dockerfile --target runtime` 成功（Rust 编译 3m58s + runtime `apt-get` 约 8 分钟）；`docker run` 后容器 `Up (healthy)`、`Restarts=0`、`/api/health` = `{"ok":true,"version":"20261107.0.0"}`、根路径 `/` = HTTP 200（29163 B HTML）、`/css/app.css` 与 `/js/ui.js` 均 200；无素材时 `/api/tiles`、`/api/stamps` 如实 503（不伪造像素）。镜像 `crystalstudio/miredit:20261107.0.0`（134 MB），已导出 tar 归档；**未推任何 registry**。
   仍未验证：`front`（nginx）层、素材卷挂载、`/api/save` 写盘。逐项状态见 `docker/README.md` §7。
+- **注释订正（1 笔，2 文件，+6/−6）**：`crates/miredit-gui/src/canvas.rs`、`crates/miredit-gui/src/metrics.rs` 的「离线不可复核」改为「可复核（给路径）」。
+- **台账 §8.104：Type5 真实语料入库（`G:\WeMade Entertainment`，992 文件）**：本仓 `FormatId::Mir3Wemade` 即上游 `LoadMapType5`（`crates/mir2-format/src/formats/mir3_wemade.rs` 的 `HEADER_LEN=28` / `CELL_LEN=14` / `TAIL_LEN=4` / `BACK_GROUP_LEN=3`；`crates/mir2-format/src/model.rs:176` 映射），无需新增格式即可读该语料。
+- **台账 §8.105：Type5 语料实测 937/992 完美往返**：937 个 14 B/格文件 `read→write` 逐字节相等、0 字节差异；55 个 13 B/格变体当时判 `UnknownFormat`（`crates/mir2-format/tests/real_samples.rs:235` 报 `left: 55 right: 0`）。`Data` 下 174 个库基名 0 个命中 `Tiles/SmTiles/Objects` 三族规则 ⇒ 图可读入内存但画布零精灵，属已知未覆盖（`crates/miredit-core/src/map_check.rs:44`、`crates/mir2-assets/src/lib.rs:102` 已登记）。
 
 ## [20261107.0.0] - 2026-11-07
 

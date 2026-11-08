@@ -102,25 +102,41 @@ fn slash_path(p: &std::path::Path) -> String {
     p.to_string_lossy().replace('\\', "/")
 }
 
-/// 日期版本 `<YYYYMMDD>.<轮次>.<修正>` → Windows `FILEVERSION` 的四个 `u16`。
+/// 日期版本 → Windows `FILEVERSION` 的四个 `u16`。
 ///
 /// ⚠ 为什么不能直接把三段 parse 成 u16（2026-11-07 用户改用日期版本后暴露）：
 /// `20261107 > u16::MAX(65535)`，`parse::<u16>()` 会**静默失败再兜成 0** ⇒
 /// exe 属性里数值版本显示 `0.0.0.0`，字符串版本却是 `20261107.0.0`，自相矛盾。
 /// 而 Windows 资源只给四个 u16，装不下 8 位日期。
 ///
-/// 本仓口径：把 8 位日期拆成「年(4) / 月日(4)」两个 u16，后两段照放：
-///   `20261107.1.2` ⇒ `[2026, 1107, 1, 2]`
-/// 这样数值版本既**不溢出**、又单调可比（同一年内日期递增 ⇒ 第二段递增），
-/// 字符串版本仍用完整的 `CARGO_PKG_VERSION`，两者在「属性」面板里各司其职。
+/// # 现行方案（2026-11-08 用户拍板：`年.月.日` + 同日字母）
 ///
-/// 旧 `0.x.y` 版本号也兼容（历史 tag 仍可能从源码构建）：不足 8 位就原样放
-/// `[0, x, y, 0]`，不 panic、不造假数字。
+/// 用户要的形态是 `2026.11.08a`，但 cargo 两种写法都拒：
+/// * `2026.11.8a`  ⇒ `unexpected character 'a' after patch version number`
+/// * `2026.11.08a` ⇒ `invalid leading zero in patch version number`（报的是**前导零**，不是字母）
+///
+/// 所以同日字母走 **build metadata**：`2026.11.8+a`。本函数把字母折算成**第四段**：
+///   `2026.11.8`   ⇒ `[2026, 11, 8, 0]`（不带字母；本仓发布一律带字母，此档仅为兼容/测试）
+///   `2026.11.8+a` ⇒ `[2026, 11, 8, 1]`（当天第 1 个发布）
+///   `2026.11.8+b` ⇒ `[2026, 11, 8, 2]`（当天第 2 个）
+///   … `+z` ⇒ 26；换天 ⇒ `<新日期>+a` ⇒ 第四段回到 1
+/// 这样同一天多次发布在**数值版本上也能区分且单调**（a < b < c），
+/// 字符串版本仍用完整的 `CARGO_PKG_VERSION`（`2026.11.8+a`），两者各司其职。
+///
+/// # 历史形态（原样保留，不清理）
+///
+/// * 8 位日期 `<YYYYMMDD>.<轮次>.<修正>`（2026-11-07 ~ 2026-11-08 用过）：把 8 位日期
+///   拆成「年(4) / 月日(4)」两个 u16，后两段照放：
+///   `20261107.1.2` ⇒ `[2026, 1107, 1, 2]`；`20261108.0.0` ⇒ `[2026, 1108, 0, 0]`。
+///   数值版本既不溢出、又单调可比（同一年内日期递增 ⇒ 第二段递增）。
+/// * 旧 `0.x.y`（历史 tag 仍可能从源码构建）：原样放 `[0, x, y, 0]`，不 panic、不造假数字。
 fn version_quad(v: &str) -> [u16; 4] {
     let mut parts = v.split(['.', '-', '+']);
     let first = parts.next().unwrap_or("0");
     let second = parts.next().unwrap_or("0");
     let third = parts.next().unwrap_or("0");
+    // 第三段之后的那一段：`2026.11.8+a` 的 `a`（构建元数据；`-rc1` 之类预发布也落这里，本仓不用）
+    let fourth = parts.next().unwrap_or("");
 
     let to_u16 = |s: &str| -> u16 {
         // 超 u16 的段一律折成 0，并在构建日志里如实说明（不静默）
@@ -134,6 +150,7 @@ fn version_quad(v: &str) -> [u16; 4] {
     };
 
     if first.len() == 8 && first.bytes().all(|b| b.is_ascii_digit()) {
+        // 历史 8 位日期：拆「年 / 月日」，第四段仍是原来的修正段
         let year = &first[..4];
         let month_day = &first[4..];
         return [
@@ -143,16 +160,36 @@ fn version_quad(v: &str) -> [u16; 4] {
             to_u16(third),
         ];
     }
-    // 旧 0.x.y：保持历史行为，第四段补 0
-    [to_u16(first), to_u16(second), to_u16(third), 0]
+    // 新方案 `年.月.日[+字母]`：第四段承载当天字母序号；旧 `0.x.y` 没有附加段 ⇒ 第四段 0
+    [to_u16(first), to_u16(second), to_u16(third), letter_ordinal(fourth, v)]
+}
+
+/// 当天字母 ⇒ 序号：`a` = 1、`b` = 2 … `z` = 26；空串（没有附加段）= 0。
+///
+/// 其它形态（大写、多字符、`+g<sha>` 之类）一律记 0，并在构建日志里如实说明 ——
+/// 与上面的 `to_u16` 同一纪律：**宁可显示 0 并告警，也不静默编一个数字**。
+fn letter_ordinal(meta: &str, full_version: &str) -> u16 {
+    if meta.is_empty() {
+        return 0;
+    }
+    let bytes = meta.as_bytes();
+    if bytes.len() == 1 && bytes[0].is_ascii_lowercase() {
+        return u16::from(bytes[0] - b'a') + 1;
+    }
+    println!(
+        "cargo:warning=[构建] 版本号 {full_version} 的附加段 '{meta}' 不是单个小写字母 a-z，\
+         数值版本第四段记 0；字符串版本仍为 {full_version}"
+    );
+    0
 }
 
 /// 生成 `.rc` 文本（纯函数；不含任何写死的版本号）。
 ///
-/// ⚠ 这里**不挂单元测试**：`cargo test` 不会编译 `build.rs` 的 `#[cfg(test)]` 段
-/// （构建脚本只在构建期跑，不进测试 harness），写在里面等于假装测过。
-/// 这段代码的真判据是**构建出来的 exe**：图标能被 `ExtractAssociatedIcon` 取到、
-/// 文件属性里能读到 `ProductName` / `ProductVersion`（见交付回执的验证命令）。
+/// ⚠ `cargo test` **不会**编译 `build.rs` 的 `#[cfg(test)]` 段（构建脚本只在构建期以
+/// `main()` 跑，不进测试 harness），所以本文件的测试要用 `rustc --test` 直接跑 ——
+/// 命令写在文件末尾 `mod tests` 上方；只写测试不跑，等于假装测过。
+/// `rc_text` 自身的真判据仍是**构建出来的 exe**：图标能被 `ExtractAssociatedIcon` 取到、
+/// 文件属性里能读到 `ProductName` / `ProductVersion` 与数值 `FILEVERSION`。
 fn rc_text(version: &str, icon_path: &str) -> String {
     let [a, b, c, d] = version_quad(version);
     format!(
@@ -197,4 +234,66 @@ END
         c = c,
         d = d,
     )
+}
+
+// ───────────────────────────── 单元测试 ─────────────────────────────
+//
+// ⚠ **`cargo test` 不会跑这里的测试**：`build.rs` 是构建脚本，只在构建期以 `main()`
+// 运行，`#[cfg(test)]` 段根本不参与编译。要真跑，得把本文件当成一个测试 crate 直接喂给
+// `rustc --test`（`main()` 用到 build-dependency `embed_resource`，必须显式给 rlib 与
+// 依赖搜索路径，否则报 `can't find crate for 'cc' which 'embed_resource' depends on`）：
+//
+//   $deps = "<CARGO_TARGET_DIR>\debug\deps"
+//   $rlib = (Get-ChildItem $deps -Filter 'libembed_resource-*.rlib')[0].FullName
+//   rustc --edition 2021 --test -L "dependency=$deps" --extern "embed_resource=$rlib" `
+//         -o I:\cargo\tmp\buildrs_tests.exe crates/miredit-gui/build.rs
+//   & I:\cargo\tmp\buildrs_tests.exe
+//
+// 2026-11-08 实测（CARGO_TARGET_DIR = I:\cargo\scratch\miredit-ver-20261108-192258）：
+// `test result: ok. 7 passed; 0 failed`。
+#[cfg(test)]
+mod tests {
+    use super::version_quad;
+
+    /// 新方案、不带字母 ⇒ 第四段 0。
+    #[test]
+    fn new_scheme_without_letter() {
+        assert_eq!(version_quad("2026.11.8"), [2026, 11, 8, 0]);
+    }
+
+    /// 新方案、当天第 1 个（`+a`）⇒ 第四段 1。
+    #[test]
+    fn new_scheme_first_of_day() {
+        assert_eq!(version_quad("2026.11.8+a"), [2026, 11, 8, 1]);
+    }
+
+    /// 新方案、当天第 2 个（`+b`）⇒ 第四段 2（与 `+a` 在数值版本上可区分）。
+    #[test]
+    fn new_scheme_second_of_day() {
+        assert_eq!(version_quad("2026.11.8+b"), [2026, 11, 8, 2]);
+    }
+
+    /// 历史 8 位日期方案必须原样保留：`20261108.0.0` ⇒ `[2026, 1108, 0, 0]`。
+    #[test]
+    fn legacy_eight_digit_date() {
+        assert_eq!(version_quad("20261108.0.0"), [2026, 1108, 0, 0]);
+    }
+
+    /// 更早的 `0.x.y` 必须原样保留：`0.7.0` ⇒ `[0, 7, 0, 0]`。
+    #[test]
+    fn legacy_zero_xy() {
+        assert_eq!(version_quad("0.7.0"), [0, 7, 0, 0]);
+    }
+
+    /// `+z` 是当天第 26 个（字母序号上限）。
+    #[test]
+    fn new_scheme_last_letter_of_day() {
+        assert_eq!(version_quad("2026.11.8+z"), [2026, 11, 8, 26]);
+    }
+
+    /// 附加段不是单个小写字母（如 `+g4639dd7`）⇒ 第四段 0，并打 `cargo:warning`（不静默编数字）。
+    #[test]
+    fn unexpected_build_metadata_falls_back_to_zero() {
+        assert_eq!(version_quad("2026.11.8+g4639dd7"), [2026, 11, 8, 0]);
+    }
 }
