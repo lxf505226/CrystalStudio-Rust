@@ -111,7 +111,7 @@ cargo run -p miredit-web --release
 | `MIREDIT_PALETTE_JSON` | 印章目录索引 `palette.json` | `/api/stamps` 503 |
 | `MIREDIT_WEB_ROOT` | 静态前端目录（缺省 = 本仓 `web/`，中立回退） | 找不到 ⇒ `GET /` 404（不伪造页面） |
 
-> ⚠ **没有任何内置路径指向某台开发机**（2026-11-06 起）。四个路径变量都**必须显式设置**才
+> ⚠ **没有任何内置路径指向某台开发机**。四个路径变量都**必须显式设置**才
 > 能真的服务数据；不设就是"如实不可用"（503/404 + 启动横幅点名缺哪个变量），不会去猜一个
 > `GodotClient/maps` 之类的相对目录。接口契约见 [web/README.md](web/README.md)。
 
@@ -135,7 +135,7 @@ cargo run -p miredit-gui --release -- --map /path/to/some.map
 本仓**只含代码**。地图编辑器需要客户端素材才能出图：
 
 - **地图**：`.map` 文件目录 → 网页版 `MIREDIT_MAP_ROOT`，PC 版 `--map` / `--map-list-root`。
-- **图库**：客户端根目录（Mir2 的 `.wil/.wix`、`.wzl/.wzx`，或原版 Crystal `.lib`）→ 网页版与 PC 版**都**用 `MIREDIT_CLIENT_ROOT`（2026-11-06 起 PC 版也走环境变量，不再有内置常量）。
+- **图库**：客户端根目录（Mir2 的 `.wil/.wix`、`.wzl/.wzx`，或原版 Crystal `.lib`）→ 网页版与 PC 版**都**用 `MIREDIT_CLIENT_ROOT`（PC 版也走环境变量，没有内置常量）。
 - **印章**：`catalogue/palette.json` 与并列的 `Objects/*.X` → 网页版 `MIREDIT_PALETTE_JSON`，PC 版 `MIR2_STAMP_PALETTE`。
 
 缺素材时各端点/界面如实报错（404 / 503 / 「图库未就绪」），**不会**画占位图冒充成功。
