@@ -27,7 +27,7 @@
 //!
 //! | 函数 | 清哪几层 | 清库号字节 | 源码 |
 //! |---|---|---|---|
-//! | `ClearSelection`（`Delete` 键走它） | **只清当前层** | **不清** | `_upstream/CrystalStudio/MapViewport.cs:598`（`case MapLayer.Ground: c.BackImage &= 0x60000000; break;` …）、`MainWindow.axaml.cs:873` |
+//! | `ClearSelection`（`Delete` 键走它） | **只清当前层** | **不清** | `_upstream/CrystalStudio/MapViewport.cs:598`（`case MapLayer.Ground: c.BackImage &= 0x60000000; break;` …）、`MainWindow.axaml.cs:1001` |
 //! | `CutSource`（剪切） | **三族一起清** | **清**（`BackLibrary = 0` / `MiddleLibrary = 0`） | `RegionCopy.cs:45-69`，`:54`、`:59`、`:63` |
 //!
 //! **本仓统一取 `CutSource` 口径**（删除与剪切行为一致）—— 2026-11-05 裁定：
@@ -110,7 +110,7 @@
 //!    - `RegionCopy.cs:57` 则是 `if (middle && s.Cell.MiddleImage != 0)`（**有内容才清**）。
 //!    - 本 crate 两条路径共用 [`clear_plan`]，统一取 `CutSource` 的**条件**口径
 //!      （`after == before` 就跳过）⇒ 「删除空选区」在这里 `changes` 为空：不记撤销步、回执 0 格。
-//!      这是**有意偏离**（保「值没变不记步」的全局口径，`edit.rs:903-905`），不是漏改；
+//!      这是**有意偏离**（保「值没变不记步」的全局口径，`crates/miredit-gui/src/edit.rs:1937-1939`），不是漏改；
 //!      也没有为此新增公共 API（`vis` 一个参数已经区分了层，两种口径的差别只剩「空选区要不要记步」）。
 //!
 //! # 三、剪贴板
@@ -158,7 +158,7 @@
 //! - **差异 B（2026-11-05 订正；原「差异 C」）**：官方 `RegionCopy` 抓的是**整格**（`RegionCopy.cs:24` 的
 //!   `document.Get(x+dx, y+dy).Copy()`），本 crate 现在也**整格抓** —— [`Clipboard::capture`]
 //!   把 `StampCellInput` 的 10 个附加字段一并填上：门索引/门偏移/光照/前景动画帧+节拍在
-//!   12/14 B 布局里**有字节**（`mir2-map/src/cell.rs:184-195` 的 off6/7/11/8/9）⇒ 照抄；
+//!   12/14 B 布局里**有字节**（`mir2-map/src/cell.rs:304-315` 的 off6/7/11/8/9）⇒ 照抄；
 //!   中层动画帧+节拍、地表动画图号/偏移/帧数这 5 个**没有字节**（36 B 档的扩展字段落在
 //!   不透明的 `Cell::tail` 里）⇒ 留 0 并由 `stamp::记丢动画` 如实说明。
 //!
@@ -512,7 +512,7 @@ impl Clipboard {
             // `var cell = document.Get(x + dx, y + dy).Copy();` —— `Copy()` 复制全部字段，
             // 不是只复制三族），所以这里除三族图号/库号外，门索引、门偏移、光照、
             // 前景动画帧/节拍也一并填上（这 5 个字段在 `mir2_map::Cell` 里都有独立字节：
-            // `mir2-map/src/cell.rs:184-195` 的 off6/off7/off11/off8/off9）。
+            // `mir2-map/src/cell.rs:304-315` 的 off6/off7/off11/off8/off9）。
             cells.push(StampCellInput {
                 dx: i32::from(x) - i32::from(x0),
                 dy: i32::from(y) - i32::from(y0),
@@ -524,17 +524,17 @@ impl Clipboard {
                 mid_lib: if 抓中层 { c.sm_tiles } else { 0 },
                 fr_lib: if 抓物体 { c.area } else { 0 },
                 // ── 以下 5 个字段在 12/14 B 格布局里**有**对应字节，逐字节照抄 ──
-                // 门索引 / 门偏移：off6 / off7（`mir2-map/src/cell.rs:184-187`）
+                // 门索引 / 门偏移：off6 / off7（`mir2-map/src/cell.rs:304-307`）
                 // ⚠ 门属于**物体**层（C# `Paste` 的 `if (pasteObjects) { target.Door = … }`，
                 //    `RegionCopy.cs:86`）⇒ 物体层隐藏时一并填 0。
                 door: if 抓物体 { c.door_index } else { 0 },
                 door_offset: if 抓物体 { c.door_offset } else { 0 },
-                // 光照：off11（`mir2-map/src/cell.rs:195`）。**不随层过滤**：
+                // 光照：off11（`mir2-map/src/cell.rs:314-315`）。**不随层过滤**：
                 // 它不是任何一族的字段，且粘贴路径根本不写它（`RegionCopy.cs:84-86` 无 `Light`）。
                 light: c.light,
-                // 前景动画帧 / 节拍：off8 / off9（`mir2-map/src/cell.rs:188-191`）。
-                // ⚠ C# 的 `Front.Frames/Tick` 就是这两个字节（`LegacyMapReader.cs:243-244` 读、
-                // `:257-258` 只在有前景时赋值），所以它们是**前景**动画，不是中层动画。
+                // 前景动画帧 / 节拍：off8 / off9（`mir2-map/src/cell.rs:308-311`）。
+                // ⚠ C# 的 `Front.Frames/Tick` 就是这两个字节（`LegacyMapReader.cs:245-246` 读、
+                // `:259-260` 只在有前景时赋值），所以它们是**前景**动画，不是中层动画。
                 // ⇒ 物体层隐藏时填 0（同 `RegionCopy.cs:86` 的 `target.Foreground = source.Foreground`）。
                 ani_frame: if 抓物体 { c.ani_frame } else { 0 },
                 ani_tick: if 抓物体 { c.ani_tick } else { 0 },
@@ -542,7 +542,7 @@ impl Clipboard {
                 // 地表动画图号 / 偏移 / 帧数（C# `TileAnimation`/`TileOffset`/`TileFrames`，
                 // `RegionCopy.cs:84` 会搬）在 12/14 B 档**没有对应字节**：它们是 36 B 档的
                 // 扩展字段（`LegacyMapReader.cs:300-303`），在本 crate 里落在**不透明的 22 字节
-                // 尾区** `Cell::tail`（`mir2-map/src/cell.rs:200-201`，语义未知、只许原样往返；
+                // 尾区** `Cell::tail`（`mir2-map/src/cell.rs:320-321`，语义未知、只许原样往返；
                 // `convert.rs` 的 `FIELD_MAP` 第 12 条）。按猜测从尾区切三个字节出来会写坏未知数据，
                 // 故留 0 并在 `stamp.rs` 的 `丢动画` 里如实告诉用户"这些字段没搬"。
                 tile_animation: 0,
@@ -550,9 +550,9 @@ impl Clipboard {
                 tile_frames: 0,
                 // 中层动画帧 / 节拍（C# `MiddleFrames`/`MiddleTick`）同样**12 B 布局里没有这个字节**：
                 // 12/14 B 档只有一组动画字节（off8/off9，已按前景动画填进 `ani_frame`/`ani_tick`），
-                // 没有第二组给中层用（`mir2-map/src/cell.rs:32-33` 的字节表里只有一行 `btAniFrame`）。
+                // 没有第二组给中层用（`mir2-map/src/cell.rs:34-48` 的字节表里只有一行 `btAniFrame`（`:41`）；字段定义见 `:309-311`）。
                 // C# 自己也承认这点：`Document.cs:19-20` 定义 `MiddleAnimationFrame` 恒 0，
-                // `:63` 从 `s.MiddleAnimationFrame` 抄 ⇒ 14 B 图上没有可搬的中层动画。
+                // `:71` 从 `s.MiddleAnimationFrame` 抄 ⇒ 14 B 图上没有可搬的中层动画。
                 mid_ani_frame: 0,
                 mid_ani_tick: 0,
             });

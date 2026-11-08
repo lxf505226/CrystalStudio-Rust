@@ -152,7 +152,7 @@ pub struct Palette {
     /// ⚠ 本地 `_upstream` = `f84566bc` **快照**（`MapViewport.cs` 604 行），`DarkBlue` **0 命中**；
     /// 该符号是 `a78affdf` **引入**的（属"某提交引入"的历史事实，故此处保留 `@<sha>`；
     /// 行号位置一律不声称对应某个提交）。该版 616 行，取证说明同 `metrics::CELL_HOVER_STROKE`。
-    /// ⚠ `:144` / `:305` 都是 `a78affdf` **版内行号**，离线不可复核；本地 `f84566bc` 的
+    /// ⚠ `:144` / `:305` 都是 `a78affdf` **版内行号**（本地 `_upstream` 快照无 `hoverCellOutline` 符号）。**可复核**：`a78affdf` 全量副本已落地本地，路径 `I:\cargo\tmp\cs-master\CrystalStudio-a78affdfd8f912d10a8bce940b54ff7a836cbbfc\CrystalStudio\MapViewport.cs`（616 行 / 40,168 B）。**订正（2026-11-08）**：原写「离线不可复核」，该表述已过期（`a78affdf` 全量副本已落地本地），已订正为「可复核」并给出路径；本地 `f84566bc` 的
     /// `MapViewport.cs:144` 是 `public MapViewport()` 构造函数，**不是**这个符号。
     ///
     /// ⚠ **两套主题同值，因为上游是硬编码常量、不是主题刷**：
