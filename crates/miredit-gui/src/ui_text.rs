@@ -1327,12 +1327,12 @@ pub const PALETTE_FRAME_TOO_BIG: &str = "图号超过 32767，地图格里存不
 
 // ───────────────── 右侧：资源面板 ·「分类」页签 = 印章浏览器（本单新增） ─────────────────
 //
-// 印章 = `CrystalStudio/Objects/**/*.X`（`catalogue/palette.json` 登记 9,159 枚，
+// 印章 = `_upstream/Objects/**/*.X`（`catalogue/palette.json` 登记 9,159 枚，
 // 磁盘上另有 11 枚**未登记**）。数据全部来自 `mir2_stamp::StampCatalog`，本文件只管措辞。
 //
 // ## 术语：本页签统一叫「印章」，官方译名逐条留档
 //
-// 官方 `CrystalStudio/Localization/Strings.json` 把 `Stamp` 译作**「物体模板」**
+// 官方 `_upstream/CrystalStudio/Localization/Strings.json` 把 `Stamp` 译作**「物体模板」**
 // （`Stamp_2910B6D7`）、复数 `stamps` 译作「物体」（`stamps_48306FD0`）；
 // 而本仓 `mir2-stamp` 全库、任务书、以及本面板的既有注释都用**「印章」**。
 // ⇒ 为免同一个东西在界面上有两个名字，本页签的**新**文案统一用「印章」；

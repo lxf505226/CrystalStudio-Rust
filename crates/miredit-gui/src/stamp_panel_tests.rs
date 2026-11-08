@@ -6,7 +6,7 @@
 //! 两类用例：
 //! 1. **纯逻辑**（几何 / 分页 / LRU / 截断）：不依赖任何外部文件，永远跑；
 //! 2. **真实数据**（分类条数 / 搜索计数 / 未登记清单 / 缩略图渲染对照）：
-//!    读本机 `CrystalStudio/catalogue/palette.json` 与 `Objects/`；文件不在 ⇒
+//!    读本机 `_upstream/catalogue/palette.json` 与 `Objects/`；文件不在 ⇒
 //!    打印原因并 `return`（**不 panic、也不静默变成"绿"**）。
 
 use std::path::PathBuf;

@@ -1,6 +1,6 @@
 //! 「地图扩边」模态（A-015 Expand / R36）：几何 + 绘制 + 输入。
 //!
-//! 上游 `CrystalStudio/MapExpansionWindow.cs`（`@901dbe2f`）：
+//! 上游 `_upstream/CrystalStudio/MapExpansionWindow.cs`：
 //!
 //! | 段 | 上游 | 本模块 |
 //! |---|---|---|

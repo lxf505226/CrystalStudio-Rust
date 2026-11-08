@@ -238,7 +238,7 @@ fn 占位文档() -> miredit_core::Document {
 
 /// **换层时的工具纠正**（上游 `_upstream/CrystalStudio/MainWindow.axaml.cs:648-657` 的 `LayerChanged` 三条判据）。
 ///
-/// 上游原文（`@901dbe2f`）：
+/// 上游原文：
 ///
 /// ```csharp
 /// if (Viewport.Tool == EditorTool.Eyedropper && Viewport.Layer is not (MapLayer.Ground or MapLayer.Middle))
@@ -256,7 +256,7 @@ fn 占位文档() -> miredit_core::Document {
 /// | `Wall` / `SpecialBrush` | 8 / 9 | 层 ≠ `Front`（物件层） | ⇒ 铅笔 |
 /// | `Stamp` / `Pickup` / `Clone` | 5 / 6 / 7 | 层是**阻挡层**（`LowCollision`/`HighCollision`） | ⇒ 铅笔 |
 ///
-/// # 槽位映射的证据（R43 复核，`@901dbe2f`）
+/// # 槽位映射的证据（R43 复核）
 ///
 /// 上游枚举有两个"像吸管"的工具，必须分清（`_upstream/CrystalStudio/MapViewport.cs:4`）：
 /// `EditorTool { Brush, Pencil, Bucket, Eraser, Select, Stamp, Pickup, Clone, SpecialBrush,

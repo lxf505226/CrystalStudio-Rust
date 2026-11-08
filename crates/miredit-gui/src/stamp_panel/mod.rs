@@ -2,7 +2,7 @@
 //!
 //! # 一、本页签做什么 / **不做什么**
 //!
-//! 做：把 `CrystalStudio/Objects/**/*.X` 按 `catalogue/palette.json` 的 19 个分类
+//! 做：把 `_upstream/Objects/**/*.X` 按 `catalogue/palette.json` 的 19 个分类
 //! （中文名取自 `mir2_stamp::kind_label_zh`）分组，配搜索、缩略图网格、分页与选中；
 //! 选中的那一枚会出现在右栏「当前资源」与状态栏。
 //!

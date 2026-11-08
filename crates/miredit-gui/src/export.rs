@@ -61,7 +61,7 @@
 //!
 //! # 四、选档 + 两段式（小地图）
 //!
-//! **@acfbbf8a 回源订正（2026-11-06）**：上游新增小地图尺寸面板，官方尺寸口径已可得
+//! **回源订正（2026-11-06）**：上游新增小地图尺寸面板，官方尺寸口径已可得
 //! ⇒ 小地图**缺省**改走 [`export_minimap_sized`] + [`MinimapSize::Default`]
 //! （`W*12 × H*8`，官方 `_upstream/CrystalStudio/MinimapExporter.cs:20`）；三档预设与显式像素见
 //! [`MinimapPreset`] / [`MinimapSize`]，官方 `ValidSize` 的 Rust 等价换算见
@@ -208,7 +208,7 @@ pub use miredit_render::tiled::{
 /// 最小档仍超 ⇒ 再走一次**第二段最终合成**（[`downscale_to_fit`]：等比 + 居中 +
 /// 不透明黑底 + 最近邻，对齐上游 `_upstream/CrystalStudio/PreviewRaster.cs:15-19,35-38`）把整幅落到它以内。
 ///
-/// ⚠ **原判断「原版不可得 ⇒ 自定值」已失效，@acfbbf8a 回源订正（2026-11-06）**：
+/// ⚠ **原判断「原版不可得 ⇒ 自定值」已失效，回源订正（2026-11-06）**：
 /// 官方尺寸口径见 `I:\cs-new\MinimapExporter.cs` + `MinimapExportWindow.cs`：
 ///
 /// 1. **默认输出尺寸**：`width = document.Width * 12`、`height = document.Height * 8`
@@ -236,7 +236,7 @@ pub const MINIMAP_MAX_SIDE: u32 = 2048;
 
 /// `--minimap-max-side` 允许的最小值。
 ///
-/// ⚠ **原判断「自定值」已失效，@acfbbf8a 回源订正（2026-11-06）**：
+/// ⚠ **原判断「自定值」已失效，回源订正（2026-11-06）**：
 /// 官方 `MinimapExporter.ValidSize` 的下界条件就是 `width > 0 && height > 0`；
 /// **64 不再是官方判据**，只保留为本仓旧「长边两段式」开关的局部下限：
 /// 该路径要求保持 `cw*48 : ch*32` 的精确整数比，64 能确保 `fit_ratio` 不退化成 0 宽/0 高
@@ -331,7 +331,7 @@ pub struct ExportReport {
 /// | `2048` | `Quarter` | 三档都超 2048；`Quarter` 是最小档 |
 /// | `99999` | `Quarter` | `One` 33600 px 超 `MAX_EXPORT_SIDE`；`Half` 752 MB 超 `MAX_EXPORT_BYTES` ⇒ 只剩 `Quarter` |
 ///
-/// ⚠ @acfbbf8a 回源订正后，这条**只服务本仓旧开关 `--minimap-max-side`**；
+/// ⚠ 回源订正后，这条**只服务本仓旧开关 `--minimap-max-side`**；
 /// 官方缺省 / 预设 / 指定像素走 [`pick_official_scale`] + [`export_minimap_sized`]。
 pub fn pick_minimap_scale(cells_w: u32, cells_h: u32, max_side: u32) -> RenderScale {
     for s in [RenderScale::One, RenderScale::Half, RenderScale::Quarter] {
@@ -712,7 +712,7 @@ pub fn export_minimap(
     finish(img, target, scale, two_stage, false, options)
 }
 
-/// **导出小地图（官方 @acfbbf8a 尺寸口径）**：缺省 `W*12 × H*8`，
+/// **导出小地图（官方尺寸口径）**：缺省 `W*12 × H*8`，
 /// 三档预设 `W*48/{4,2,1} × H*32/{4,2,1}`，或 `--minimap-width/--minimap-height` 指定像素。
 ///
 /// 流程：`valid_minimap_size` 先拒绝非法尺寸（中文原因、不写文件）→

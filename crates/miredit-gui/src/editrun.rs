@@ -201,7 +201,7 @@ pub fn run(cli: &Cli) -> i32 {
         }
     }
     if let Some(target) = &cli.export_minimap {
-        // @acfbbf8a：官方缺省 W*12 × H*8；只有旧 --minimap-max-side 显式给了才走兼容链。
+        // 官方缺省 W*12 × H*8；只有旧 --minimap-max-side 显式给了才走兼容链。
         let 导出结果 = if let Some(max_side) = cli.minimap_max_side {
             if cli.minimap_preset.is_some()
                 || cli.minimap_width.is_some()

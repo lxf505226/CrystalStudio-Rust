@@ -268,7 +268,7 @@ pub struct Cli {
     pub export_selection: Option<PathBuf>,
     /// `--export-minimap <路径>`：**不开窗**把整张地图渲成 PNG。
     ///
-    /// @acfbbf8a 回源订正后，缺省走官方尺寸链 [`crate::export::export_minimap_sized`]
+    /// 回源订正后，缺省走官方尺寸链 [`crate::export::export_minimap_sized`]
     /// （`W*12 × H*8`）；给了 `--minimap-preset` / `--minimap-width`+`--minimap-height`
     /// 就按官方预设 / 指定像素出图。大图自动分块，分块护栏原样保留。
     /// **只有**显式给了旧开关 `--minimap-max-side` 时，才回退到本仓兼容链
@@ -289,7 +289,7 @@ pub struct Cli {
     pub export_doors: bool,
     /// `--minimap-max-side <像素>`：小地图导出的**本仓兼容链目标长边**。
     ///
-    /// @acfbbf8a 回源订正后，官方缺省已改为 `W*12 × H*8`（见
+    /// 回源订正后，官方缺省已改为 `W*12 × H*8`（见
     /// [`crate::export::MINIMAP_MAX_SIDE`] 的官方四要素注释）。这里**只有显式给了该开关**
     /// 才走旧的 2048 长边两段式；下限 [`crate::export::MINIMAP_MAX_SIDE_MIN`] 只保护
     /// 该兼容链的 `fit_ratio` 整数比，不是官方尺寸判据。
@@ -719,7 +719,7 @@ impl Cli {
                     },
                     None => c.bad(&a, true),
                 },
-                // 官方 @acfbbf8a 尺寸面板：宽 / 高三档预设。0 也先收进来，
+                // 官方尺寸面板：宽 / 高三档预设。0 也先收进来，
                 // 由 export::valid_minimap_size 给中文原因（不是静默夹到 1）。
                 "--minimap-width" => match it.next().map(|v| v.trim().parse::<u32>()) {
                     Some(Ok(n)) => c.minimap_width = Some(n),
@@ -957,7 +957,7 @@ mod tests {
         Cli::parse(args.iter().map(|s| (*s).to_string()))
     }
 
-    /// @acfbbf8a 官方尺寸链：缺省 `W*12×H*8`，三档预设与显式宽高从 CLI 正常入口进来。
+    /// 官方尺寸链：缺省 `W*12×H*8`，三档预设与显式宽高从 CLI 正常入口进来。
     #[test]
     fn 小地图官方尺寸开关() {
         let c = p(&[]);

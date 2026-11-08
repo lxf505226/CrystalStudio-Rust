@@ -1002,7 +1002,7 @@ pub fn export_selection_path(cx: &mut Ctx<'_>, path: &str) -> Outcome {
 
 /// **导出小地图到指定路径**（模态点「导出」/ 回车时走这里）。
 ///
-/// @acfbbf8a 回源订正：菜单路径与 CLI 缺省都走官方尺寸链
+/// 回源订正：菜单路径与 CLI 缺省都走官方尺寸链
 /// [`crate::export::export_minimap_sized`]，**不再**经过本仓旧的 2048 长边两段式。
 /// 整图渲不出来时自动分块，**采样仍由 render crate 做**；官方 16 级 overview mip
 /// 到本仓 4 档的有据映射见 [`crate::export::pick_official_scale`]。

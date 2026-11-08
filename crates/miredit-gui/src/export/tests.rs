@@ -149,7 +149,7 @@ fn 档位像素换算与render同口径() {
 
 /// 选档规则：`One → Half → Quarter` 里第一个两边 ≤ `max_side` 的；都不行用 `Quarter`。
 ///
-/// 这条只钉**本仓兼容链**（`--minimap-max-side`）的选档；@acfbbf8a 回源后
+/// 这条只钉**本仓兼容链**（`--minimap-max-side`）的选档；回源后
 /// 官方缺省走 [`MinimapSize::Default`] + [`export_minimap_sized`]，不经过这条选档。
 #[test]
 fn 选档规则() {
@@ -216,7 +216,7 @@ fn 两段式目标尺寸精确保持比例() {
     assert_eq!(fit_ratio(8400, 5600, 700, 700, 64).unwrap(), Some((63, 42)));
 }
 
-/// @acfbbf8a 官方四要素：**默认 `W*12 × H*8`** + 三档预设除数 `4/2/1`。
+/// 官方四要素：**默认 `W*12 × H*8`** + 三档预设除数 `4/2/1`。
 ///
 /// `700×700` 是 `0.map` 实测格数；这里纯算尺寸，不渲染、不写盘。
 #[test]
@@ -803,7 +803,7 @@ fn 导出与render直出逐字节相同() {
 
 /// 本仓**兼容链**小地图导出的尺寸 = 档位公式，且长宽比与 1× 渲染**恒等**。
 ///
-/// @acfbbf8a 回源后官方缺省已改走 [`export_minimap_sized`]；这里保留旧链的自证。
+/// 回源后官方缺省已改走 [`export_minimap_sized`]；这里保留旧链的自证。
 #[test]
 fn 小地图尺寸符合档位公式且比例不变() {
     let Some((dir, doc)) = 合成文档("minimap-size", 64, 48) else {
