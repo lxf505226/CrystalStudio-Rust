@@ -914,7 +914,7 @@ pub const fn state(action: Action) -> State {
         //
         // 为什么是 `Ready`：官方这一项是**容器**（`OpenRecentButton` 在 axaml 里没有
         // `Click`，`_upstream/CrystalStudio/MainWindow.RecentMaps.cs:23-40` 只往 `Items` 里填行），它自己的
-        // `IsEnabled` 跟着 `busy` 走（`axaml.cs` 的 `OpenRecentButton.IsEnabled = !busy`）
+        // `IsEnabled` 跟着 `busy` 走（`_upstream/CrystalStudio/MainWindow.axaml.cs:1037` 的 `OpenRecentButton.IsEnabled = !busy`）
         // ⇒ 常态可点。本仓同样：可点、不灰，点了（或回车）只展开/收起子菜单，
         // **不执行任何父项动作**（回执见 [`STATUS_RECENT_CONTAINER`]）。
         Action::OpenRecent => State::Ready,
