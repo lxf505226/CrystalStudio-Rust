@@ -36,7 +36,7 @@
 //! 旧值保留作历史引用。真值不在 `MapLighting.cs` 里（那个文件只有 3 行，纯枚举定义）。
 //!
 //! ⚠ **本模块不生成任何衰减曲线**：三张光罩 PNG 是从官方目录**原样拷贝**的
-//! （`assets/lights/{445,685,925}.png`，SHA256 与 `CrystalStudio/CrystalStudio/PreviewLights/`
+//! （`assets/lights/{445,685,925}.png`，SHA256 与 `_upstream/CrystalStudio/PreviewLights/`
 //! 逐字节相同），本模块只做「解码 → 取 R → 减 alpha」。**没有 `205/0/255` 以外的任何自定数值**，
 //! 也没有任何三档之间的过渡/动画（官方是三档互斥单选，`_upstream/CrystalStudio/MainWindow.axaml.cs:676-683`）。
 //!

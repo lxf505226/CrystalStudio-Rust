@@ -54,7 +54,7 @@
 //!
 //! # 六、五层计数（2026-11-06 新增，见 [`crate::layer_counts`]）
 //!
-//! 文档缓存五个官方层计数（`Document.LayerCounts.cs:5@acfbbf8a` 的等价物）：
+//! 文档缓存五个官方层计数（`_upstream/CrystalStudio/Document.LayerCounts.cs:5` 的等价物）：
 //!
 //! - **单格写**走 [`Document::write_view_cell`]（写视图 + O(1) 增量更新计数）；
 //!   它是编辑路径的**唯一**逐格写入口（`paint` / `fill` / `stamp` / 选区 / 撤销）。
@@ -118,14 +118,14 @@ pub const UNTITLED_FILE_NAME: &str = "Untitled";
 
 /// 上游新建窗口的单边**下限**（含）。
 ///
-/// 真值：`MapDimensions.cs:31-32@acfbbf8a`
+/// 真值：`_upstream/CrystalStudio/MapDimensions.cs:31-32`
 /// （`width is < 16 or > 4096 || height is < 16 or > 4096` ⇒ `"Enter dimensions between 16 and 4096."`）。
 pub const CREATION_MIN_DIMENSION: u16 = 16;
 
 /// 上游新建窗口的单边**上限**（含）。真值同 [`CREATION_MIN_DIMENSION`]（`MapDimensions.cs:31`）。
 pub const CREATION_MAX_DIMENSION: u16 = 4096;
 
-/// 上游单张地图的格数上限（`MapDimensions.cs:7@acfbbf8a` 的 `MaximumCells = 16_000_000`）。
+/// 上游单张地图的格数上限（`_upstream/CrystalStudio/MapDimensions.cs:7` 的 `MaximumCells = 16_000_000`）。
 ///
 /// 同值另见 `MapDimensions.cs:11-12` 的 `CanRoundTrip` 第三条、`LegacyMapReader.cs:50`。
 pub const CREATION_MAX_CELLS: u64 = 16_000_000;
@@ -248,7 +248,7 @@ impl Document {
             tolerant_trailer,
             counts: LayerCounts::zero(),
         })
-        // 构造完立刻全量数一次（`Document.LayerCounts.cs:5@acfbbf8a` 的五个计数在
+        // 构造完立刻全量数一次（`_upstream/CrystalStudio/Document.LayerCounts.cs:5` 的五个计数在
         // `MapDocument.Load` 的逐格 `Set` 里被累计，等价于这里的一次 O(n) 重建）。
         .map(|mut doc| {
             doc.rebuild_layer_counts();
@@ -323,7 +323,7 @@ impl Document {
     ///
     /// # 二、尺寸口径：先按上游 `CreationError`，再交给 `mir2-map`
     ///
-    /// 顺序与上游 `MapDimensions.CreationError` 一致（`MapDimensions.cs:28-41@acfbbf8a`）：
+    /// 顺序与上游 `MapDimensions.CreationError` 一致（`_upstream/CrystalStudio/MapDimensions.cs:28-41`）：
     ///
     /// 1. `:31-32` 单边必须落在 `16..=4096`（`"Enter dimensions between 16 and 4096."`）；
     /// 2. `:33` `!CanRoundTrip` ⇒ 格数上限（`"A map supports at most 16,000,000 cells."`）。
@@ -771,7 +771,7 @@ impl Document {
 
 /// 上游 `MapDimensions.CreationError(width, height, MapCreationKind.Blank)` 的等价物。
 ///
-/// # 上游原文（`MapDimensions.cs:28-41@acfbbf8a`）
+/// # 上游原文（`_upstream/CrystalStudio/MapDimensions.cs:28-41`）
 ///
 /// ```csharp
 /// public static string? CreationError(int width, int height, MapCreationKind kind)
@@ -883,7 +883,7 @@ fn blank_gate(format: FormatId) -> Result<(), &'static str> {
 /// 把 [`mir2_map::Map::blank`] 的尺寸错误折成 [`FormatError`]（**不新造措辞**）。
 ///
 /// 三个尺寸变体与 `mir2-format` 的尺寸变体一一对应（两边都照 C#
-/// `MapDimensions.cs:11-12@acfbbf8a` 的 `CanRoundTrip` 三条件）：
+/// `_upstream/CrystalStudio/MapDimensions.cs:11-12` 的 `CanRoundTrip` 三条件）：
 /// `ZeroDimension → InvalidDimensions`、`DimensionTooLarge → DimensionTooLarge`、
 /// `TooManyCells → TooManyCells`。这样 `miredit-web/src/error.rs:134-145` 的
 /// `from_core` **不用改一个字**就能把「尺寸非法」报成 422。

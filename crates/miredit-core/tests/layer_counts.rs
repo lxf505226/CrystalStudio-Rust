@@ -4,10 +4,10 @@
 //!
 //! | 用例 | 官方出处 |
 //! |------|----------|
-//! | `官方用例_替换删除与越界` | `CrystalStudio.Tests/LayerCountTests.cs:9-24@acfbbf8a` |
-//! | `旧族_只有前景bit15不算高位阻挡` | 同上 `:13-14@acfbbf8a` + `LegacyMapReader.cs:153-161@acfbbf8a` |
-//! | `crystalcs_字面值五层各一` | 同上 `:12-14@acfbbf8a`（u32 位路径） |
-//! | `type5_标志位与地表拒绝` | `Document.LayerCounts.cs:18-22@acfbbf8a` + `LegacyMapReader.cs:438-439@acfbbf8a` |
+//! | `官方用例_替换删除与越界` | `_upstream/CrystalStudio.Tests/LayerCountTests.cs:9-24` |
+//! | `旧族_只有前景bit15不算高位阻挡` | 同上 `:13-14` + `_upstream/CrystalStudio/LegacyMapReader.cs:153-161` |
+//! | `crystalcs_字面值五层各一` | 同上 `:12-14`（u32 位路径） |
+//! | `type5_标志位与地表拒绝` | `_upstream/CrystalStudio/Document.LayerCounts.cs:18-22` + `_upstream/CrystalStudio/LegacyMapReader.cs:438-439` |
 //! | 其余 | 本仓 `layer_counts.rs` 模块文档第三节 |
 //!
 //! ⚠ 本文件**只读合成字节**（不碰磁盘真实地图），也不改任何生产代码路径。

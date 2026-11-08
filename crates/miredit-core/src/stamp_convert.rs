@@ -45,7 +45,7 @@
 //! # 三、三族图号一律 `& 0x7FFF`
 //!
 //! `bit15` 在 CrystalStudio 里是**阻挡/标记位**，不是图号的一部分：
-//! 前景取 `Image & 0x7FFF` 见 `CrystalStudio/README.md:205-207` 与 `StampIdentifier.cs:84`；
+//! 前景取 `Image & 0x7FFF` 见 `_upstream/README.md:288`（原写 `CrystalStudio/README.md:205-207`，实为路径 + 行号双错）与 `StampIdentifier.cs:84`；
 //! 地表 `BackImage` 的高位（`0x20000000` / `0x40000000` = 低/高阻挡）更是在**第 29 位以上**。
 //! ⇒ 三族统一掩掉 `bit15`，与 `crate::paint` 的写入口径（`v & 0x7FFF`）对齐，
 //! 免得「转换时带进来的标记位」被 `plan_stamp` 当成图号写进地图。

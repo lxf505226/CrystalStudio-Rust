@@ -47,10 +47,10 @@
 //! | 6 | **撤销**：整格快照；一次拖动/填充 = 一步；撤销后 `to_bytes()` 与操作前**逐字节相等** | [`undo`] / [`UndoStack`] | `edit.rs:554-579`、`:1288-1323` |
 //! | 7 | **保存**：`tmp → write_all → sync_all → 读回逐字节核对 → rename → 尽力 fsync 父目录`；目录 fsync 失败**不改结论**，只报告 | [`save`] | `save.rs:1-330` |
 //! | 8 | **格式能力闸门**（新增）：`ground_paint_supported=false`（Type5）⇒ 地表层落笔**明确拒绝**并给中文原因；writer 不写的库号字节 ⇒ 还原成改前值并说明 | [`EditSession::touch`] / [`EditSession::fill`] | `mir2-format/src/model.rs:430-440`、`:419-461` |
-//! | 9 | **印章放置**（新增）：锚点 + 相对偏移（可负）；出界**逐格跳过**并计数、全出界 ⇒ 拒绝；三族图号 + 库号字节；`bit15` 矩阵复用 [`paint`]；整次放置 = **一步撤销** | [`EditSession::place_stamp`] / [`stamp`] | `CrystalStudio/PlacedStamps.cs:80`、`:87-98`、`:114-121`；`mir2-stamp/src/stamp.rs:22-32` |
+//! | 9 | **印章放置**（新增）：锚点 + 相对偏移（可负）；出界**逐格跳过**并计数、全出界 ⇒ 拒绝；三族图号 + 库号字节；`bit15` 矩阵复用 [`paint`]；整次放置 = **一步撤销** | [`EditSession::place_stamp`] / [`stamp`] | `_upstream/CrystalStudio/PlacedStamps.cs:80`、`:87-98`、`:114-121`；`mir2-stamp/src/stamp.rs:22-32` |
 //! | 10 | **矩形选区 + 剪贴板**（新增）：选区是**闭区间**（C# `Rect` 半开 + 构造时 `+1`，两者等价）；越界**入口裁剪一次**；复制**整块都抓**（含空格）；删除/剪切**三族按层清 + 库号字节写 0**（取 `CutSource` 口径）；粘贴**先按源奇偶重算锚点**（`Anchor`，负锚点整块拒绝）再**复用 `plan_stamp`**（逐格越界跳过 + Type5 闸门 + 保留目标 `bit15`）；**整次操作 = 一步撤销**；选区/剪贴板**不进撤销栈、不置脏** | [`EditSession::copy_selection`] / [`selection`] | `_upstream/CrystalStudio/MapViewport.cs:106`、`:119`、`:399`、`:422-423`、`:566`、`:598`；`RegionCopy.cs:17`、`:21-27`、`:45-69`、`:70-91`、`:121-122`、`:101-110` |
-//! | 11 | **`.X` → 格表**（新增）：三族图号一律 `& 0x7FFF`；三族库号超出 `0..=255` **报错不截断**（消息含「第 N 格 / 地表\|中层\|物体 / 值」）；`door`/`door_offset`/`light`/`ani_frame`/`ani_tick` 与 5 个「视图装不下」的动画字段**全部照搬真值** | [`cells_from_stamp`] / [`stamp_convert`] | `mir2-stamp/src/cell.rs`（v2 格体偏移表）；`CrystalStudio/README.md:205-207` |
-//! | 12 | **五层计数**（新增）：官方掩码 = C# **归一化内存表示**（legacy `bit15`→29/30、Mir3 `flag` bit0/1、u32 族磁盘 bit29/30）；单格 **O(1) 增量**、整块换视图后**必须** `rebuild_layer_counts()`；**照抄磁盘 bit29/30 会得到几乎全 0 的假计数**（40 张实测 39 张全 0） | [`layer_counts`] / [`Document::write_view_cell`] | `Document.LayerCounts.cs:5-25@acfbbf8a`；`LegacyMapReader.cs:149-150`、`:160-161`、`:438-439`、`:496-497`、`:545-546@acfbbf8a` |
+//! | 11 | **`.X` → 格表**（新增）：三族图号一律 `& 0x7FFF`；三族库号超出 `0..=255` **报错不截断**（消息含「第 N 格 / 地表\|中层\|物体 / 值」）；`door`/`door_offset`/`light`/`ani_frame`/`ani_tick` 与 5 个「视图装不下」的动画字段**全部照搬真值** | [`cells_from_stamp`] / [`stamp_convert`] | `mir2-stamp/src/cell.rs`（v2 格体偏移表）；`_upstream/README.md:288`（原写 `CrystalStudio/README.md:205-207`，实为路径 + 行号双错） |
+//! | 12 | **五层计数**（新增）：官方掩码 = C# **归一化内存表示**（legacy `bit15`→29/30、Mir3 `flag` bit0/1、u32 族磁盘 bit29/30）；单格 **O(1) 增量**、整块换视图后**必须** `rebuild_layer_counts()`；**照抄磁盘 bit29/30 会得到几乎全 0 的假计数**（40 张实测 39 张全 0） | [`layer_counts`] / [`Document::write_view_cell`] | `_upstream/CrystalStudio/Document.LayerCounts.cs:5-25`；`_upstream/CrystalStudio/LegacyMapReader.cs:149-150`、`:160-161`、`:438-439`、`:496-497`、`:545-546` |
 //!
 //! # 四、模块地图
 //!
@@ -59,11 +59,11 @@
 //! | [`document`] | `Document`：双表示（`raw` + `view`）+ 路径 + 脏标记 + `to_bytes` + 逐字节差异 | `mapdoc.rs:22-44`、`edit.rs:1326-1346`、`:1669-1720` |
 //! | [`convert`] | `raw ⇄ view` 的**字段映射表**、位宽处理、信息丢失清单、格式能力闸门 | 新增（接入 `mir2-format`） |
 //! | [`layer`] | `EditLayer`（五层）+ 字段映射 + **`bit15` 保留矩阵** | `edit.rs:127-360` |
-//! | [`layer_counts`] | **五层计数**：官方掩码的按格式归一化（legacy `bit15` / Mir3 `flag` / u32 `bit29/30`）+ 单格增量 + 整块重建 | `Document.LayerCounts.cs:5-25@acfbbf8a`（2026-11-06 新增） |
+//! | [`layer_counts`] | **五层计数**：官方掩码的按格式归一化（legacy `bit15` / Mir3 `flag` / u32 `bit29/30`）+ 单格增量 + 整块重建 | `_upstream/CrystalStudio/Document.LayerCounts.cs:5-25`（2026-11-06 新增） |
 //! | [`brush`] | `Brush`（族/图号/库号/来源）+ `PickedCell` + 笔刷尺寸规范化 | `edit.rs:459-552`、`metrics.rs:159-199` |
 //! | [`paint`] | `paint()`：单格落笔（按层分派；N×N 由会话展开） | `edit.rs:1360-1488` |
 //! | [`fill`] | 填充匹配键 + 四邻 BFS + `step=2` + 上限 + **先收块后动笔** | `edit.rs:1490-1610`、`:1036-1206` |
-//! | [`stamp`] | 印章放置：逐格越界裁剪 + 三族写字段 + Type5 闸门 + **先算后写** | `CrystalStudio/PlacedStamps.cs:52-121`（新增） |
+//! | [`stamp`] | 印章放置：逐格越界裁剪 + 三族写字段 + Type5 闸门 + **先算后写** | `_upstream/CrystalStudio/PlacedStamps.cs:52-121`（新增） |
 //! | [`stamp_convert`] | `.X` 印章 → [`StampCellInput`]：三族图号掩 `0x7FFF` + 库号越界即错 + 12 个附加字段照搬 | `mir2-stamp/src/cell.rs`（2026-11-05 新增） |
 //! | [`selection`] | 矩形选区 + 剪贴板：闭区间语义 + 越界裁剪 + 清空计划 + 复制快照 | `_upstream/CrystalStudio/MapViewport.cs:106-598`、`RegionCopy.cs:1-133`（新增） |
 //! | [`undo`] | 撤销栈（整格快照、一次拖动/填充 = 一步、上限 100） | `edit.rs:554-579`、`:851-960`、`:1288-1323` |

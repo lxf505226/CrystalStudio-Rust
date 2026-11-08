@@ -346,7 +346,7 @@ fn 地面图号按格式归一化() {
     let mut raw = 空raw(FormatId::Wemade2010, 1, 1);
     格(&mut raw, 0, 0).bk_img = 5u32 ^ 0xAA38_AA38;
     assert_eq!(ground_image(FormatId::Wemade2010, 格(&mut raw, 0, 0), 无键()), 5);
-    // 上游 Type1 不折 bk 的 bit15（`LegacyReader.cs:190-211` 漏搬）⇒ 它留在图号里
+    // 上游 Type1 不折 bk 的 bit15（`_upstream/CrystalStudio/LegacyMapReader.cs:190-211` 漏搬；原写 `LegacyReader`，实为漏写）⇒ 它留在图号里
     let mut raw = 空raw(FormatId::Wemade2010, 1, 1);
     格(&mut raw, 0, 0).bk_img = 0x8003u32 ^ 0xAA38_AA38;
     assert_eq!(
@@ -466,7 +466,7 @@ fn 门格判据按格式掩码() {
 /// 非 Mir3：还原后的 `bk/fr` `bit15` 都为 0（折叠位那五档与上游逐格等价）。
 ///
 /// 顺带钉住**有意差异**：Wemade2010 的 bk `bit15` 上游不折进 `0x20000000`
-/// （`LegacyReader.cs:190-211`），本仓按 R33 统一按位判 ⇒ 这里是 `false`（更严格）。
+/// （`_upstream/CrystalStudio/LegacyMapReader.cs:190-211`；原写 `LegacyReader`，实为漏写），本仓按 R33 统一按位判 ⇒ 这里是 `false`（更严格）。
 #[test]
 fn 非mir3格式可走按bit15() {
     let mut raw = 空raw(FormatId::Old12, 1, 1);

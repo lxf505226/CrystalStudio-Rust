@@ -1,7 +1,7 @@
 //! 五层计数（地表 / 中层 / 物体 / 低位阻挡 / 高位阻挡）——官方 `MapDocument.layerCounts` 的移植。
 //!
-//! 抽取自 CrystalStudio `Document.LayerCounts.cs:5-25@acfbbf8a`（`layerCounts` / `LayerCount` /
-//! `UpdateLayerCounts`）与 `Document.cs:26@acfbbf8a`（`HasForeground`）。
+//! 抽取自 CrystalStudio `_upstream/CrystalStudio/Document.LayerCounts.cs:5-25`（`layerCounts` / `LayerCount` /
+//! `UpdateLayerCounts`）与 `_upstream/CrystalStudio/Document.cs:26`（`HasForeground`）。
 //!
 //! # 一、官方口径（照抄，不"优化"）
 //!
@@ -14,18 +14,18 @@
 //! ```
 //!
 //! 每次 `Set` 调 `UpdateLayerCounts(x, y, 旧格, 新格)`，计数按 `+after 位 - before 位` **增量**更新
-//! （`Document.LayerCounts.cs:10-12@acfbbf8a`；`Document.cs:51-56@acfbbf8a` 是唯一调用点）⇒
+//! （`_upstream/CrystalStudio/Document.LayerCounts.cs:10-12`；`_upstream/CrystalStudio/Document.cs:51-56` 是唯一调用点）⇒
 //! 单个格 O(1)，**不是**每次全图重扫。
 //!
 //! # 二、三个口径必须分开（**这是本模块最容易做错的地方**）
 //!
 //! | 口径 | 内容 | 出处 |
 //! |------|------|------|
-//! | ① **官方掩码** | C# **归一化后的内存表示**：`BackImage` 的 bit29/30 是编辑器私有碰撞位 | `Document.LayerCounts.cs:18-22@acfbbf8a` |
-//! | ② **磁盘表示** | legacy 格式把碰撞存在 **`bit15`**：地表 `bk_img & 0x8000`、物体 `fr_img & 0x8000`；Mir3 存在格首 `flag` 的 bit0/bit1 | `LegacyMapReader.cs:149-150`、`:160-161`、`:438-439`、`:496-497`、`:545-546@acfbbf8a` |
+//! | ① **官方掩码** | C# **归一化后的内存表示**：`BackImage` 的 bit29/30 是编辑器私有碰撞位 | `_upstream/CrystalStudio/Document.LayerCounts.cs:18-22` |
+//! | ② **磁盘表示** | legacy 格式把碰撞存在 **`bit15`**：地表 `bk_img & 0x8000`、物体 `fr_img & 0x8000`；Mir3 存在格首 `flag` 的 bit0/bit1 | `_upstream/CrystalStudio/LegacyMapReader.cs:149-150`、`:160-161`、`:438-439`、`:496-497`、`:545-546` |
 //! | ③ **本仓双表示** | [`crate::Document::raw`]（磁盘原值，u32 `bk_img`）+ [`crate::Document::view`]（`bk_img: u16`，只留低 16 位） | `convert.rs:390-412`、`:483-507` |
 //!
-//! 归一化就发生在 ①←②：`LegacyMapReader.cs:149-150@acfbbf8a`
+//! 归一化就发生在 ①←②：`_upstream/CrystalStudio/LegacyMapReader.cs:149-150`
 //! `if ((BackImage & 0x8000) != 0) BackImage = (BackImage & 0x7FFF) | 0x20000000;`。
 //! ⇒ **照抄 `raw.bk_img & 0x20000000` 会得到几乎全 0 的假计数**。
 //!
@@ -56,32 +56,32 @@
 //! 逐条依据：
 //!
 //! - **地表**：官方 `(x&1)==0 && (y&1)==0 && (BackImage & 0x1FFFFFFF) != 0`
-//!   （`Document.LayerCounts.cs:18@acfbbf8a`）。legacy 的 `BackImage & 0x1FFFFFFF` 归一化后
+//!   （`_upstream/CrystalStudio/Document.LayerCounts.cs:18`）。legacy 的 `BackImage & 0x1FFFFFFF` 归一化后
 //!   只剩 `bk_img & 0x7FFF`（bit15 被搬去 bit29）⇒ 用 `view` 的低 15 位。
 //!   u32 三族（`Wemade2010` / `Heroes34` / `CrystalCs`）的 `BackImage` 保留高 16 位
-//!   （`LegacyMapReader.cs:193`、`:532`、`:582@acfbbf8a`）⇒ 要带上 `raw` 的 bit16..28。
+//!   （`_upstream/CrystalStudio/LegacyMapReader.cs:195`、`:532`、`:582`）⇒ 要带上 `raw` 的 bit16..28。
 //!   ⚠ **不能把 bit15 当图号**：本仓 `view.bk_img` 的 bit15 是阻挡位（`layer.rs:19-38`）。
 //! - **中层**：`view.mid_img != 0`（官方 `MiddleImage != 0`）。
 //! - **物体**：`view.fr_img & 0x7FFF != 0`。官方 `HasForeground` 有**两个**条件
-//!   （`Foreground is { }` 且 `(Image & 0x7FFF) != 0`，`Document.cs:26@acfbbf8a`），
+//!   （`Foreground is { }` 且 `(Image & 0x7FFF) != 0`，`_upstream/CrystalStudio/Document.cs:26`），
 //!   对九种格式的装载路径而言第一个条件都**不额外收窄**第二个：只有 bit15 的前景图号
 //!   （`0x8000`）在 legacy 里根本不会被装成 `Foreground`（`LegacyMapReader.cs:153`、
-//!   `:255`、`:311`、`:366@acfbbf8a` 的 `(frimage & 0x7FFF) > 0 && frindex > 0`），
+//!   `:255`、`:311`、`:366` 的 `(frimage & 0x7FFF) > 0 && frindex > 0`），
 //!   在 `CrystalCs` v1/v2 里 `fr_img != 0` 也会让 `HasFront` 为真
-//!   （`LegacyMapReader.cs:621-623@acfbbf8a`）⇒ 两类情况都退化成「低 15 位非 0」。
+//!   （`_upstream/CrystalStudio/LegacyMapReader.cs:621-623`）⇒ 两类情况都退化成「低 15 位非 0」。
 //!   唯一的例外是 Mir3 的 `frindex == -1` 哨兵，见第五节第 4 条。
 //! - **低位 / 高位阻挡**：
 //!   - legacy 四族 + `Heroes34`：磁盘 `bit15` → 官方 bit29（`LegacyMapReader.cs:149-150`、
-//!     `:251-252`、`:307-308`、`:362-363`、`:545-546@acfbbf8a`）；
+//!     `:251-252`、`:307-308`、`:362-363`、`:545-546`）；
 //!   - 高位阻挡在 legacy 四族还要求前景图号低 15 位非 0（`LegacyMapReader.cs:160-161`、
-//!     `:262-263`、`:318-319`、`:373-374@acfbbf8a` 的 `if (frimage & 0x8000)` 在
+//!     `:262-263`、`:318-319`、`:373-374` 的 `if (frimage & 0x8000)` 在
 //!     `if (((frimage & 0x7FFF) > 0) && (frindex > 0))` 之内）；`Heroes34` 没有这层门
-//!     （`:535`、`:548-551@acfbbf8a` 里 `HasFront = true` 恒定）⇒ 只看 bit15；
-//!   - Mir3：`flag` bit0/bit1（`LegacyMapReader.cs:438-439`、`:496-497@acfbbf8a`）；
+//!     （`:541`、`:548-551` 里 `HasFront = true` 恒定）⇒ 只看 bit15；
+//!   - Mir3：`flag` bit0/bit1（`_upstream/CrystalStudio/LegacyMapReader.cs:438-439`、`:496-497`）；
 //!   - `Wemade2010`：磁盘 u32 的 bit29/bit30 + 前景 bit15（`LegacyMapReader.cs:195`、
-//!     `:209-213@acfbbf8a`）；
+//!     `:209-213`）；
 //!   - `CrystalCs`：磁盘 u32 的 bit29/bit30，外加前景 bit15 触发的 bit30
-//!     （`LegacyMapReader.cs:597-598`、`:624-625@acfbbf8a`；本仓复用
+//!     （`_upstream/CrystalStudio/LegacyMapReader.cs:597-598`、`:624-625`；本仓复用
 //!     `mir2_format::formats::crystal_cs::csharp_back_mark`）。
 //!
 //! # 四、增量更新 / 整块替换 / GUI 接线状态
@@ -96,30 +96,30 @@
 //!   [`crate::Document::write_view_cell`] ⇒ 换完**必须**调 `rebuild_layer_counts()`，
 //!   否则计数停留在旧视图上（旧值不会报错，只会显示错数）。
 //! - **GUI / 菜单 / 网页显示未接线**：本模块只给数据（`LayerCount` × 5），
-//!   官方那五条 UI 文本（`MainWindow.LayerCounts.cs:8-12@acfbbf8a`）不在本单范围。
+//!   官方那五条 UI 文本（`_upstream/CrystalStudio/MainWindow.LayerCounts.cs:8-12`）不在本单范围。
 //!
 //! # 五、与派单书 / 上游分支的差异（显式记账，不静默改口径）
 //!
 //! 1. **legacy 高位阻挡要看前景低 15 位**：派单书的简化式是 `view.fr_img & 0x8000`，
-//!    但上游 `:160-161@acfbbf8a` 的 `if (frimage & 0x8000)` 在
+//!    但上游 `:160-161` 的 `if (frimage & 0x8000)` 在
 //!    `if (((frimage & 0x7FFF) > 0) && (frindex > 0))` 之内。官方用例
-//!    `LayerCountTests.cs:13-14@acfbbf8a` 也反证：`(1,1)` 放 `fr = 0x8000` 之后断言五层仍各 1
+//!    `_upstream/CrystalStudio.Tests/LayerCountTests.cs:13-14` 也反证：`(1,1)` 放 `fr = 0x8000` 之后断言五层仍各 1
 //!    ⇒ 只有 bit15 的前景**不能**算高位阻挡。本模块按上游实现（并有用例钉住）。
-//! 2. **`Heroes34` 的高位阻挡没有这层门**（`:535`、`:548-551@acfbbf8a`），只看 bit15。
-//! 3. **`Wemade2010` 不走 XOR 解码**：上游 `:193@acfbbf8a` 把磁盘 u32 与 `0xAA38AA38` 异或后
+//! 2. **`Heroes34` 的高位阻挡没有这层门**（`:541`、`:548-551`），只看 bit15。
+//! 3. **`Wemade2010` 不走 XOR 解码**：上游 `:195` 把磁盘 u32 与 `0xAA38AA38` 异或后
 //!    才存进 `BackImage`。若照解码值判位，掩码自身的 bit29 = 1 会让「**几乎所有格**」都算低位阻挡
 //!    （空格的磁盘值 0 解码成 `0xAA38AA38`）⇒ 本仓按**磁盘位**判（与派单书一致）。
 //!    该格式在真实语料里 **0 个样本**，两种口径都无法用文件交叉验证，故以「位29/30 = 磁盘上
 //!    的碰撞标记」这一可解释口径为准，差异在此记账。
 //! 4. **Mir3 物体的 `frindex == -1` 哨兵未参与判定**：上游要求 `frindex > 0`
-//!    （`:441`、`:499@acfbbf8a`），而 `btArea == 255` 时 `frindex = -1`。本仓的
+//!    （`:441`、`:499`），而 `btArea == 255` 时 `frindex = -1`。本仓的
 //!    `mir2_map::Cell` 没有前景库号字段（只有 `area` 一字节），逐格判哨兵会把「库号 -1」与
 //!    「库号 200」混在同一个字节上；且真实语料里没有 Mir3 样本可交叉验证 ⇒
 //!    按官方 `HasForeground` 的**图像条件**判（`fr_img & 0x7FFF != 0`）。
 //!    影响面：仅 `fr_img` 低 15 位非 0 且库号哨兵为 -1 的格（正常地图里「有前景」与
 //!    「库号 -1」互斥），偏多计不计少计。
 //! 5. **`CrystalCs` 的 `ver` / `fr_count` 门照抄 C#**：`ver > 1` 才补 bit30；`ver > 2` 时
-//!    还要求 `fr_count == 1`（`:588-598@acfbbf8a` 的标记只在 `frcount == 1` 支里）。
+//!    还要求 `fr_count == 1`（`:588-598` 的标记只在 `frcount == 1` 支里）。
 //!    `ver` 从 `raw.header_raw[0..2]` 读（`crystal_cs.rs:7` 的头部表），读不到按 `0`
 //!    （= 不补 bit30），**不猜**。
 
@@ -128,15 +128,15 @@ use mir2_map::{Cell as ViewCell, Map};
 
 use crate::layer::EditLayer;
 
-/// 地表层位（官方 `mask` 的 bit0）。`Document.LayerCounts.cs:18@acfbbf8a`
+/// 地表层位（官方 `mask` 的 bit0）。`_upstream/CrystalStudio/Document.LayerCounts.cs:18`
 pub const MASK_GROUND: u8 = 1;
-/// 中层位（官方 bit1）。`Document.LayerCounts.cs:19@acfbbf8a`
+/// 中层位（官方 bit1）。`_upstream/CrystalStudio/Document.LayerCounts.cs:19`
 pub const MASK_MIDDLE: u8 = 2;
-/// 物体层位（官方 bit2）。`Document.LayerCounts.cs:20@acfbbf8a`
+/// 物体层位（官方 bit2）。`_upstream/CrystalStudio/Document.LayerCounts.cs:20`
 pub const MASK_FRONT: u8 = 4;
-/// 低位阻挡位（官方 bit3）。`Document.LayerCounts.cs:21@acfbbf8a`
+/// 低位阻挡位（官方 bit3）。`_upstream/CrystalStudio/Document.LayerCounts.cs:21`
 pub const MASK_LOW_COLLISION: u8 = 8;
-/// 高位阻挡位（官方 bit4）。`Document.LayerCounts.cs:22@acfbbf8a`
+/// 高位阻挡位（官方 bit4）。`_upstream/CrystalStudio/Document.LayerCounts.cs:22`
 pub const MASK_HIGH_COLLISION: u8 = 16;
 
 /// 地表图号掩码（低 15 位）。官方 `BackImage & 0x1FFFFFFF` 归一化后的图号部分。
@@ -156,7 +156,7 @@ const CRYSTAL_VER_OFFSET: usize = 0;
 /// 五层计数的快照（官方 `int[5] layerCounts` 的等价物）。
 ///
 /// 字段顺序与官方 `MapLayer` 枚举一致：`Ground, Middle, Objects, LowCollision, HighCollision`
-/// （`Document.cs:5@acfbbf8a`），但这里用**具名字段**而不是数组下标 —— 下标一错就是
+/// （`_upstream/CrystalStudio/Document.cs:5`），但这里用**具名字段**而不是数组下标 —— 下标一错就是
 /// 「地表数显示成物体数」这类静默错数。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LayerCounts {
@@ -237,7 +237,7 @@ impl LayerCounts {
 
     /// 增量更新：`-before 位 +after 位`（官方 `UpdateLayerCounts` 的循环体）。
     ///
-    /// 官方用 `int`（`Document.LayerCounts.cs:12@acfbbf8a`）；本仓用 `usize`，
+    /// 官方用 `int`（`_upstream/CrystalStudio/Document.LayerCounts.cs:12`）；本仓用 `usize`，
     /// 减到负数说明「计数与地图脱节」—— debug 下直接炸，release 下饱和到 0 并**不掩盖**
     /// （下一次 [`LayerCounts::is_zero`] 之类的读会如实反映 0，而不是回绕成一个巨大数）。
     pub(crate) fn apply(&mut self, before: u8, after: u8) {
@@ -359,8 +359,8 @@ fn has_ground_image(raw: &RawCell, view: &ViewCell, ctx: MaskContext) -> bool {
             (img & 0x1FFF_FFFF) != 0
         }
         // legacy 六族（12/14/36 档 + Mir3 两支）：图号就是 `bk_img` 的低 15 位。
-        // legacy 四族装载期把 bit15 搬到 bit29（`LegacyMapReader.cs:149-150@acfbbf8a`），
-        // Mir3 两支用 `flag` 判碰撞（`:438-439@acfbbf8a`）⇒ 图号部分都只剩低 15 位。
+        // legacy 四族装载期把 bit15 搬到 bit29（`_upstream/CrystalStudio/LegacyMapReader.cs:149-150`），
+        // Mir3 两支用 `flag` 判碰撞（`:438-439`）⇒ 图号部分都只剩低 15 位。
         _ => (view.bk_img & IMG_MASK) != 0,
     }
 }
@@ -369,13 +369,13 @@ fn has_ground_image(raw: &RawCell, view: &ViewCell, ctx: MaskContext) -> bool {
 fn has_low_collision(raw: &RawCell, view: &ViewCell, ctx: MaskContext) -> bool {
     match ctx.format {
         // legacy 五族：磁盘 bit15 → 官方 bit29（`LegacyMapReader.cs:149-150`、`:251-252`、
-        // `:307-308`、`:362-363`、`:545-546@acfbbf8a`）。
+        // `:307-308`、`:362-363`、`:545-546`）。
         FormatId::Old12
         | FormatId::AntiHack
         | FormatId::Shanda14
         | FormatId::Shanda2012
         | FormatId::Heroes34 => (view.bk_img & COLLISION_BIT) != 0,
-        // Mir3：格首 flag 的 bit0（`LegacyMapReader.cs:438-439`、`:496-497@acfbbf8a`）。
+        // Mir3：格首 flag 的 bit0（`_upstream/CrystalStudio/LegacyMapReader.cs:438-439`、`:496-497`）。
         // 视图里没有 flag（`mir2_map::Cell` 装不下）⇒ 本层计数**不随编辑变化**（编辑改不到它）。
         FormatId::Mir3Wemade | FormatId::Mir3Shanda => (raw.flag & 0x01) != 0x01,
         // u32 两族：磁盘位就是官方位（见模块文档第五节第 3 条：不做 XOR 解码）。
@@ -388,25 +388,25 @@ fn has_high_collision(raw: &RawCell, view: &ViewCell, ctx: MaskContext) -> bool 
     match ctx.format {
         // legacy 四族：前景 bit15 → 官方 bit30，但上游只在「前景低 15 位 > 0 且库号 > 0」
         // 时才会装出 `Foreground`（`LegacyMapReader.cs:153-161`、`:255-263`、`:311-319`、
-        // `:366-374@acfbbf8a`）⇒ 只有 bit15 的前景格**不能**算高位阻挡
-        // （官方用例 `LayerCountTests.cs:13-14@acfbbf8a` 反证）。
+        // `:366-374`）⇒ 只有 bit15 的前景格**不能**算高位阻挡
+        // （官方用例 `_upstream/CrystalStudio.Tests/LayerCountTests.cs:13-14` 反证）。
         FormatId::Old12 | FormatId::AntiHack | FormatId::Shanda14 | FormatId::Shanda2012 => {
             (view.fr_img & COLLISION_BIT) != 0 && (view.fr_img & IMG_MASK) != 0
         }
-        // Heroes34：`HasFront = true` 恒定（`:535`、`:548-551@acfbbf8a`）⇒ 只看 bit15。
+        // Heroes34：`HasFront = true` 恒定（`:541`、`:548-551`）⇒ 只看 bit15。
         FormatId::Heroes34 => (view.fr_img & COLLISION_BIT) != 0,
-        // Mir3：flag 的 bit1（`LegacyMapReader.cs:438-439`、`:496-497@acfbbf8a`）。
+        // Mir3：flag 的 bit1（`_upstream/CrystalStudio/LegacyMapReader.cs:438-439`、`:496-497`）。
         FormatId::Mir3Wemade | FormatId::Mir3Shanda => (raw.flag & 0x02) != 0x02,
-        // Wemade2010：磁盘 bit30 或「前景 bit15 ⇒ 补 bit30」（`:209-213@acfbbf8a`）。
+        // Wemade2010：磁盘 bit30 或「前景 bit15 ⇒ 补 bit30」（`:209-213`）。
         FormatId::Wemade2010 => {
             (raw.bk_img & HIGH_BIT) != 0 || (view.fr_img & COLLISION_BIT) != 0
         }
-        // CrystalCs：磁盘 bit30，或按 ver/fr_count 门补的 bit30（`:588-598`、`:620-625@acfbbf8a`）。
+        // CrystalCs：磁盘 bit30，或按 ver/fr_count 门补的 bit30（`:588-598`、`:620-625`）。
         FormatId::CrystalCs => crystal_cs_high(raw, view, ctx),
     }
 }
 
-/// `CrystalCs` 的高位阻挡（`LegacyMapReader.cs:588-598` / `:620-625@acfbbf8a`）。
+/// `CrystalCs` 的高位阻挡（`_upstream/CrystalStudio/LegacyMapReader.cs:588-598` / `:620-625`）。
 ///
 /// - `ver <= 2`：前景图号 bit15 ⇒ 补 bit30，条件是 `ver > 1`（`:624`）；
 /// - `ver > 2`：只有 `fr_count == 1` 那一支才读前景、也才补 bit30（`:592-598`）。
