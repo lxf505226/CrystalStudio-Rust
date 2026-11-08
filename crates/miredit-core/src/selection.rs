@@ -12,7 +12,7 @@
 //! | 2 | 选区**只在拖拽时产生**：起点必须图内，终点**夹到图内** | `:399`（`if (!Document.Contains(x, y)) return false;`）、`:422`（`Math.Clamp(x, 0, Document.Width - 1)`） | [`Selection::clamp_to`] 复刻这条不变量 ⇒ 存下来的选区**永远整块在图内** |
 //! | 3 | 存的是 `(左, 上, 宽, 高)`，且宽高 = 端点差 **+1** | `:423`（`new(Math.Min(ax,bx), Math.Min(ay,by), Math.Abs(bx-ax)+1, Math.Abs(by-ay)+1)`） | `x1 = x0 + 宽 - 1` ⇒ 格集合是**闭区间** |
 //! | 4 | **`Right` / `Bottom` 不含端点**（半开） | `:119`（`x >= area.Left && x < area.Right && y >= area.Top && y < area.Bottom`）；`:566`/`:598` 两处双层循环全是 `y < r.Bottom` / `x < r.Right` | 闭区间 `[x0..x1]` 与它**等价**：`x1 = Right - 1`；[`Selection::iter`] 用 `x0..=x1` |
-//! | 5 | 选区**不进撤销栈**、**不置脏** | `:147`/`:152`（选区随 `MapEditorState` 一起存取，与 `History` **并列**而不是被它管） | 选区/剪贴板是 UI 状态：`SetSelection` 等命令 `changed = 0` 且不动 `dirty` |
+//! | 5 | 选区**不进撤销栈**、**不置脏** | `_upstream/CrystalStudio/MapViewport.cs:147`/`:152`（选区随 `MapEditorState` 一起存取，与 `History` **并列**而不是被它管） | 选区/剪贴板是 UI 状态：`SetSelection` 等命令 `changed = 0` 且不动 `dirty` |
 //! | 6 | 取消选区 = 置 `null` | `:107-112`（`Deselect()`） | [`crate::EditSession::clear_selection`] |
 //! | 7 | 选区工具是 `M` 键；**选区外按下 = 先取消选区** | `MainWindow.axaml.cs:989`（`Key.M => EditorTool.Select`）、`_upstream/CrystalStudio/MapViewport.cs:398`（`if (!SelectionContains(x, y)) Deselect();`） | UI 层的事，本 crate 只提供 `set_selection` / `clear_selection` |
 //!
@@ -348,7 +348,7 @@ pub struct Clipboard {
     /// 复制时**地表层是否可见**（`RegionCopy.cs:107` 传给构造函数的 `ground`、`:19` 存下）。
     ///
     /// ⚠ 是"复制那一刻的地表可见性"，**不是**"抓到的格表里有没有地表内容" ——
-    /// 上游 `Anchor`（`:70`）判的就是这个 flag，两者混淆会让锚点在对空地表块上算错。
+    /// 上游 `_upstream/CrystalStudio/RegionCopy.cs:70` 的 `Anchor` 判的就是这个 flag，两者混淆会让锚点在对空地表块上算错。
     ground: bool,
 }
 
@@ -402,7 +402,7 @@ impl Clipboard {
     /// - `ground` 为假、或没有 `source`（[`Self::from_cells`] 造的无源剪贴板）⇒ **原样**返回
     ///   `Some((x, y))`：无源剪贴板**不做奇偶重算**（没有 `sourceX` 就没法算，猜一个就是编数据）。
     /// - **负锚点**（点在地图最左/最上列且源原点奇偶对不上）⇒ `None`。
-    ///   对应上游 `PlaceRegion`（`:121-122`）先 `Anchor` 再 `CanPaste`：负坐标必然
+    ///   对应上游 `_upstream/CrystalStudio/RegionCopy.cs:121-122` 的 `PlaceRegion` 先 `Anchor` 再 `CanPaste`：负坐标必然
     ///   `Contains` 为 false ⇒ `Paste` 返回 false ⇒ **整块拒绝、一格不写**。
     ///   ⇒ 调用方拿到 `None` 必须**整块拒绝**，不许把它当成 `(0, y)` 之类夹到图内。
     ///
@@ -681,7 +681,7 @@ pub(crate) fn clear_plan(view: &Map, id: FormatId, sel: Selection, vis: [bool; 3
 /// 会话里「选区 + 剪贴板」这一对 UI 状态（见模块文档 §一 第 5 条：不进撤销栈、不置脏）。
 ///
 /// 单独抽成一个结构而不是两个字段：`EditSession::new` 里一行 `Default::default()` 就装完，
-/// 也方便将来整体快照/恢复（C# 的 `MapEditorState` 就是把它和 `History` 并列存的，`:147`/`:152`）。
+/// 也方便将来整体快照/恢复（C# 的 `MapEditorState` 就是把它和 `History` 并列存的，`_upstream/CrystalStudio/MapViewport.cs:147`/`:152`）。
 #[derive(Debug, Default)]
 pub(crate) struct SelectionState {
     /// 当前选区（`None` = 没有选区，= C# 的 `Selection == null`）。

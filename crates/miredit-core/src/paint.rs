@@ -28,8 +28,8 @@
 //! [`paint`] 是**纯函数**：吃一个 `Cell` 的副本、吐一个 `Cell` 的副本，被拒绝时返回
 //! [`PaintOutcome::LayerMismatch`] / [`PaintOutcome::PaletteBrushOnCollision`] 而不是 panic 或
 //! 静默返回原值。调用方（会话）据 `Write` 与 `before` 比较才决定"要不要记一步撤销"——
-//! 于是"拒绝"和"值没变"是两件可区分的事（`crates/miredit-gui/src/edit.rs:1937-1939`：值没变不记步，
-//! 否则"空刷一遍也算一步"；原写 `edit.rs:903-905`，本 crate 无该文件，且 `903-905` 是 `register_stamp` 形参）。
+//! 于是"拒绝"和"值没变"是两件可区分的事（生产实现 `crates/miredit-core/src/session.rs:478-479`：值没变不记步，
+//! 否则"空刷一遍也算一步"；同一规则由 `crates/miredit-gui/src/edit.rs:1937-1939` 的测试钉住。原写 `edit.rs:903-905`，本 crate 无该文件，且 `903-905` 是 `register_stamp` 形参）。
 
 use mir2_map::{Cell, CellFormat};
 
@@ -65,7 +65,7 @@ pub const TOOL_BRUSH_IDX: usize = 0;
 /// 填充在工具图标表里的下标（JSON `tag_value = "Bucket"`，官方快捷键 `F`）。
 ///
 /// 真值：`_upstream/CrystalStudio/MainWindow.axaml:11` 的第三个工具按钮 `Tag="Bucket"`；
-/// 快捷键 `MainWindow.axaml.cs:861` `Key.F => EditorTool.Bucket`。
+/// 快捷键 `_upstream/CrystalStudio/MainWindow.axaml.cs:989` `Key.F => EditorTool.Bucket`。
 pub const TOOL_BUCKET_IDX: usize = 2;
 /// 橡皮在工具图标表里的下标（MDL2 码位 U+E75C 的等效自绘）。
 pub const TOOL_ERASER_IDX: usize = 3;
@@ -183,7 +183,7 @@ impl Tool {
     }
 
     /// 本工具**吃不吃笔刷尺寸**（官方口径：铅笔与填充恒为单格，其余用 `BrushSize`）。
-    /// 来源：`edit.rs:452-454`。
+    /// 来源：`miredit-gui/src/edit.rs` 的 `Tool` 块（2026-11-05 迁入本 crate，该文件现为薄适配层）；生产生效点 `crates/miredit-core/src/session.rs:547`。
     ///
     /// 真值 `_upstream/CrystalStudio/MapViewport.cs:498`：
     /// `int size = Tool is EditorTool.Pencil or EditorTool.Bucket ? 1 : BrushSize;`
@@ -266,7 +266,7 @@ pub fn paint(
                 return PaintOutcome::NoOp;
             };
             if b.family != fam {
-                // 族不匹配：拒绝，绝不把地表图号写进 mid_img 这类跨字段乱写。`edit.rs:1426-1432`
+                // 族不匹配：拒绝，绝不把地表图号写进 mid_img 这类跨字段乱写。本分支即全部判据（原引 `miredit-gui/src/edit.rs` 的 `paint` 族判据，抽取后已迁入本 crate）。
                 return PaintOutcome::LayerMismatch {
                     brush: b.family,
                     layer,
@@ -278,7 +278,7 @@ pub fn paint(
             //    `c.BackImage = (c.BackImage & 0x60000000) | image`（画地表保留碰撞位）；
             //    `:520` 填充同款；`:598` 清除选区 `c.BackImage &= 0x60000000`（只留碰撞位）。
             //    C# 内存模型里 `0x60000000` = 低/高两位阻挡（`:24`），
-            //    `LegacyMapReader.cs:147-159` 把它们从 `.map` 的
+            //    `LegacyMapReader.cs:147-161` 把它们从 `.map` 的
             //    `bk_img & 0x8000` / `frimage & 0x8000` 翻上来
             //    ⇒ 我们文件级等价位 = `bk_img` / `fr_img` 的 `bit15`。
             //
@@ -312,7 +312,7 @@ pub fn paint(
         Tool::Eraser => {
             let cur = layer.img_of(&cell);
             if layer.is_collision() {
-                // 阻挡层：清 bit15 = 恢复可走；**图号低 15 位原样保留**。`edit.rs:1477-1479`
+                // 阻挡层：清 bit15 = 恢复可走；**图号低 15 位原样保留**。真值 `_upstream/CrystalStudio/MapViewport.cs:505`（`c.BackImage = erase ? c.BackImage & ~ActiveCollisionMask : …`）。
                 layer.set_img(&mut out, cur & !COLLISION_BIT);
             } else {
                 // 图号层：只清图号，**保留最高位**（否则橡皮变成"顺手把墙拆了"）。`edit.rs:1480-1483`
@@ -478,7 +478,7 @@ mod tests {
         }
     }
 
-    /// 族不匹配 ⇒ 拒绝，且**一个字段都不写**。来源：`edit.rs:1426-1432`。
+    /// 族不匹配 ⇒ 拒绝，且**一个字段都不写**。来源：`crates/miredit-core/src/paint.rs:268-274`（原引 `miredit-gui/src/edit.rs` 的 `paint` 族判据，抽取后已迁入本 crate）。
     #[test]
     fn 族不匹配拒绝() {
         let c = Cell {
@@ -557,7 +557,7 @@ mod tests {
         }
     }
 
-    /// 橡皮：图号层 `cur & 0x8000`；阻挡层 `cur & !0x8000`。来源：`edit.rs:1475-1483`。
+    /// 橡皮：图号层 `cur & 0x8000`；阻挡层 `cur & !0x8000`。来源：`_upstream/CrystalStudio/MapViewport.cs:505` 的 `erase` 三元式（原引 `miredit-gui/src/edit.rs` 的 `paint` 橡皮分支，抽取后已迁入本 crate）。
     ///
     /// ⚠ **图号层的三个层走同一条公式**（`cur & 0x8000`），中层也不例外 ——
     /// 橡皮分支**不看** `bit15` 保留矩阵（`edit.rs:1480-1483` 里就是无条件 `cur & COLLISION_BIT`）。
@@ -663,7 +663,7 @@ mod tests {
     }
 
     /// 值没变时 `paint` 仍然给 `Write`，由调用方判"等于 before ⇒ 不记步"。
-    /// 这样"拒绝"与"值没变"是两件可区分的事。来源：`crates/miredit-gui/src/edit.rs:1937-1939`（原写 `edit.rs:903-905`，本 crate 无该文件，且 `903-905` 是 `register_stamp` 形参）。
+    /// 这样"拒绝"与"值没变"是两件可区分的事。生产实现：`crates/miredit-core/src/session.rs:478-479`；测试：`crates/miredit-gui/src/edit.rs:1937-1939`（原写 `edit.rs:903-905`，本 crate 无该文件，且 `903-905` 是 `register_stamp` 形参）。
     #[test]
     fn 值没变也给write() {
         let c = Cell {
@@ -684,7 +684,7 @@ mod tests {
         );
     }
 
-    /// 合成图冒烟：地表 3×3 里只改一格，其余字段原样（口径同 `edit.rs:2210-2250`）。
+    /// 合成图冒烟：地表 3×3 里只改一格，其余字段原样（口径同 `crates/miredit-gui/src/edit.rs:1706-1746` 的 `画笔只改地表层`）。
     #[test]
     fn 只改当前层字段() {
         let map = 造图(3, 3, CellFormat::New14);
